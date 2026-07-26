@@ -1,0 +1,67 @@
+# OMEGA Atelier — Supabase project config.
+# Version-controlled so `supabase db push` / `supabase link` can apply the auth
+# setup (email templates, providers) instead of hand-clicking the dashboard.
+# Secrets are NEVER inlined here — providers read them from env (see below).
+
+project_id = "omega-atelier"
+
+[auth]
+# The site users are sent back to after auth. Override per environment.
+# Locally this is the dev server; in production it is the deployed origin
+# (e.g. https://<user>.github.io/OmegaAtelier/).
+site_url = "env(SUPABASE_AUTH_SITE_URL)"
+# Every origin/path the OAuth + email links may redirect to must be allow-listed
+# here (and mirrored in the dashboard → Authentication → URL Configuration).
+additional_redirect_urls = [
+  "http://localhost:5173/plans",
+  "http://localhost:4173/plans",
+  "https://nicozrmn.github.io/OmegaAtelier/plans",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+
+[auth.email]
+enable_signup = true
+# Require the confirmation e-mail before the account is usable (seriös).
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "60s"
+
+# Branded, OMEGA-styled transactional e-mails (Gold/Noir). Paths are relative
+# to this file. Mirror these in the dashboard → Authentication → Email Templates
+# if you are not deploying config via the CLI.
+[auth.email.template.confirmation]
+subject = "Bestätige deine E-Mail · OMEGA Atelier"
+content_path = "./templates/confirmation.html"
+
+[auth.email.template.magic_link]
+subject = "Dein Anmeldelink · OMEGA Atelier"
+content_path = "./templates/magic_link.html"
+
+[auth.email.template.recovery]
+subject = "Passwort zurücksetzen · OMEGA Atelier"
+content_path = "./templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Neue E-Mail-Adresse bestätigen · OMEGA Atelier"
+content_path = "./templates/email_change.html"
+
+[auth.email.template.invite]
+subject = "Du bist eingeladen · OMEGA Atelier"
+content_path = "./templates/invite.html"
+
+# ── Social login ────────────────────────────────────────────────────────────
+# Client IDs/secrets come from Google Cloud + Apple Developer and are supplied
+# as env vars (never committed). Set them where you run the Supabase CLI, or
+# configure the same providers in the dashboard → Authentication → Providers.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+# skip_nonce_check only if you use the implicit flow; default keeps it strict.
+
+[auth.external.apple]
+enabled = true
+client_id = "env(SUPABASE_AUTH_APPLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_APPLE_SECRET)"
