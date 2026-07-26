@@ -18,13 +18,22 @@ import type { Point, Room } from '@/types'
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
 const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
 
+/** DCC-style axis tints for transform fields (reference: X red, Y green, Z blue). */
+const AXIS_TONE: Record<string, string> = {
+  x: '#F16A6A',
+  y: '#3ECF8E',
+  z: '#5AA7FF',
+  accent: 'var(--accent-bright)',
+}
+
 /**
  * Compact editable numeric field for the transform grid (premium-inspector
  * feel like the reference). Commits on blur / Enter so dragging the plan and
- * typing here stay independent.
+ * typing here stay independent. `tone` colours the axis letter like a DCC
+ * inspector (x/y/z/accent).
  */
-function NumField({ label, value, unit, onCommit }: {
-  label: string; value: number; unit?: string; onCommit: (v: number) => void
+function NumField({ label, value, unit, tone, onCommit }: {
+  label: string; value: number; unit?: string; tone?: keyof typeof AXIS_TONE; onCommit: (v: number) => void
 }) {
   const [text, setText] = useState<string | null>(null)
   const shown = text ?? String(Math.round(value * 10) / 10)
@@ -36,7 +45,10 @@ function NumField({ label, value, unit, onCommit }: {
   }
   return (
     <label className="flex items-center gap-1.5 rounded-md border border-[color:var(--border)] bg-[color:var(--bg)] px-2 py-1 focus-within:border-[color:var(--accent)]">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-[color:var(--muted)] w-3 shrink-0">{label}</span>
+      <span
+        className="w-3 shrink-0 text-[10px] font-semibold uppercase tracking-wider"
+        style={{ color: tone ? AXIS_TONE[tone] : 'var(--muted)' }}
+      >{label}</span>
       <input
         type="text" inputMode="decimal" value={shown}
         onChange={(e) => setText(e.target.value)}
@@ -163,9 +175,9 @@ export function PropertyPanel() {
           <div className="space-y-1">
             <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Transform</div>
             <div className="grid grid-cols-2 gap-1">
-              <NumField label="X" value={d.position.x} unit="cm" onCommit={(v) => patchDevice(d.id, (it) => { it.position.x = v })} />
-              <NumField label="Y" value={d.position.y} unit="cm" onCommit={(v) => patchDevice(d.id, (it) => { it.position.y = v })} />
-              <NumField label="↻" value={d.rotation ?? 0} unit="°" onCommit={(v) => patchDevice(d.id, (it) => { it.rotation = ((v % 360) + 360) % 360 })} />
+              <NumField label="X" tone="x" value={d.position.x} unit="cm" onCommit={(v) => patchDevice(d.id, (it) => { it.position.x = v })} />
+              <NumField label="Y" tone="y" value={d.position.y} unit="cm" onCommit={(v) => patchDevice(d.id, (it) => { it.position.y = v })} />
+              <NumField label="↻" tone="accent" value={d.rotation ?? 0} unit="°" onCommit={(v) => patchDevice(d.id, (it) => { it.rotation = ((v % 360) + 360) % 360 })} />
             </div>
           </div>
           {/* Mode state for the active mode */}
@@ -198,8 +210,8 @@ export function PropertyPanel() {
       const [w, h] = f.size ?? entry?.size ?? [60, 60]
       const rot = f.rotation ?? 0
       // Decide which slot catalog applies based on furniture id.
-      const isSofa     = /^sofa|^armchair/i.test(f.furnitureId)
-      const isWooden   = /^bed|^table|^wardrobe|^sideboard|^nightstand|^dresser|^shoe|^chair/i.test(f.furnitureId)
+      const isSofa     = /^sofa|^armchair|^stool|^bench/i.test(f.furnitureId)
+      const isWooden   = /^bed|^table|^wardrobe|^sideboard|^nightstand|^dresser|^shoe|^chair|^desk|^shelf|^bookshelf|^bookcase|^tv|^kitchen|^cabinet|^crib|^highboard|^lowboard/i.test(f.furnitureId)
       const slots = isSofa ? UPHOLSTERY_SLOTS
                   : isWooden ? WOOD_SLOTS
                   : null
@@ -234,11 +246,11 @@ export function PropertyPanel() {
 
           <Section title="Transformation">
             <div className="grid grid-cols-2 gap-1">
-              <NumField label="X" value={f.position.x} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.position.x = v })} />
-              <NumField label="Y" value={f.position.y} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.position.y = v })} />
+              <NumField label="X" tone="x" value={f.position.x} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.position.x = v })} />
+              <NumField label="Y" tone="y" value={f.position.y} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.position.y = v })} />
               <NumField label="B" value={w} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.size = [Math.max(10, v), (it.size ?? [w, h])[1]] })} />
               <NumField label="T" value={h} unit="cm" onCommit={(v) => patchFurniture(f.id, (it) => { it.size = [(it.size ?? [w, h])[0], Math.max(10, v)] })} />
-              <NumField label="↻" value={rot} unit="°" onCommit={(v) => patchFurniture(f.id, (it) => { it.rotation = ((v % 360) + 360) % 360 })} />
+              <NumField label="↻" tone="accent" value={rot} unit="°" onCommit={(v) => patchFurniture(f.id, (it) => { it.rotation = ((v % 360) + 360) % 360 })} />
             </div>
           </Section>
 
@@ -272,7 +284,7 @@ export function PropertyPanel() {
                     onClick={() => patchFurniture(f.id, (it) => { it.materialKey = s.key })}
                     className={`w-7 h-7 rounded-md border-2 transition-all ${
                       currentKey === s.key
-                        ? 'border-[color:var(--accent)] scale-110 shadow-[0_2px_10px_rgba(199, 162, 78,0.35)]'
+                        ? 'border-[color:var(--accent)] scale-110 shadow-[0_2px_10px_rgba(199,162,78,0.35)]'
                         : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'
                     }`}
                     style={{ background: s.swatch }}
@@ -415,6 +427,36 @@ export function PropertyPanel() {
               ))}
             </div>
             <div className="text-[11px] text-[color:var(--muted)]">{activeFloor.name}</div>
+          </div>
+
+          {/* Wall + ceiling — every surface of every room is individually stylable. */}
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Wandmaterial</div>
+            <div className="flex flex-wrap gap-1.5">
+              {materialsForSurface('wall').map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => patch(rm.id, (r) => { r.wallMaterialId = m.id })}
+                  title={m.name}
+                  className={`w-7 h-7 rounded-md border-2 transition-all ${(rm.wallMaterialId ?? 'wall-plaster') === m.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
+                  style={{ background: m.color }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Decke</div>
+            <div className="flex flex-wrap gap-1.5">
+              {materialsForSurface('ceiling').map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => patch(rm.id, (r) => { r.ceilingMaterialId = m.id })}
+                  title={m.name}
+                  className={`w-7 h-7 rounded-md border-2 transition-all ${(rm.ceilingMaterialId ?? 'ceiling-white') === m.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
+                  style={{ background: m.color }}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Rename */}

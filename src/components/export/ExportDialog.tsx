@@ -136,7 +136,7 @@ export function ExportDialog({ open, onClose }: Props) {
               key={f.key}
               disabled={busy !== null}
               onClick={() => run(f.key, f.run)}
-              className="flex items-start gap-3 rounded-md border border-[color:var(--border)] p-3 text-left transition hover:border-[color:var(--accent)] hover:bg-[rgba(199, 162, 78,0.07)]"
+              className="flex items-start gap-3 rounded-md border border-[color:var(--border)] p-3 text-left transition hover:border-[color:var(--accent)] hover:bg-[rgba(199,162,78,0.07)]"
             >
               <Icon size={20} className="mt-0.5 text-[color:var(--accent)]" />
               <div className="flex-1">

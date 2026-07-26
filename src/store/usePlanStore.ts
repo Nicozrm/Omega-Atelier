@@ -32,6 +32,7 @@ import { uuid, debounce } from '@/lib/utils'
 import { createBlankPlan } from '@/data/templates'
 import { DEVICES } from '@/data/devices'
 import { modeStateFor } from '@/lib/modeState'
+import { autoFurnishFloor } from '@/lib/autoFurnish'
 import { parsePlanJSON, coercePlan } from '@/lib/planSchema'
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
@@ -101,6 +102,8 @@ interface PlanState {
   // object ops (operate on active floor)
   addDevice: (catalogId: string, position: Point) => UUID
   addFurniture: (catalogId: string, position: Point, size?: [number, number]) => UUID
+  /** Auto-furnish every empty room on the active floor. Returns pieces added. */
+  autoFurnishActiveFloor: () => number
   addWall: (a: Point, b: Point, thickness?: number, subtype?: WallSubtype, openingWidth?: number) => UUID
   addRoom: (polygon: Point[], name: string, zoneType?: 'indoor' | 'outdoor') => UUID
   addLabel: (position: Point, text: string) => UUID
@@ -229,8 +232,12 @@ export const usePlanStore = create<PlanState>()(
       if (!doc || canvasW <= 0 || canvasH <= 0) return
       const f = activeFloor(doc)
       if (!f) return
-      const innerW = Math.max(1, canvasW - padding * 2)
-      const innerH = Math.max(1, canvasH - padding * 2)
+      // Adaptive padding: a fixed 60px eats a third of a phone's width, leaving
+      // the plan tiny. Clamp to ~7% of the smaller dimension so the plan fills
+      // the space on small screens; desktop keeps the roomy 60px.
+      const pad = Math.max(12, Math.min(padding, Math.min(canvasW, canvasH) * 0.07))
+      const innerW = Math.max(1, canvasW - pad * 2)
+      const innerH = Math.max(1, canvasH - pad * 2)
       const zx = innerW / Math.max(1, f.extent.width)
       const zy = innerH / Math.max(1, f.extent.height)
       const z = Math.min(zx, zy, 6)
@@ -315,6 +322,14 @@ export const usePlanStore = create<PlanState>()(
         f.furniture.push(placed)
       })
       return id
+    },
+
+    autoFurnishActiveFloor: () => {
+      const doc = get().doc
+      const f0 = doc ? activeFloor(doc) : undefined
+      const added = f0 ? autoFurnishFloor(f0) : []
+      if (added.length) get().updateDoc((d) => { activeFloor(d)?.furniture.push(...added) })
+      return added.length
     },
 
     addWall: (a, b, thickness = 14, subtype, openingWidth) => {

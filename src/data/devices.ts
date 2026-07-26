@@ -165,4 +165,109 @@ export const DEVICES: DeviceCatalogEntry[] = [
   { id: 'arenti-go1',             name: 'Arenti GO1 4G/Akku',            brand: 'Arenti',    ecosystem: 'arenti',    category: 'camera',      protocol: ['wifi'],                  price: 119, power: 5,     icon: 'Cctv',          modeTags: ['away','alarm'] },
   { id: 'arenti-in1q',            name: 'Arenti IN1Q Indoor 4MP',        brand: 'Arenti',    ecosystem: 'arenti',    category: 'camera',      protocol: ['wifi'],                  price: 49,  power: 4,     icon: 'Cctv',          modeTags: ['away','alarm'] },
   { id: 'arenti-out6q',           name: 'Arenti OUT6Q Outdoor PTZ',      brand: 'Arenti',    ecosystem: 'arenti',    category: 'camera',      protocol: ['wifi'],                  price: 89,  power: 8,     icon: 'Cctv',          modeTags: ['away','alarm'] },
+
+  // ── v56 — Katalog-Ausbau: reale Geräte über alle Ökosysteme ──────────
+  // Philips Hue (Bridge-gebunden)
+  { id: 'hue-play-bar',           name: 'Hue Play Lightbar (Doppelpack)', brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee'],          price: 130, power: 12, requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'hue-go-2',               name: 'Hue Go tragbare Leuchte',        brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee','bt'],     price: 90,  power: 6,  requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'hue-signe-floor',        name: 'Hue Signe Gradient Stehleuchte', brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee'],          price: 300, power: 29, requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','morning','film','night','relax','party'] },
+  { id: 'hue-iris',               name: 'Hue Iris Tischleuchte',          brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee'],          price: 90,  power: 10, requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'hue-ambiance-ceiling',   name: 'Hue Enrave Deckenleuchte',       brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee'],          price: 180, power: 33, requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','morning','day-office','film','night','relax'] },
+  { id: 'hue-filament-e27',       name: 'Hue Filament E27',               brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee','bt'],     price: 30,  power: 7,  requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','morning','film','night','relax','party'] },
+  { id: 'hue-lily-outdoor',       name: 'Hue Lily Outdoor Spot (3er)',    brand: 'Philips',  ecosystem: 'philips-hue',   category: 'light',   protocol: ['zigbee'],          price: 280, power: 24, requires: ['hue-bridge'], icon: 'Lightbulb', modeTags: ['auto','night','relax','party','away'] },
+  { id: 'hue-tap-dial',           name: 'Hue Tap Dial Switch',            brand: 'Philips',  ecosystem: 'philips-hue',   category: 'switch',  protocol: ['zigbee'],          price: 50,             requires: ['hue-bridge'], icon: 'CircleDot', modeTags: ['auto','morning','film','night','relax','party'] },
+  { id: 'hue-wall-module',        name: 'Hue Wandschalter-Modul',         brand: 'Philips',  ecosystem: 'philips-hue',   category: 'switch',  protocol: ['zigbee'],          price: 40,             requires: ['hue-bridge'], icon: 'CircleDot', modeTags: ['auto','morning','night','relax'] },
+
+  // Aqara
+  { id: 'aqara-temp-humid',       name: 'Aqara Temp-/Feuchtesensor',      brand: 'Aqara',    ecosystem: 'aqara',         category: 'sensor',  protocol: ['zigbee'],          price: 19,             icon: 'Thermometer', modeTags: ['auto','morning','away'] },
+  { id: 'aqara-water-leak',       name: 'Aqara Wassermelder',             brand: 'Aqara',    ecosystem: 'aqara',         category: 'sensor',  protocol: ['zigbee'],          price: 22,             icon: 'Droplet', modeTags: ['auto','away','alarm'] },
+  { id: 'aqara-cube-t1',          name: 'Aqara Cube T1 Pro',              brand: 'Aqara',    ecosystem: 'aqara',         category: 'switch',  protocol: ['zigbee'],          price: 25,             icon: 'CircleDot', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'aqara-roller-e1',        name: 'Aqara Rollo-Antrieb E1',         brand: 'Aqara',    ecosystem: 'aqara',         category: 'blind',   protocol: ['zigbee'],          price: 79,             icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'aqara-u100-lock',        name: 'Aqara Smart Lock U100',          brand: 'Aqara',    ecosystem: 'aqara',         category: 'lock',    protocol: ['bt','thread','matter'], price: 189,      icon: 'Lock', modeTags: ['auto','away','alarm','night'] },
+  { id: 'aqara-g3-cam',           name: 'Aqara Camera Hub G3',            brand: 'Aqara',    ecosystem: 'aqara',         category: 'camera',  protocol: ['wifi'],            price: 109, power: 5,  icon: 'Cctv', modeTags: ['away','alarm'] },
+  { id: 'aqara-smart-plug-eu',    name: 'Aqara Smart Plug EU',            brand: 'Aqara',    ecosystem: 'aqara',         category: 'outlet',  protocol: ['zigbee'],          price: 25,  power: 1,  icon: 'Plug', modeTags: ['auto','away'] },
+
+  // Shelly
+  { id: 'shelly-plus-1',          name: 'Shelly Plus 1',                  brand: 'Shelly',   ecosystem: 'shelly',        category: 'switch',  protocol: ['wifi','bt'],       price: 18,  power: 1,  icon: 'CircleDot', modeTags: ['auto','morning','night','relax'] },
+  { id: 'shelly-plus-i4',         name: 'Shelly Plus i4 Szenentaster',    brand: 'Shelly',   ecosystem: 'shelly',        category: 'switch',  protocol: ['wifi'],            price: 16,             icon: 'CircleDot', modeTags: ['auto','morning','night','relax','party'] },
+  { id: 'shelly-ht-g3',           name: 'Shelly H&T Gen3',                brand: 'Shelly',   ecosystem: 'shelly',        category: 'sensor',  protocol: ['wifi','bt'],       price: 29,             icon: 'Thermometer', modeTags: ['auto','morning','away'] },
+  { id: 'shelly-plus-plug-s',     name: 'Shelly Plus Plug S',             brand: 'Shelly',   ecosystem: 'shelly',        category: 'outlet',  protocol: ['wifi'],            price: 19,  power: 1,  icon: 'Plug', modeTags: ['auto','away'] },
+  { id: 'shelly-motion-2',        name: 'Shelly Motion 2',                brand: 'Shelly',   ecosystem: 'shelly',        category: 'sensor',  protocol: ['wifi'],            price: 30,             icon: 'Radar', modeTags: ['auto','morning','night','away','alarm'] },
+  { id: 'shelly-plus-rgbw',       name: 'Shelly Plus RGBW PM',            brand: 'Shelly',   ecosystem: 'shelly',        category: 'light',   protocol: ['wifi'],            price: 25,  power: 4,  icon: 'Zap', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'shelly-2pm-cover',       name: 'Shelly Plus 2PM Rollladen',      brand: 'Shelly',   ecosystem: 'shelly',        category: 'blind',   protocol: ['wifi'],            price: 26,             icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+
+  // Eve
+  { id: 'eve-aqua',               name: 'Eve Aqua Bewässerung',           brand: 'Eve',      ecosystem: 'eve',           category: 'irrigation', protocol: ['thread','matter'], price: 99,          icon: 'Droplet', modeTags: ['auto','away'] },
+  { id: 'eve-room',               name: 'Eve Room Luftqualität',          brand: 'Eve',      ecosystem: 'eve',           category: 'sensor',  protocol: ['thread','matter'], price: 99,             icon: 'Gauge', modeTags: ['auto','morning','day-office'] },
+  { id: 'eve-water-guard',        name: 'Eve Water Guard',                brand: 'Eve',      ecosystem: 'eve',           category: 'sensor',  protocol: ['thread','matter'], price: 89,             icon: 'Droplet', modeTags: ['auto','away','alarm'] },
+  { id: 'eve-weather',            name: 'Eve Weather',                    brand: 'Eve',      ecosystem: 'eve',           category: 'sensor',  protocol: ['thread','matter'], price: 69,             icon: 'Gauge', modeTags: ['auto','morning'] },
+  { id: 'eve-motionblinds',       name: 'Eve MotionBlinds',               brand: 'Eve',      ecosystem: 'eve',           category: 'blind',   protocol: ['thread','matter'], price: 329,            icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+
+  // IKEA Dirigera
+  { id: 'ikea-rodret',            name: 'Rodret Dimmer/Schalter',         brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'switch',  protocol: ['zigbee','matter'], price: 6,              icon: 'CircleDot', modeTags: ['auto','morning','night','relax'] },
+  { id: 'ikea-parasoll',          name: 'Parasoll Tür-/Fenstersensor',    brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'sensor',  protocol: ['zigbee','matter'], price: 8,              icon: 'DoorOpen', modeTags: ['auto','away','alarm'] },
+  { id: 'ikea-badring',           name: 'Badring Wassermelder',           brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'sensor',  protocol: ['zigbee'],          price: 10,             icon: 'Droplet', modeTags: ['auto','away','alarm'] },
+  { id: 'ikea-starkvind',         name: 'Starkvind Luftreiniger',         brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'appliance', protocol: ['zigbee'],        price: 129, power: 25, icon: 'Wind', modeTags: ['auto','day-office','night','away'] },
+  { id: 'ikea-fyrtur',            name: 'Fyrtur Rollo',                   brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'blind',   protocol: ['zigbee'],          price: 129,            icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'ikea-symfonisk-2',       name: 'Symfonisk Regal-Lautsprecher',   brand: 'IKEA',     ecosystem: 'sonos',         category: 'speaker', protocol: ['wifi'],            price: 119, power: 12, icon: 'Speaker', modeTags: ['auto','morning','film','relax','party'] },
+  { id: 'ikea-inspelning-plug',   name: 'Inspelning Zwischenstecker',     brand: 'IKEA',     ecosystem: 'ikea-dirigera', category: 'outlet',  protocol: ['zigbee','matter'], price: 12,  power: 1,  icon: 'Plug', modeTags: ['auto','away'] },
+
+  // Sonos
+  { id: 'sonos-era-100',          name: 'Sonos Era 100',                  brand: 'Sonos',    ecosystem: 'sonos',         category: 'speaker', protocol: ['wifi','bt'],       price: 279, power: 20, icon: 'Speaker', modeTags: ['auto','morning','film','relax','party'] },
+  { id: 'sonos-beam-2',           name: 'Sonos Beam (Gen 2)',             brand: 'Sonos',    ecosystem: 'sonos',         category: 'speaker', protocol: ['wifi'],            price: 499, power: 28, icon: 'Speaker', modeTags: ['auto','film','party'] },
+  { id: 'sonos-roam-2',           name: 'Sonos Roam 2',                   brand: 'Sonos',    ecosystem: 'sonos',         category: 'speaker', protocol: ['wifi','bt'],       price: 199, power: 8,  icon: 'Speaker', modeTags: ['auto','relax','party'] },
+  { id: 'sonos-sub-4',            name: 'Sonos Sub (Gen 4)',              brand: 'Sonos',    ecosystem: 'sonos',         category: 'speaker', protocol: ['wifi'],            price: 899, power: 40, icon: 'Speaker', modeTags: ['auto','film','party'] },
+
+  // Tado / Netatmo (Klima)
+  { id: 'tado-x-thermostat',      name: 'Tado° X Thermostat',             brand: 'tado',     ecosystem: 'tado',          category: 'climate', protocol: ['thread','matter'], price: 130, power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'tado-x-valve',           name: 'Tado° X Heizkörper-Thermostat',  brand: 'tado',     ecosystem: 'tado',          category: 'climate', protocol: ['thread','matter'], price: 90,  power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'netatmo-thermostat',     name: 'Netatmo Smartes Thermostat',     brand: 'Netatmo',  ecosystem: 'netatmo',       category: 'climate', protocol: ['wifi'],            price: 179, power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'netatmo-outdoor-cam',    name: 'Netatmo Präsenz Außenkamera',    brand: 'Netatmo',  ecosystem: 'netatmo',       category: 'camera',  protocol: ['wifi'],            price: 299, power: 9,  icon: 'Cctv', modeTags: ['away','alarm'] },
+
+  // Bosch Smart Home
+  { id: 'bosch-controller-2',     name: 'Bosch Smart Home Controller II', brand: 'Bosch',    ecosystem: 'bosch-sh',      category: 'hub',     protocol: ['zigbee','thread','wired'], price: 129, power: 4, icon: 'Router', modeTags: ['auto'] },
+  { id: 'bosch-radiator-2',       name: 'Bosch Heizkörper-Thermostat II', brand: 'Bosch',    ecosystem: 'bosch-sh',      category: 'climate', protocol: ['zigbee'],          price: 60,  power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'bosch-door-window-2',    name: 'Bosch Tür-/Fensterkontakt II',   brand: 'Bosch',    ecosystem: 'bosch-sh',      category: 'sensor',  protocol: ['zigbee'],          price: 35,             icon: 'DoorOpen', modeTags: ['auto','away','alarm'] },
+  { id: 'bosch-plug-compact',     name: 'Bosch Zwischenstecker compact',  brand: 'Bosch',    ecosystem: 'bosch-sh',      category: 'outlet',  protocol: ['zigbee'],          price: 40,  power: 1,  icon: 'Plug', modeTags: ['auto','away'] },
+  { id: 'bosch-eyes-outdoor',     name: 'Bosch Eyes Außenkamera',         brand: 'Bosch',    ecosystem: 'bosch-sh',      category: 'camera',  protocol: ['wifi'],            price: 199, power: 8,  icon: 'Cctv', modeTags: ['away','alarm'] },
+
+  // Nuki / SwitchBot (Schließen)
+  { id: 'nuki-lock-4',            name: 'Nuki Smart Lock (4. Gen)',       brand: 'Nuki',     ecosystem: 'nuki',          category: 'lock',    protocol: ['bt','wifi','thread','matter'], price: 179, icon: 'Lock', modeTags: ['auto','away','alarm','night'] },
+  { id: 'nuki-opener',            name: 'Nuki Opener (Türsummer)',        brand: 'Nuki',     ecosystem: 'nuki',          category: 'lock',    protocol: ['bt','wifi'],       price: 99,             icon: 'Lock', modeTags: ['auto','away'] },
+  { id: 'switchbot-meter',        name: 'SwitchBot Thermo-Hygrometer',    brand: 'SwitchBot',ecosystem: 'switchbot',     category: 'sensor',  protocol: ['bt'],              price: 15,             icon: 'Thermometer', modeTags: ['auto','morning'] },
+
+  // Govee
+  { id: 'govee-neon-rope-2',      name: 'Govee Neon Rope Light 2',        brand: 'Govee',    ecosystem: 'govee',         category: 'light',   protocol: ['wifi','bt'],       price: 80,  power: 24, icon: 'Zap', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'govee-lyra-lamp',        name: 'Govee Lyra Stehleuchte',         brand: 'Govee',    ecosystem: 'govee',         category: 'light',   protocol: ['wifi','bt'],       price: 100, power: 15, icon: 'Lightbulb', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'govee-tv-backlight-3',   name: 'Govee TV-Backlight 3 Lite',      brand: 'Govee',    ecosystem: 'govee',         category: 'light',   protocol: ['wifi','bt'],       price: 60,  power: 12, icon: 'Zap', modeTags: ['auto','film','night','relax','party'] },
+  { id: 'govee-outdoor-string-2', name: 'Govee Outdoor String Light 2',   brand: 'Govee',    ecosystem: 'govee',         category: 'light',   protocol: ['wifi','bt'],       price: 90,  power: 15, icon: 'Zap', modeTags: ['auto','night','relax','party','away'] },
+  { id: 'govee-hexa-panel',       name: 'Govee Glide Hexa Pro Panels',    brand: 'Govee',    ecosystem: 'govee',         category: 'light',   protocol: ['wifi','bt'],       price: 200, power: 30, icon: 'Zap', modeTags: ['auto','film','night','relax','party'] },
+
+  // Google Home / Alexa
+  { id: 'google-nest-hub-max',    name: 'Nest Hub Max',                   brand: 'Google',   ecosystem: 'google-home',   category: 'hub',     protocol: ['wifi','thread'],   price: 229, power: 12, icon: 'Router', modeTags: ['auto','morning','film','relax'] },
+  { id: 'google-nest-protect',    name: 'Nest Protect (Rauch/CO)',        brand: 'Google',   ecosystem: 'google-home',   category: 'sensor',  protocol: ['wifi'],            price: 119, power: 1,  icon: 'Flame', modeTags: ['auto','away','alarm'] },
+  { id: 'google-nest-thermostat', name: 'Nest Thermostat',                brand: 'Google',   ecosystem: 'google-home',   category: 'climate', protocol: ['wifi','thread'],   price: 130, power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'google-nest-doorbell',   name: 'Nest Doorbell (batt.)',          brand: 'Google',   ecosystem: 'google-home',   category: 'camera',  protocol: ['wifi'],            price: 189, power: 4,  icon: 'Cctv', modeTags: ['away','alarm'] },
+  { id: 'google-chromecast-tv',   name: 'Chromecast mit Google TV 4K',    brand: 'Google',   ecosystem: 'google-home',   category: 'tv',      protocol: ['wifi'],            price: 69,  power: 5,  icon: 'Tv', modeTags: ['auto','film','party'] },
+  { id: 'alexa-echo-show-8',      name: 'Echo Show 8',                    brand: 'Amazon',   ecosystem: 'alexa',         category: 'hub',     protocol: ['wifi','zigbee','matter'], price: 150, power: 10, icon: 'Router', modeTags: ['auto','morning','film','relax'] },
+  { id: 'alexa-echo-pop',         name: 'Echo Pop',                       brand: 'Amazon',   ecosystem: 'alexa',         category: 'speaker', protocol: ['wifi','bt'],       price: 55,  power: 5,  icon: 'Speaker', modeTags: ['auto','morning','relax','party'] },
+  { id: 'alexa-echo-hub',         name: 'Echo Hub (Wandpanel)',           brand: 'Amazon',   ecosystem: 'alexa',         category: 'hub',     protocol: ['wifi','zigbee','thread','matter'], price: 190, power: 6, icon: 'Router', modeTags: ['auto'] },
+
+  // Lutron / Fibaro / SmartThings / Fritz / Loxone
+  { id: 'lutron-serena-shade',    name: 'Lutron Serena Rollo',            brand: 'Lutron',   ecosystem: 'lutron',        category: 'blind',   protocol: ['wired'],           price: 380,            icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'lutron-caseta-hub',      name: 'Lutron Caséta Smart Hub',        brand: 'Lutron',   ecosystem: 'lutron',        category: 'hub',     protocol: ['wired','wifi'],    price: 90,  power: 3,  icon: 'Router', modeTags: ['auto'] },
+  { id: 'fibaro-flood',           name: 'Fibaro Flood Sensor',            brand: 'Fibaro',   ecosystem: 'fibaro',        category: 'sensor',  protocol: ['z-wave'],          price: 60,             icon: 'Droplet', modeTags: ['auto','away','alarm'] },
+  { id: 'fibaro-roller-3',        name: 'Fibaro Roller Shutter 3',        brand: 'Fibaro',   ecosystem: 'fibaro',        category: 'blind',   protocol: ['z-wave'],          price: 60,             icon: 'Blinds', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'smartthings-multi',      name: 'SmartThings Multipurpose Sensor',brand: 'Samsung',  ecosystem: 'samsung-smartthings', category: 'sensor', protocol: ['zigbee'],    price: 25,             icon: 'DoorOpen', modeTags: ['auto','away','alarm'] },
+  { id: 'fritz-dect-301',         name: 'FRITZ!DECT 301 Heizkörper',      brand: 'AVM',      ecosystem: 'fritzbox',      category: 'climate', protocol: ['wired'],           price: 55,  power: 2,  icon: 'Thermometer', modeTags: ['auto','morning','day-office','night','away'] },
+  { id: 'fritz-dect-500',         name: 'FRITZ!DECT 500 Lampe',           brand: 'AVM',      ecosystem: 'fritzbox',      category: 'light',   protocol: ['wired'],           price: 20,  power: 9,  icon: 'Lightbulb', modeTags: ['auto','morning','film','night','relax'] },
+  { id: 'loxone-touch',           name: 'Loxone Touch Taster',            brand: 'Loxone',   ecosystem: 'loxone',        category: 'switch',  protocol: ['wired'],           price: 130,            icon: 'CircleDot', modeTags: ['auto','morning','night','relax'] },
+
+  // Smart Life / Tuya / Custom
+  { id: 'smartlife-bulb-rgb',     name: 'Smart Life RGBCCT Lampe',        brand: 'Smart Life',ecosystem: 'smart-life',   category: 'light',   protocol: ['wifi'],            price: 10,  power: 9,  icon: 'Lightbulb', modeTags: ['auto','morning','film','night','relax','party'] },
+  { id: 'smartlife-ir-hub',       name: 'Smart Life IR-Universalhub',     brand: 'Smart Life',ecosystem: 'smart-life',   category: 'hub',     protocol: ['wifi'],            price: 20,  power: 1,  icon: 'Router', modeTags: ['auto'] },
+  { id: 'smartlife-water-valve',  name: 'Smart Life Bewässerungsventil',  brand: 'Smart Life',ecosystem: 'smart-life',   category: 'irrigation', protocol: ['wifi','zigbee'], price: 35,          icon: 'Droplet', modeTags: ['auto','away'] },
+  { id: 'tuya-siren',             name: 'Tuya Alarm-Sirene',              brand: 'Tuya',     ecosystem: 'tuya',          category: 'alarm',   protocol: ['wifi','zigbee'],   price: 25,  power: 2,  icon: 'Siren', modeTags: ['away','alarm'] },
+  { id: 'lg-oled-c4',             name: 'LG OLED evo C4 (webOS)',         brand: 'LG',       ecosystem: 'custom',        category: 'tv',      protocol: ['wifi','wired'],    price: 1500, power: 120, icon: 'Tv', modeTags: ['auto','film','party'] },
+  { id: 'samsung-the-frame',      name: 'Samsung The Frame (Tizen)',      brand: 'Samsung',  ecosystem: 'custom',        category: 'tv',      protocol: ['wifi','wired'],    price: 1300, power: 110, icon: 'Tv', modeTags: ['auto','film','party'] },
 ]

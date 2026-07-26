@@ -28,6 +28,7 @@ import type {
   Room,
   PlacedDevice,
   PlacedFurniture,
+  PlacedBlasterAsset,
   Label,
   ModeKey,
   LayerKey,
@@ -169,6 +170,29 @@ function repairFurniture(raw: unknown): PlacedFurniture[] {
   return out
 }
 
+/** Image-Blaster assets: require the recipe core (image, settings, position). */
+function repairBlasterAssets(raw: unknown): PlacedBlasterAsset[] {
+  if (!isArr(raw)) return []
+  const out: PlacedBlasterAsset[] = []
+  for (const a of raw) {
+    if (isObj(a) && isStr(a.image) && a.image.startsWith('data:image/') && isObj(a.settings) && isPoint(a.position)) {
+      out.push({
+        ...(a as object),
+        id: isStr(a.id) ? a.id : uuid(),
+        name: isStr(a.name) ? a.name : 'Asset',
+        image: a.image,
+        settings: a.settings as PlacedBlasterAsset['settings'],
+        position: { x: a.position.x, y: a.position.y },
+        rotation: isNum(a.rotation) ? a.rotation : 0,
+        width: isNum(a.width) && a.width > 0 ? a.width : 100,
+        elevation: isNum(a.elevation) && a.elevation >= 0 ? a.elevation : 140,
+        mount: a.mount === 'floor' ? 'floor' : 'wall',
+      } as PlacedBlasterAsset)
+    }
+  }
+  return out
+}
+
 function repairLabels(raw: unknown): Label[] {
   if (!isArr(raw)) return []
   const out: Label[] = []
@@ -197,6 +221,7 @@ function repairFloor(raw: unknown, index: number): Floor | null {
     devices: repairDevices(raw.devices),
     furniture: repairFurniture(raw.furniture),
     labels: repairLabels(raw.labels),
+    blasterAssets: repairBlasterAssets(raw.blasterAssets),
     layers: repairLayers(raw.layers),
     extent: repairExtent(raw.extent),
   }

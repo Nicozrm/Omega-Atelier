@@ -1,12 +1,11 @@
 name: Deploy to GitHub Pages
 
+# PRODUCTION deploys come from main ONLY. A feature-branch trigger here once
+# let a stale parallel branch overwrite the live site with a 10-day-old build —
+# never add branches back; merge to main to ship.
 on:
   push:
-    # Nur Default-Branches: die `github-pages`-Environment erlaubt Deployments
-    # ausschließlich vom Default-Branch. Von einem Feature-Branch würde der
-    # Deploy-Job vor dem ersten Schritt abgelehnt ("environment protection
-    # rules") — der Build liefe umsonst und die Checks wären dauerhaft rot.
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 # Allow the workflow to publish to Pages via the built-in GITHUB_TOKEN
@@ -23,6 +22,9 @@ concurrency:
 jobs:
   build:
     name: Build (Pages base)
+    # Hard guard: even if a branch re-adds itself to the triggers, only main
+    # (or a manual dispatch) may publish to the live site.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -69,7 +69,7 @@ function LegalLayout({ title, meta, children, self }: {
     ['/agb', 'AGB', 'agb'],
   ]
   return (
-    <div className="min-h-screen omega-noise">
+    <div className="omega-noise omega-scroll h-screen overflow-y-auto">
       <header className="flex h-14 items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--bg)] px-4 safe-top">
         <Link to="/" className="btn btn-ghost btn-icon" aria-label="Zurück zum Start"><ArrowLeft size={16} /></Link>
         <div className="font-display text-lg">{OPERATOR.brand}</div>

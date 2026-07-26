@@ -41,7 +41,7 @@ export function WorkspaceRail({
   return (
     <aside
       className={cn(
-        'relative z-10 flex h-full shrink-0 flex-col overflow-hidden bg-[color:var(--bg-elevated)] transition-[width] duration-300 ease-[var(--ease-out-expo)]',
+        'relative z-10 flex h-full shrink-0 flex-col overflow-hidden bg-[color:var(--glass-bg)] backdrop-blur-[18px] transition-[width] duration-300 ease-[var(--ease-out-expo)]',
         isLeft ? 'border-r' : 'border-l',
         'border-[color:var(--border)]',
         className,

@@ -34,8 +34,15 @@ interface UIState {
   rightRailOpen: boolean
   libraryTab: LibraryTab
   commandOpen: boolean
+  /** Image-Blaster-3D studio overlay (global — works on every page). */
+  blasterOpen: boolean
+  /** Insights suite overlay (Plan-Doktor · Energie · Kosten · Ökosystem). */
+  insightsOpen: boolean
   onboardingShown: boolean
   toasts: Toast[]
+  /** Living-Home day cycle: hour 0–24 that drives the 2D daylight wash and the
+   *  auto-selected mode, or null when the day cycle is off (normal live view). */
+  timeOfDay: number | null
 
   setTheme: (t: 'dark' | 'light') => void
   toggleTheme: () => void
@@ -47,7 +54,10 @@ interface UIState {
   toggleRightRail: () => void
   setLibraryTab: (t: LibraryTab) => void
   setCommandOpen: (open: boolean) => void
+  setBlasterOpen: (open: boolean) => void
+  setInsightsOpen: (open: boolean) => void
   setOnboardingShown: (shown: boolean) => void
+  setTimeOfDay: (h: number | null) => void
 
   pushToast: (t: Omit<Toast, 'id'>) => void
   dismissToast: (id: string) => void
@@ -80,8 +90,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   rightRailOpen: (() => { try { return localStorage.getItem('omega.rightRail') !== '0' } catch { return true } })(),
   libraryTab: 'devices',
   commandOpen: false,
+  blasterOpen: false,
+  insightsOpen: false,
   onboardingShown: (() => { try { return localStorage.getItem(ONBOARDING_KEY) === '1' } catch { return true } })(),
   toasts: [],
+  timeOfDay: null,
 
   setTheme: (t) => { applyTheme(t); set({ theme: t }) },
   toggleTheme: () => {
@@ -89,6 +102,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     applyTheme(next); set({ theme: next })
   },
   setViewMode: (m) => set({ viewMode: m }),
+  setTimeOfDay: (h) => set({ timeOfDay: h }),
 
   openMobilePanel: (p) => set({ mobilePanel: p }),
   toggleDesktopPanel: (p) =>
@@ -105,6 +119,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   setLibraryTab: (t) => set({ libraryTab: t }),
   setCommandOpen: (open) => set({ commandOpen: open }),
+  setBlasterOpen: (open) => set({ blasterOpen: open }),
+  setInsightsOpen: (open) => set({ insightsOpen: open }),
   setOnboardingShown: (shown) => {
     try { localStorage.setItem(ONBOARDING_KEY, shown ? '1' : '0') } catch { /* */ }
     set({ onboardingShown: shown })
@@ -113,9 +129,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   pushToast: (t) => {
     const toast: Toast = { id: uuid(), duration: 3200, ...t }
     set({ toasts: [...get().toasts, toast] })
-    if (toast.duration && toast.duration > 0) {
-      setTimeout(() => get().dismissToast(toast.id), toast.duration)
-    }
+    // Auto-dismiss timing is owned by the ToastViewport so it can pause on
+    // hover/focus and play an exit animation before the toast is removed.
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }))

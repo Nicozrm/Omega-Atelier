@@ -1,18 +1,19 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Sun, Moon, User, LogOut, Save,
-  Download, Share2, ArrowLeft, Search, Box, HelpCircle, Cpu, Radio,
-  SquarePen, ScanEye,
+  Download, Share2, ArrowLeft, Search, HelpCircle, Cpu, Radio, Bot,
+  Wand2, BarChart3,
 } from 'lucide-react'
-import type { ViewMode } from '@/store/useUIStore'
 import { usePlanStore } from '@/store/usePlanStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useUIStore } from '@/store/useUIStore'
 import { supabaseReady } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { OmegaMark } from './OmegaMark'
+import { PlanBadge } from './PlanBadge'
 import { SyncStatus } from './SyncStatus'
-import { Button, IconButton, Tooltip, Divider } from '@/ui'
+import { ViewSwitcher } from './ViewSwitcher'
+import { Button, IconButton, Tooltip, Divider, Menu } from '@/ui'
 
 interface TopbarProps {
   showBack?: boolean
@@ -21,9 +22,10 @@ interface TopbarProps {
   onOpenShare?: () => void
   onOpenDevices?: () => void
   onOpenConnectors?: () => void
+  onOpenVacuum?: () => void
 }
 
-export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenDevices, onOpenConnectors }: TopbarProps) {
+export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenDevices, onOpenConnectors, onOpenVacuum }: TopbarProps) {
   const navigate = useNavigate()
   const doc = usePlanStore((s) => s.doc)
   const isSaving = usePlanStore((s) => s.isSaving)
@@ -35,9 +37,9 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
 
   const theme = useUIStore((s) => s.theme)
   const toggleTheme = useUIStore((s) => s.toggleTheme)
-  const viewMode = useUIStore((s) => s.viewMode)
-  const setViewMode = useUIStore((s) => s.setViewMode)
   const setCommandOpen = useUIStore((s) => s.setCommandOpen)
+  const setBlasterOpen = useUIStore((s) => s.setBlasterOpen)
+  const setInsightsOpen = useUIStore((s) => s.setInsightsOpen)
   const pushToast = useUIStore((s) => s.pushToast)
 
   const [editingTitle, setEditingTitle] = useState(false)
@@ -80,7 +82,7 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
           </IconButton>
         )}
         <Link to="/dashboard" className="flex items-center gap-2.5 group">
-          <span className="block transition-transform duration-200 group-hover:scale-105 rounded-[10px] overflow-hidden shadow-[0_2px_10px_rgba(199, 162, 78,0.32)]">
+          <span className="block transition-transform duration-200 group-hover:scale-105 rounded-[10px] overflow-hidden shadow-[0_2px_10px_rgba(199,162,78,0.32)]">
             <OmegaMark size={30} />
           </span>
           <span className="hidden md:inline-block font-display text-[0.95rem] font-semibold leading-none tracking-tight text-[color:var(--fg)]">
@@ -92,32 +94,11 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
       <Divider orientation="vertical" className="mx-1 hidden h-6 md:block" />
 
       {/* Workspace tabs — the reference's Editor | 3D Ansicht | Digital Twin
-          trio, shown whenever a plan is open. */}
-      {doc && (
-        <nav className="hidden md:flex items-center gap-1">
-          {([
-            ['2d', 'Editor', SquarePen],
-            ['3d', '3D Ansicht', Box],
-            ['twin', 'Digital Twin', ScanEye],
-          ] as Array<[ViewMode, string, typeof Box]>).map(([mode, label, Icon]) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              title={label}
-              className={`flex items-center gap-1.5 rounded-lg px-2 lg:px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === mode
-                  ? 'bg-[color:var(--surface-2)] text-[color:var(--fg)] border border-[color:var(--border)]'
-                  : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] border border-transparent'
-              }`}
-            >
-              <Icon size={13} /> <span className="hidden lg:inline">{label}</span>
-            </button>
-          ))}
-        </nav>
-      )}
+          trio, shown whenever a plan is open. Magic-move pill in ViewSwitcher. */}
+      {doc && <ViewSwitcher />}
 
       {doc && (
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {editingTitle ? (
             <input
               autoFocus
@@ -135,49 +116,85 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
           ) : (
             <button
               onClick={() => setEditingTitle(true)}
-              className="truncate rounded-[var(--radius-sm)] px-2 py-1 text-left font-display text-[0.95rem] font-medium text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
+              className="min-w-0 truncate rounded-[var(--radius-sm)] px-2 py-1 text-left font-display text-[0.95rem] font-medium text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
               title="Zum Umbenennen klicken"
             >
               {doc.title}
             </button>
           )}
-          <div className="ml-2"><SyncStatus /></div>
         </div>
       )}
 
       <div className="ml-auto flex items-center gap-1">
+        {/* Workspace tools — icon row (reference style), labels live in tooltips. */}
         <Tooltip label="Befehle & Suche" hint="⌘K" side="bottom">
+          <IconButton
+            label="Befehle & Suche (⌘K)"
+            size="sm"
+            className="hidden lg:inline-flex"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search size={16} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Visible on every breakpoint — on phones this is the only entry
+            point into the studio (the ⌘K palette needs a keyboard). */}
+        <Tooltip label="Image Blaster 3D — Bild in ein 3D-Asset verwandeln" side="bottom">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCommandOpen(true)}
-            className="hidden lg:inline-flex"
-            leading={<Search size={14} />}
+            onClick={() => setBlasterOpen(true)}
+            aria-label="Image Blaster 3D Studio öffnen"
+            leading={<Wand2 size={14} className="text-[color:var(--accent-bright)]" />}
           >
-            <span className="text-[color:var(--muted)] font-mono text-xs">⌘K</span>
+            <span className="hidden lg:inline">3D Studio</span>
           </Button>
         </Tooltip>
-
+        {doc && (
+          <Tooltip label="Insights — Plan-Doktor, Energie, Kosten, Ökosystem" side="bottom">
+            <IconButton label="Insights öffnen" size="sm" onClick={() => setInsightsOpen(true)}>
+              <BarChart3 size={16} />
+            </IconButton>
+          </Tooltip>
+        )}
         {onOpenShare && (
-          <Button variant="ghost" size="sm" onClick={onOpenShare} title="Teilen" className="hidden md:inline-flex" leading={<Share2 size={14} />}>
-            <span className="hidden lg:inline">Teilen</span>
-          </Button>
+          <Tooltip label="Teilen" side="bottom">
+            <IconButton label="Teilen" size="sm" className="hidden md:inline-flex" onClick={onOpenShare}>
+              <Share2 size={16} />
+            </IconButton>
+          </Tooltip>
         )}
         {onOpenDevices && (
-          <Button variant="ghost" size="sm" onClick={onOpenDevices} title="Geräte" className="hidden md:inline-flex" leading={<Cpu size={14} />}>
-            <span className="hidden lg:inline">Geräte</span>
-          </Button>
+          <Tooltip label="Geräte" side="bottom">
+            <IconButton label="Geräte" size="sm" className="hidden md:inline-flex" onClick={onOpenDevices}>
+              <Cpu size={16} />
+            </IconButton>
+          </Tooltip>
         )}
         {onOpenConnectors && (
-          <Button variant="ghost" size="sm" onClick={onOpenConnectors} title="Connectors" className="hidden md:inline-flex" leading={<Radio size={14} />}>
-            <span className="hidden lg:inline">Connectors</span>
-          </Button>
+          <Tooltip label="Connectors" side="bottom">
+            <IconButton label="Connectors" size="sm" className="hidden md:inline-flex" onClick={onOpenConnectors}>
+              <Radio size={16} />
+            </IconButton>
+          </Tooltip>
+        )}
+        {onOpenVacuum && (
+          <Tooltip label="Saugroboter-Karte" side="bottom">
+            <IconButton label="Saugroboter-Karte" size="sm" className="hidden md:inline-flex" onClick={onOpenVacuum}>
+              <Bot size={16} />
+            </IconButton>
+          </Tooltip>
         )}
         {onOpenExport && (
-          <Button variant="ghost" size="sm" onClick={onOpenExport} title="Export" className="hidden md:inline-flex" leading={<Download size={14} />}>
-            <span className="hidden lg:inline">Export</span>
-          </Button>
+          <Tooltip label="Export" side="bottom">
+            <IconButton label="Export" size="sm" className="hidden md:inline-flex" onClick={onOpenExport}>
+              <Download size={16} />
+            </IconButton>
+          </Tooltip>
         )}
+
+        {doc && <div className="hidden xl:block px-1"><SyncStatus /></div>}
         {doc && (
           <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving} leading={<Save size={14} />}>
             <span className="hidden md:inline">Speichern</span>
@@ -197,18 +214,19 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </IconButton>
 
+        {/* Always-visible plan (Zahlplan) + Admin badge. */}
+        <PlanBadge className="ml-1 hidden sm:flex" />
+
         {user ? (
-          <div className="relative group">
-            <IconButton label="Konto" size="sm"><User size={16} /></IconButton>
-            <div className="absolute right-0 top-full mt-1 hidden w-48 surface-elevated p-1 group-hover:block animate-fade-in z-50">
-              <div className="px-3 py-2 text-xs text-[color:var(--muted)] truncate border-b border-[color:var(--border)]">
-                {user.email}
-              </div>
-              <button onClick={() => signOut()} className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm hover:bg-[color:var(--surface-2)] transition-colors">
-                <LogOut size={14} /> Abmelden
-              </button>
-            </div>
-          </div>
+          <Menu
+            align="end"
+            trigger={({ ref, ...props }) => (
+              <IconButton ref={ref} label="Konto" size="sm" {...props}><User size={16} /></IconButton>
+            )}
+          >
+            <Menu.Label>{user.email}</Menu.Label>
+            <Menu.Item icon={<LogOut size={14} />} onSelect={() => signOut()}>Abmelden</Menu.Item>
+          </Menu>
         ) : (
           <Link to="/login" className="btn btn-outline btn-sm">Anmelden</Link>
         )}
