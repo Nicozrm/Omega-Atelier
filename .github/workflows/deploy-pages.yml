@@ -2,7 +2,11 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, master, claude/omega-atelier-gh-pages-pgfoah]
+    # Nur Default-Branches: die `github-pages`-Environment erlaubt Deployments
+    # ausschließlich vom Default-Branch. Von einem Feature-Branch würde der
+    # Deploy-Job vor dem ersten Schritt abgelehnt ("environment protection
+    # rules") — der Build liefe umsonst und die Checks wären dauerhaft rot.
+    branches: [main, master]
   workflow_dispatch:
 
 # Allow the workflow to publish to Pages via the built-in GITHUB_TOKEN
