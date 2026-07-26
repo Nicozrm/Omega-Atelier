@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The web app manifest is injected by vite-plugin-pwa (base-path aware). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="OMEGA" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="OMEGA Atelier 2.0 — Smart-Home Atelier mit interaktivem 2D-Editor, photoreal 3D-Visualisierung und über 30 unterstützten Ökosystemen." />
+    
+    <!-- Open Graph / Social -->
+    <meta property="og:title" content="OMEGA Atelier 2.0 — Smart-Home Planung" />
+    <meta property="og:description" content="Das ultimative Smart-Home Planungstool. Erstelle interaktive Grundrisse, platziere Geräte und verwalte Omega-Modi." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>OMEGA Atelier 2.0</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;550;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    
+    <style>
+      /* Touch feedback */
+      * { -webkit-tap-highlight-color: transparent; }
+      button, [role="button"] {
+        touch-action: manipulation;
+        transition: transform 100ms ease, opacity 100ms ease;
+      }
+      button:active, [role="button"]:active {
+        transform: scale(0.96);
+        opacity: 0.8;
+      }
+      /* Skeleton loading */
+      @keyframes skeleton {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .skeleton {
+        background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+        background-size: 200% 100%;
+        animation: skeleton 1.5s infinite;
+        border-radius: var(--radius-md);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
