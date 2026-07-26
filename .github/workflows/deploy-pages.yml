@@ -1,0 +1,74 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    # Nur Default-Branches: die `github-pages`-Environment erlaubt Deployments
+    # ausschließlich vom Default-Branch. Von einem Feature-Branch würde der
+    # Deploy-Job vor dem ersten Schritt abgelehnt ("environment protection
+    # rules") — der Build liefe umsonst und die Checks wären dauerhaft rot.
+    branches: [main, master]
+  workflow_dispatch:
+
+# Allow the workflow to publish to Pages via the built-in GITHUB_TOKEN
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One live deploy at a time; let a newer run supersede an in-flight one
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Pages base)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Build
+        run: npm run build
+        env:
+          # Project-site sub-path, derived from the repo name (casing-safe).
+          GITHUB_PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
+          # Supabase anon (publishable) key — public by design (RLS-protected),
+          # shipped in the client bundle. Prefer repo secrets/vars if set.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://jaeufqmehslmqvzosrum.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphZXVmcW1laHNsbXF2em9zcnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTMxMjMsImV4cCI6MjA5ODMyOTEyM30.tSFX5KWsO1FvwJEFsggWNIPzEcr_a7imZfL4cSYUUIA' }}
+
+      - name: SPA + PWA deep-link fallback
+        run: cp dist/index.html dist/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
