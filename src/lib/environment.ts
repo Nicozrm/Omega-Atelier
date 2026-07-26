@@ -69,6 +69,14 @@ export interface RenderLighting {
     /** Shadow strength, normalised for direct use as a shadow opacity (0…~0.55). */
     shadowIntensity: number
   }
+  /**
+   * Exterior-albedo multiplier, 0.07 (deep night) … 1 (full day). The world
+   * *around* the model has no interior fixtures, so its surfaces recede with
+   * daylight. A single **continuous** scalar (see `exteriorLightScale`) drives
+   * every exterior surface — neighbourhood, own-house shell, distant backdrop —
+   * so scrubbing time never steps the surroundings between brightness buckets.
+   */
+  exteriorAlbedoScale: number
 }
 
 export interface EnvironmentState {
@@ -142,6 +150,36 @@ function phaseFor(elevationDeg: number, hour: number): DayPhase {
 }
 
 /**
+ * Continuous exterior-albedo scale from the sun's elevation, 0.07 … 1.
+ *
+ * The surroundings carry no interior lighting, so at night they must recede
+ * toward black — but as a **smooth** function of the sun, never a step. Earlier
+ * this was a five-value lookup keyed on the day phase, so scrubbing the clock
+ * popped the whole neighbourhood between brightness levels at each phase border
+ * (≈0.36 in one frame).
+ *
+ * The tuned brightness *plateaus* are preserved exactly — deep night 0.07,
+ * golden hour 0.62, full day 1.0 — so a settled time of day looks identical to
+ * before. Only the three narrow bands *between* plateaus are smoothed
+ * (smoothstep, C¹), turning each former pop into a seamless dissolve. The 0.07
+ * night floor keeps the estate legible in the dark instead of crushing it to
+ * pure black.
+ */
+export function exteriorLightScale(elevationDeg: number): number {
+  const smooth = (e0: number, e1: number, x: number) => {
+    const t = clamp01((x - e0) / (e1 - e0))
+    return t * t * (3 - 2 * t)
+  }
+  const NIGHT = 0.07, TWILIGHT = 0.32, GOLDEN = 0.62, DAY = 1.0
+  return (
+    NIGHT +
+    (TWILIGHT - NIGHT) * smooth(-6, 0, elevationDeg) + // night → twilight
+    (GOLDEN - TWILIGHT) * smooth(-3, 3, elevationDeg) + // twilight → golden hour
+    (DAY - GOLDEN) * smooth(6, 14, elevationDeg) //       golden hour → full day
+  )
+}
+
+/**
  * Resolve the complete environment state for the given world conditions.
  * The single entry point for the environment domain.
  */
@@ -178,9 +216,14 @@ export function deriveEnvironment(input: EnvironmentInput = {}): EnvironmentStat
   // ── Sun (render light) ──
   const above = pos.aboveHorizon
   const sunStrength = clamp01(Math.sin(Math.max(0, elevation) * (Math.PI / 180)))
+  // Perceptual drive: sin(elevation) alone leaves the golden-hour sun nearly
+  // invisible (5° → 0.09). The sub-linear curve lifts the low sun into the
+  // warm, long-shadow drama archviz golden hour is known for, while noon
+  // changes only marginally (0.87 → 0.92).
+  const sunDrive = Math.pow(sunStrength, 0.6)
   const sunColor = kelvinToHex(above ? sunKelvin(elevation) : 6500)
-  const sunIntensity = above ? sunStrength * 1.4 * (1 - 0.75 * cloudiness) : 0
-  const shadowIntensity = above ? sunStrength * (1 - 0.85 * cloudiness) * 0.55 : 0
+  const sunIntensity = above ? sunDrive * 1.4 * (1 - 0.75 * cloudiness) : 0
+  const shadowIntensity = above ? sunDrive * (1 - 0.85 * cloudiness) * 0.55 : 0
 
   // ── Ambient + hemisphere ──
   const ambient = {
@@ -208,6 +251,7 @@ export function deriveEnvironment(input: EnvironmentInput = {}): EnvironmentStat
       ambient,
       hemisphere,
       sun: { color: sunColor, intensity: sunIntensity, castShadow: above, shadowIntensity },
+      exteriorAlbedoScale: exteriorLightScale(elevation),
     },
   }
 }

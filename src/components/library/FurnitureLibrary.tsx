@@ -150,7 +150,7 @@ export function FurnitureLibrary() {
                     className={cn(
                       'flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg border transition',
                       hover === f.id
-                        ? 'border-[color:var(--accent)] bg-[rgba(199, 162, 78,0.10)] text-[color:var(--accent)]'
+                        ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.10)] text-[color:var(--accent)]'
                         : 'border-[color:var(--border)] text-[color:var(--muted)] hover:border-[color:var(--border-strong)] hover:text-[color:var(--fg)]',
                     )}
                   >
@@ -176,7 +176,7 @@ export function FurnitureLibrary() {
                 className={cn(
                   'group relative flex flex-col items-stretch rounded-lg border p-2 text-left transition',
                   selected
-                    ? 'border-[color:var(--accent)] bg-[rgba(199, 162, 78,0.10)]'
+                    ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.10)]'
                     : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-2)]',
                 )}
               >

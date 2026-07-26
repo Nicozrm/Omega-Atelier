@@ -3,7 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
+import { CinematicLayer } from '@/components/editor/CinematicLayer'
 import { SnapBar } from '@/components/editor/SnapBar'
+import { LivingHome } from '@/components/editor/LivingHome'
+import { SoundScape } from '@/components/editor/SoundScape'
+import { RadioMesh } from '@/components/editor/RadioMesh'
 import { EditorToolbar } from '@/components/editor/Toolbar'
 import { FloorTabs } from '@/components/editor/FloorTabs'
 import { HistoryTimeline } from '@/components/editor/HistoryTimeline'
@@ -43,6 +47,9 @@ const DeviceInspector = lazy(() =>
 const ConnectorManager = lazy(() =>
   import('@/components/connectors/ConnectorManager').then((m) => ({ default: m.ConnectorManager })),
 )
+const VacuumRobotView = lazy(() =>
+  import('@/components/vacuum/VacuumRobotView').then((m) => ({ default: m.VacuumRobotView })),
+)
 
 import { MobilePlacement } from '@/components/editor/MobilePlacement'
 
@@ -67,6 +74,7 @@ export function EditorPage() {
   const [shareOpen, setShareOpen] = useState(false)
   const [devicesOpen, setDevicesOpen] = useState(false)
   const [connectorsOpen, setConnectorsOpen] = useState(false)
+  const [vacuumOpen, setVacuumOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -164,6 +172,7 @@ export function EditorPage() {
       <MobilePlacement />
       <OnboardingTour />
       <ShortcutsHelp />
+      <CinematicLayer />
       
       <Topbar
         showBack
@@ -172,10 +181,11 @@ export function EditorPage() {
         onOpenShare={() => setShareOpen(true)}
         onOpenDevices={() => setDevicesOpen(true)}
         onOpenConnectors={() => setConnectorsOpen(true)}
+        onOpenVacuum={() => setVacuumOpen(true)}
       />
 
       {/* Toolbar — responsive, not overlapping */}
-      <div className="shrink-0 z-20 flex items-center gap-2 px-3 py-2 bg-[color:var(--bg-elevated)] border-b border-[color:var(--border)] overflow-x-auto no-select">
+      <div className="shrink-0 z-20 flex items-center gap-2 px-3 py-2 bg-[color:var(--glass-bg)] backdrop-blur-[18px] border-b border-[color:var(--border)] overflow-x-auto no-select">
         <EditorToolbar />
         <div className="mx-2 w-px h-6 bg-[color:var(--border)]" />
         <FloorTabs />
@@ -205,6 +215,9 @@ export function EditorPage() {
               <OmegaFloorCanvas cursors={cursors} publishCursor={publishCursor} />
               <HistoryTimeline />
               <SnapBar />
+              <LivingHome />
+              <SoundScape />
+              <RadioMesh />
             </>
           ) : viewMode === 'twin' ? (
             <Suspense fallback={
@@ -282,6 +295,11 @@ export function EditorPage() {
         {shareOpen && <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} planRowId={planRowId} />}
         {devicesOpen && <DeviceInspector onClose={() => setDevicesOpen(false)} />}
         {connectorsOpen && <ConnectorManager onClose={() => setConnectorsOpen(false)} />}
+        {vacuumOpen && (
+          <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0c0d10]"><div className="w-12 h-12 rounded-full border-2 border-[color:var(--border)] border-t-[color:var(--accent)] animate-spin" /></div>}>
+            <VacuumRobotView onClose={() => setVacuumOpen(false)} />
+          </Suspense>
+        )}
       </Suspense>
     </div>
   )

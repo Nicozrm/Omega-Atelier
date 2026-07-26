@@ -23,6 +23,7 @@ import { OMEGA_MODES } from '@/lib/constants'
 import type { ModeKey, PlacedDevice } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { modeReadiness, type DeviceLookupEntry } from '@/lib/readiness'
+import { play as playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 /** Map mode-icon names from constants.ts to actual components.
@@ -66,7 +67,10 @@ export function ModesPanel() {
           return (
             <button
               key={m.key}
-              onClick={() => setActiveMode(m.key as ModeKey)}
+              onClick={() => {
+                playSound(m.key === 'film' ? 'swell' : 'click')
+                setActiveMode(m.key as ModeKey)
+              }}
               title={
                 missing.length
                   ? `Fehlt fuer vollstaendige Deckung: ${missing.join(', ')}`
@@ -77,7 +81,7 @@ export function ModesPanel() {
                 'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
                 'hover:-translate-y-0.5',
                 active
-                  ? 'border-[color:var(--accent)] bg-[rgba(199, 162, 78,0.12)] scale-[1.02]'
+                  ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.12)] scale-[1.02]'
                   : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-2)]',
               )}
               style={active ? { boxShadow: `0 0 22px ${m.accent}33, 0 4px 14px ${m.accent}1f` } : undefined}

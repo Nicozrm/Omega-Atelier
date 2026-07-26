@@ -19,6 +19,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { usePlanStore, loadLocalPlan } from '@/store/usePlanStore'
+import { useUIStore } from '@/store/useUIStore'
 import { createDemoPlan } from '@/data/demoPlan'
 import { createBlankPlan } from '@/data/templates'
 
@@ -134,10 +135,22 @@ export function StartScreen() {
   const [hovered, setHovered] = useState<string | null>(null)
   const [showPromo, setShowPromo] = useState(false)
   const savedPlan = useMemo(() => loadLocalPlan(), [])
+  // What the Demo actually contains — shown on the card so the choice is honest.
+  const demoStats = useMemo(() => {
+    const d = createDemoPlan()
+    return {
+      rooms: d.floors.reduce((n, f) => n + f.rooms.length, 0),
+      devices: d.floors.reduce((n, f) => n + f.devices.length, 0),
+      furniture: d.floors.reduce((n, f) => n + f.furniture.length, 0),
+    }
+  }, [])
 
-  function startNew()   { navigate('/plan/new') }
-  function startDemo()  { const d = createDemoPlan();  loadDocument(d, false); navigate('/plan/local') }
-  function startBlank() { const b = createBlankPlan(); loadDocument(b, false); navigate('/plan/local') }
+  // Each card now does exactly what it says. The old "Neuer Plan" navigated to
+  // /plan/new without setting a document, so the editor's demo-fallback silently
+  // loaded the demo instead of a blank grid. We set the document explicitly.
+  function startNew()   { loadDocument(createBlankPlan(), false); useUIStore.getState().setViewMode('2d'); navigate('/plan/local') }
+  function startDemo()  { loadDocument(createDemoPlan(), false); useUIStore.getState().setViewMode('2d'); navigate('/plan/local') }
+  function startBlank() { loadDocument(createDemoPlan(), false); useUIStore.getState().setViewMode('3d'); navigate('/plan/local') }
   function resumeSession() {
     if (!savedPlan) return
     loadDocument(savedPlan, false)
@@ -266,6 +279,13 @@ export function StartScreen() {
               Vollständig eingerichteter Plan mit Geräten, Möbeln und allen Modi.
               Die beste Tour durch alle Funktionen.
             </p>
+            <div className="omega-card-stats" aria-hidden>
+              <span><b>{demoStats.rooms}</b> Räume</span>
+              <span className="omega-stat-sep" />
+              <span><b>{demoStats.devices}</b> Geräte</span>
+              <span className="omega-stat-sep" />
+              <span><b>{demoStats.furniture}</b> Möbel</span>
+            </div>
             <div className="omega-card-cta"><span>Erkunden</span><IconArrowRight /></div>
           </button>
 
@@ -292,8 +312,8 @@ export function StartScreen() {
           >
             <div className="omega-card-bg-grid" />
             <div className="omega-card-icon"><IconQuick size={22} /></div>
-            <h3 className="omega-card-title">Schnellstart</h3>
-            <p className="omega-card-desc">Direkt in den Editor.</p>
+            <h3 className="omega-card-title">Sofort in 3D</h3>
+            <p className="omega-card-desc">Demo direkt im 3D-Rundgang.</p>
             <div className="omega-card-cta"><IconArrowRight /></div>
           </button>
         </div>
@@ -354,15 +374,35 @@ const styles = /* css */ `
     --o-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
     --o-out:    cubic-bezier(0.16, 1, 0.3, 1);
     --o-quart:  cubic-bezier(0.25, 1, 0.5, 1);
-    --o-fg:     #F1ECE1;
-    --o-muted:  #8B8478;
-    --o-accent: #C7A24E;
-    --o-accent-bright: #E6CC86;
-    --o-cyan:   #E8C879;
-    --o-bg-1:   #0A0A0B;
+    /* Derive from the global theme so the hero follows light/dark instead of
+       hardcoding a dark palette (which left the landing page black in light
+       mode). Panel/border tokens carry per-theme overrides below. */
+    --o-fg:     var(--fg);
+    --o-muted:  var(--muted);
+    --o-accent: var(--accent);
+    --o-accent-bright: var(--accent-bright);
+    --o-cyan:   var(--cyan);
+    --o-bg-1:   var(--bg);
+    --o-border: var(--border-strong);
+    --o-panel:       rgba(22, 31, 43, 0.6);
+    --o-panel-hover: rgba(28, 40, 54, 0.85);
+    --o-panel-2:     rgba(17, 24, 35, 0.72);
+    --o-panel-line:  rgba(255, 255, 255, 0.08);
+    --o-promo-bg:    rgba(3, 4, 7, 0.82);
+    --o-promo-frame: #050506;
     background: var(--o-bg-1);
     color: var(--o-fg);
     font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  }
+
+  /* Light hero — warm paper panels instead of the dark-glass slabs. */
+  :root.light .omega-start {
+    --o-panel:       rgba(255, 255, 255, 0.78);
+    --o-panel-hover: #ffffff;
+    --o-panel-2:     rgba(255, 255, 255, 0.9);
+    --o-panel-line:  rgba(15, 23, 34, 0.08);
+    --o-promo-bg:    rgba(246, 243, 236, 0.86);
+    --o-promo-frame: #ffffff;
   }
 
   /* Background atmosphere */
@@ -480,14 +520,14 @@ const styles = /* css */ `
     display: inline-flex; align-items: center; gap: 0.4rem;
     padding: 0.32rem 0.72rem; font-size: 0.74rem; font-weight: 500;
     color: var(--o-fg);
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(22, 31, 43, 0.6);
+    border: 1px solid var(--o-panel-line);
+    background: var(--o-panel);
     border-radius: 999px; backdrop-filter: blur(8px);
     opacity: 0; transform: translateY(6px);
     animation: omegaFadeUp 0.4s var(--o-out) forwards;
     transition: transform 0.2s var(--o-quart), border-color 0.2s var(--o-quart), background 0.2s var(--o-quart);
   }
-  .omega-pill:hover { transform: translateY(-2px); border-color: rgba(199, 162, 78,0.4); background: rgba(28, 40, 54, 0.85); }
+  .omega-pill:hover { transform: translateY(-2px); border-color: rgba(199, 162, 78,0.4); background: var(--o-panel-hover); }
   .omega-pill-glyph { color: var(--o-accent); display: inline-flex; align-items: center; }
 
   /* Bento */
@@ -522,9 +562,9 @@ const styles = /* css */ `
   .omega-card {
     position: relative; display: flex; flex-direction: column; align-items: flex-start;
     text-align: left; padding: 1.2rem 1.3rem; border-radius: 18px;
-    background: rgba(17, 24, 35, 0.72);
+    background: var(--o-panel-2);
     backdrop-filter: blur(14px);
-    border: 1px solid rgba(255,255,255,0.07);
+    border: 1px solid var(--o-panel-line);
     box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.32);
     cursor: pointer; overflow: hidden; color: var(--o-fg); font-family: inherit;
     opacity: 0; transform: translateY(14px);
@@ -577,7 +617,23 @@ const styles = /* css */ `
     line-height: 1.15; letter-spacing: -0.025em; margin: 0 0 0.4rem 0;
   }
   .omega-card-feature .omega-card-title, .omega-card-hero .omega-card-title { font-size: 1.45rem; }
-  .omega-card-desc { font-size: 0.83rem; line-height: 1.55; color: var(--o-muted); margin: 0; flex: 1; }
+  .omega-card-desc { font-size: 0.83rem; line-height: 1.55; color: var(--o-muted); margin: 0; }
+
+  /* Demo stats — fills the feature card's body with what you actually get. */
+  .omega-card-stats {
+    display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+    margin-top: 1rem; flex: 1; align-content: flex-start;
+    font-size: 0.8rem; color: var(--o-muted);
+  }
+  .omega-card-stats b {
+    font-size: 1.15rem; font-weight: 600; color: var(--o-fg);
+    letter-spacing: -0.02em; margin-right: 0.28rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .omega-card-stats span { display: inline-flex; align-items: baseline; }
+  .omega-stat-sep { width: 3px; height: 3px; border-radius: 50%; background: color-mix(in srgb, var(--o-muted) 55%, transparent); align-self: center; }
+  /* Cards without a stats filler keep the CTA pinned to the bottom. */
+  .omega-card-hero .omega-card-desc, .omega-card-compact .omega-card-desc { flex: 1; }
   .omega-card-cta {
     display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 1rem;
     font-size: 0.78rem; font-weight: 600; color: var(--o-accent-bright);
@@ -628,7 +684,7 @@ const styles = /* css */ `
   .omega-promo-link {
     display: inline-flex; align-items: center; gap: 0.55rem; margin-top: 1.2rem;
     padding: 0.5rem 0.9rem 0.5rem 0.5rem; border-radius: 999px;
-    background: rgba(255,255,255,0.02); border: 1px solid var(--o-border);
+    background: color-mix(in srgb, var(--o-fg) 3%, transparent); border: 1px solid var(--o-border);
     color: var(--o-muted); font-size: 0.8rem; font-weight: 500; letter-spacing: 0.01em;
     cursor: pointer; opacity: 0; backdrop-filter: blur(4px);
     transition: color 0.25s var(--o-quart), border-color 0.25s var(--o-quart), background 0.25s var(--o-quart), transform 0.25s var(--o-quart);
@@ -645,13 +701,13 @@ const styles = /* css */ `
   /* Modal */
   .omega-promo-overlay {
     position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
-    padding: 4vmin; background: rgba(3,4,7,0.82); backdrop-filter: blur(10px);
+    padding: 4vmin; background: var(--o-promo-bg); backdrop-filter: blur(10px);
     animation: omegaFadeUp 0.3s var(--o-out) forwards;
   }
   .omega-promo-frame {
     position: relative; width: min(1000px, 94vw); border-radius: 16px; overflow: hidden;
-    border: 1px solid var(--o-border); box-shadow: 0 30px 90px rgba(0,0,0,0.6);
-    background: #050506;
+    border: 1px solid var(--o-border); box-shadow: var(--shadow-4, 0 30px 90px rgba(0,0,0,0.6));
+    background: var(--o-promo-frame);
   }
   .omega-promo-video { display: block; width: 100%; height: auto; }
   .omega-promo-close {

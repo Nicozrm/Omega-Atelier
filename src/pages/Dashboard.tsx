@@ -5,14 +5,17 @@ import {
   Settings, Sun, Moon, Bell, Copy, ChevronDown, ChevronRight, Thermometer,
   Droplets, Leaf, Plug, Lightbulb, PanelTop, MousePointer2, Hand, Orbit,
   Ruler, Grid3X3, RefreshCw, Maximize2, Eye, Move, MoreHorizontal,
-  Sunrise, Coffee, LogOut, PartyPopper, AlertTriangle,
+  Sunrise, Coffee, LogOut, PartyPopper, AlertTriangle, Bot,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { usePlanStore } from '@/store/usePlanStore'
 import { createDemoPlan } from '@/data/demoPlan'
 import { useUIStore } from '@/store/useUIStore'
+import { useTier } from '@/hooks/useTier'
+import { PlanBadge } from '@/components/layout/PlanBadge'
 import { OMEGA_MODES } from '@/lib/constants'
 import { DEVICES } from '@/data/devices'
+import { play as playSound } from '@/lib/sound'
 import type { ModeKey } from '@/types'
 
 const ThreeDView = lazy(() =>
@@ -35,7 +38,13 @@ function Switch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       onClick={() => onChange(!on)}
       className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--surface-3)]'}`}
     >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+      <span
+        className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow"
+        style={{
+          transform: on ? 'translateX(16px)' : 'translateX(0)',
+          transition: 'transform var(--spring-pop-ms) var(--spring-pop)',
+        }}
+      />
     </button>
   )
 }
@@ -70,6 +79,7 @@ const NAV: Array<{ icon: LucideIcon; label: string; to?: string; view?: '2d' | '
   { icon: Clapperboard, label: 'Szenen', to: '/plan/local' },
   { icon: Workflow, label: 'Automationen', to: '/plan/local' },
   { icon: Zap, label: 'Energie', to: '/plan/local' },
+  { icon: Bot, label: 'Saugroboter', to: '/robot' },
   { icon: Settings, label: 'Einstellungen', to: '/settings' },
 ]
 
@@ -88,6 +98,7 @@ export function DashboardPage() {
   const setViewMode = useUIStore((s) => s.setViewMode)
   const loadDocument = usePlanStore((s) => s.loadDocument)
   const activeMode = doc?.activeModeKey ?? 'auto'
+  const { label: planLabel, admin } = useTier()
 
   // The dashboard previews the digital twin, so it bootstraps the same demo
   // plan the editor would — without it the store is empty on a fresh visit.
@@ -142,9 +153,9 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[color:var(--bg)] text-[color:var(--fg)]">
-      {/* ── Sidebar ─────────────────────────────────────────── */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[color:var(--border)] bg-[color:var(--bg-elevated)] md:flex">
+    <div className="flex h-screen overflow-hidden text-[color:var(--fg)]">
+      {/* ── Sidebar — glass over the ambient scene ───────────── */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-[color:var(--border)] bg-[color:var(--glass-bg)] backdrop-blur-[18px] md:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--surface-2)] font-display text-lg text-[color:var(--accent)]">Ω</div>
           <div className="font-display text-base font-semibold tracking-wide">OMEGA <span className="text-[color:var(--accent)]">Atelier</span></div>
@@ -166,7 +177,7 @@ export function DashboardPage() {
                 i === 0 ? 'bg-[color:var(--surface-2)] text-[color:var(--fg)]' : 'text-[color:var(--muted)] hover:bg-[color:var(--surface)] hover:text-[color:var(--fg)]'
               }`}
             >
-              <Icon size={15} /> {label}
+              <Icon size={15} className={i === 0 ? 'text-[color:var(--accent-bright)]' : undefined} /> {label}
             </button>
           ))}
         </nav>
@@ -176,7 +187,7 @@ export function DashboardPage() {
             <button
               key={p}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                p === project ? 'bg-[rgba(199, 162, 78,0.12)] text-[color:var(--fg)]' : 'text-[color:var(--muted)] hover:bg-[color:var(--surface)]'
+                p === project ? 'bg-[rgba(199,162,78,0.12)] text-[color:var(--fg)]' : 'text-[color:var(--muted)] hover:bg-[color:var(--surface)]'
               }`}
             >
               <LayoutPanelLeft size={14} />
@@ -186,11 +197,14 @@ export function DashboardPage() {
           ))}
         </div>
         <div className="mt-auto p-3">
-          <div className="flex items-center gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
+          <div className="panel-card flex items-center gap-3 p-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color:var(--surface-3)] text-sm font-semibold">NZ</div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">Nico Zimmermann</div>
-              <div className="text-xs text-[color:var(--muted)]">Pro Plan</div>
+              <div className="flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
+                <span>{planLabel} Plan</span>
+                {admin && <span className="rounded-full bg-[rgba(255,177,61,0.14)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[color:var(--color-omega-warn)]">Admin</span>}
+              </div>
             </div>
             <MoreHorizontal size={16} className="text-[color:var(--muted)]" />
           </div>
@@ -205,9 +219,20 @@ export function DashboardPage() {
             {doc?.title ?? 'Mein Smart Home'} <ChevronDown size={14} className="text-[color:var(--muted)]" />
           </button>
           <div className="flex items-center gap-1">
+            {/* Always-visible robot entry — the sidebar is hidden on mobile, so
+                this is the reliable way to reach the vacuum on every screen. */}
+            <button
+              onClick={() => navigate('/robot')}
+              className="btn btn-ghost btn-icon spring-press"
+              title="Saug- & Wischroboter"
+              aria-label="Saug- & Wischroboter öffnen"
+            ><Bot size={16} className="text-[color:var(--accent)]" /></button>
             {[Sun, Bell, Copy].map((I, i) => (
               <button key={i} className="btn btn-ghost btn-icon"><I size={15} /></button>
             ))}
+            {/* Always-visible plan badge — the sidebar (with its plan line) is
+                hidden on mobile, so surface it here too. */}
+            <PlanBadge className="ml-1" />
             <div className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--surface-3)] text-xs font-semibold">NZ</div>
           </div>
         </div>
@@ -217,21 +242,26 @@ export function DashboardPage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h1 className="font-display text-2xl font-semibold">Deine Grundrisse</h1>
+                <h1 className="font-display text-3xl font-semibold tracking-tight">Deine Grundrisse</h1>
                 <p className="mt-1 text-sm text-[color:var(--muted)]">Steuere dein Zuhause mit OMEGA-Modi</p>
               </div>
               <div className="flex gap-2">
-                <div className="flex items-center gap-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2">
-                  <Moon size={15} className="text-[color:var(--accent)]" />
+                <div className="panel-card flex items-center gap-2.5 px-3.5 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(199,162,78,0.14)]">
+                    <Moon size={14} className="text-[color:var(--accent-bright)]" />
+                  </span>
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Sonnenstand</div>
                     <div className="text-sm font-medium">Abend</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2">
+                <div className="panel-card flex items-center gap-2.5 px-3.5 py-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(62,207,142,0.12)]">
+                    <Zap size={14} className="text-[#3ecf8e]" />
+                  </span>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">⚡ Live-Verbrauch</div>
-                    <div className="text-sm font-medium">{stats.watts} W</div>
+                    <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Live-Verbrauch</div>
+                    <div className="text-sm font-medium tnum">{stats.watts} W</div>
                   </div>
                   <Sparkline />
                 </div>
@@ -246,16 +276,19 @@ export function DashboardPage() {
                 return (
                   <button
                     key={m.key}
-                    onClick={() => setActiveMode(m.key as ModeKey)}
-                    className={`flex min-w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-xl border px-3 py-3 transition-all ${
+                    onClick={() => {
+                      playSound(m.key === 'film' ? 'swell' : 'click')
+                      setActiveMode(m.key as ModeKey)
+                    }}
+                    className={`spring-press flex min-w-[100px] shrink-0 flex-col items-center gap-1.5 rounded-[14px] border px-3 py-3 transition-all ${
                       active
-                        ? 'border-[color:var(--accent)] bg-[rgba(199, 162, 78,0.10)] shadow-[0_0_16px_rgba(199, 162, 78,0.25)]'
-                        : 'border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--border-strong)]'
+                        ? 'border-[color:var(--accent)] bg-[linear-gradient(180deg,rgba(199,162,78,0.16),rgba(199,162,78,0.06))] shadow-[0_0_0_1px_rgba(199,162,78,0.25),0_0_22px_rgba(199,162,78,0.28)]'
+                        : 'border-[color:var(--border)] bg-[color:var(--surface)]/75 backdrop-blur-md hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface)]'
                     }`}
                   >
-                    <Icon size={16} className={active ? 'text-[color:var(--accent)]' : 'text-[color:var(--muted)]'} />
+                    <Icon size={16} className={active ? 'text-[color:var(--accent-bright)]' : 'text-[color:var(--muted)]'} />
                     <span className="text-xs font-medium">{m.name}</span>
-                    <span className={`text-[10px] ${active ? 'text-[color:var(--accent)]' : 'text-transparent'}`}>Aktiv</span>
+                    <span className={`text-[10px] font-medium ${active ? 'text-[color:var(--accent-bright)]' : 'text-transparent'}`}>Aktiv</span>
                   </button>
                 )
               })}
@@ -265,7 +298,7 @@ export function DashboardPage() {
             </div>
 
             {/* Live 3D preview card */}
-            <div className="relative mt-4 h-[440px] overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] xl:h-[520px]">
+            <div className="relative mt-4 h-[440px] overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-[var(--shadow-4)] xl:h-[520px]">
               <Suspense fallback={
                 <div className="flex h-full items-center justify-center">
                   <div className="h-10 w-10 animate-spin rounded-full border-2 border-[color:var(--border)] border-t-[color:var(--accent)]" />
@@ -318,7 +351,7 @@ export function DashboardPage() {
 
           {/* Right column */}
           <div className="hidden w-72 shrink-0 space-y-4 xl:block">
-            <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+            <div className="panel-card p-4">
               <div className="mb-3 text-sm font-semibold">Umgebung</div>
               {[
                 { icon: Thermometer, label: 'Temperatur', value: '21,5 °C' },
@@ -332,7 +365,7 @@ export function DashboardPage() {
               ))}
             </div>
 
-            <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+            <div className="panel-card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-sm font-semibold">Geräte</div>
                 <button onClick={() => navigate('/plan/local')} className="text-xs text-[color:var(--accent)] hover:underline">Alle anzeigen</button>
@@ -352,7 +385,7 @@ export function DashboardPage() {
               })}
             </div>
 
-            <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+            <div className="panel-card p-4">
               <div className="mb-3 text-sm font-semibold">Energie heute</div>
               <div className="flex items-end justify-between">
                 <div>

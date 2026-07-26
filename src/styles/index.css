@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   OMEGA DESIGN LANGUAGE — v2 "Quiet Luxury"
-   Deep off-black canvas · electric indigo accent · disciplined, calm UI.
+   OMEGA DESIGN LANGUAGE — v3 "Electric Atelier"
+   Deep blue-black canvas · electric violet accent · disciplined, calm UI.
    Figma × Tesla UI × Linear. Restraint over effects.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -61,6 +61,17 @@
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-spring:    cubic-bezier(0.34, 1.4, 0.5, 1);
 
+  /* Physical springs (Fluid Interfaces). These bezier values are only the
+     fallback — installMotion() (src/lib/motion.ts) upgrades them at startup
+     to real damped-oscillator curves via CSS linear(), so release rebounds
+     carry mass and inertia instead of a keyframe approximation. */
+  --spring-pop:       var(--ease-spring);
+  --spring-pop-ms:    240ms;
+  --spring-panel:     var(--ease-out-quart);
+  --spring-panel-ms:  280ms;
+  --spring-bounce:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-bounce-ms: 340ms;
+
   /* Motion durations (UX-1) — pair with the eases above */
   --dur-1: 120ms;
   --dur-2: 200ms;
@@ -100,6 +111,9 @@
   --accent-dim:    #9A7B36;
   --accent-contrast: #0A0A0B;
   --cyan:          #E8C879;
+  --danger:        #FF5C5C;
+  --warn:          #FFB13D;
+  --success:       #2EE59D;
 
   --surface:    #17161A;
   --surface-2:  #1F1D22;
@@ -135,6 +149,9 @@
   --accent-dim:    #6E5420;
   --accent-contrast: #FFFDF8;
   --cyan:          #B8862F;
+  --danger:        #E03E3E;
+  --warn:          #D98A16;
+  --success:       #14A56F;
 
   --surface:    #FFFFFF;
   --surface-2:  #F3EFE5;
@@ -198,6 +215,11 @@ body {
 
 /* Numeric readouts hold their width. */
 .font-mono, .tnum, [data-numeric] { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* Optical alignment: an inline icon flex-centred next to lowercase text sits
+   a hair high (its box is taller than the x-height it visually pairs with).
+   Nudge it onto the optical baseline — machine centring reads as sloppy. */
+.icon-optical { transform: translateY(0.05em); }
 
 /* Glass surface — translucent, blurred, faint top highlight. */
 .glass {
@@ -294,7 +316,7 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
   border: 1px solid transparent;
   letter-spacing: -0.01em;
   transition:
-    transform var(--dur-1) var(--ease-out-quart),
+    transform var(--spring-pop-ms) var(--spring-pop),
     box-shadow var(--dur-2) var(--ease-out-quart),
     background-color var(--dur-1) var(--ease-out-quart),
     border-color var(--dur-1) var(--ease-out-quart),
@@ -302,7 +324,14 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
     filter var(--dur-1) var(--ease-out-quart);
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn:active:not(:disabled) { transform: scale(0.97); filter: brightness(0.98); }
+/* Press/release asymmetry: the press is immediate (short ease-out), the
+   release springs back with mass — the organic rebound of a real control. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.98);
+  transition-duration: 70ms;
+  transition-timing-function: var(--ease-out-quart);
+}
 @keyframes omega-spin { to { transform: rotate(360deg); } }
 .btn.is-loading { color: transparent !important; pointer-events: none; position: relative; }
 .btn.is-loading::after {
@@ -404,6 +433,20 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
 }
+/* Dashboard/inspector card — translucent surface with a soft lift. The
+   reference's right-rail cards: quiet glass, hairline border, inner light. */
+.panel-card {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.20),
+    0 10px 28px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
 /* Frosted glass panel */
 .surface-glass {
   background: var(--glass-bg);
@@ -469,6 +512,17 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
   50%      { opacity: 0.6; transform: scale(0.94); }
 }
 
+/* Scroll reveal (landing) — one gentle rise+fade per block, fired once. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s var(--ease-out-quart), transform 0.7s var(--ease-out-quart);
+}
+.reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
 .animate-fade-in     { animation: fade-in 200ms var(--ease-omega); }
 .animate-slide-up    { animation: slide-up 260ms var(--ease-out-expo); }
 .animate-scale-in    { animation: scale-in 200ms var(--ease-out-expo); }
@@ -507,10 +561,45 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
 .stagger > *:nth-child(11){ animation-delay: 0.242s; }
 .stagger > *:nth-child(12){ animation-delay: 0.264s; }
 
-.lift { transition: transform var(--dur-2) var(--ease-spring), box-shadow var(--dur-2) var(--ease-out-quart); will-change: transform; }
+.lift { transition: transform var(--spring-panel-ms) var(--spring-panel), box-shadow var(--dur-2) var(--ease-out-quart); will-change: transform; }
 .lift:hover { transform: translateY(-2px) scale(1.004); box-shadow: var(--shadow-3); }
-.pressable { transition: transform var(--dur-1) var(--ease-out-quart); }
-.pressable:active { transform: scale(0.97); }
+.pressable { transition: transform var(--spring-pop-ms) var(--spring-pop); }
+.pressable:active { transform: scale(0.97); transition-duration: 70ms; transition-timing-function: var(--ease-out-quart); }
+
+/* Spring press for compact controls (chips, tabs, segments) — a slightly
+   deeper dip than .btn, released through the same physical spring. */
+.spring-press { transition: transform var(--spring-pop-ms) var(--spring-pop); will-change: transform; }
+.spring-press:active:not(:disabled) { transform: scale(0.94); transition-duration: 70ms; transition-timing-function: var(--ease-out-quart); }
+
+/* ── Predictive command state (latency mask) ─────────────────────────
+   A command in flight glows in a soft amber pulse — "searching/connecting",
+   never a raw spinner. A definitive failure morphs the control into a calm
+   error state (one spring dip, warm red ring) and releases automatically. */
+@keyframes cmd-pending-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(224, 162, 60, 0); }
+  50%      { box-shadow: 0 0 0 1px rgba(224, 162, 60, 0.55), 0 0 16px 2px rgba(224, 162, 60, 0.28); }
+}
+.cmd-pending {
+  animation: cmd-pending-pulse 1.3s var(--ease-omega) infinite;
+  border-color: rgba(224, 162, 60, 0.65) !important;
+}
+@keyframes cmd-failed-dip {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+.cmd-failed {
+  animation: cmd-failed-dip var(--spring-bounce-ms) var(--spring-bounce) both;
+  border-color: rgba(216, 99, 95, 0.75) !important;
+  color: #d8635f !important;
+  box-shadow: 0 0 0 1px rgba(216, 99, 95, 0.30), 0 0 18px rgba(216, 99, 95, 0.16);
+}
+/* A failed primary action morphs fully into a calm red — gold would fight
+   the message and red-on-gold is unreadable. */
+.btn-primary.cmd-failed {
+  background: linear-gradient(180deg, #c96560, #b04f4a);
+  color: #fff5f4 !important;
+}
 
 @keyframes twin-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.015); } }
 .twin-bloom { transform-box: fill-box; transform-origin: center; animation: twin-breathe 5.5s var(--ease-out-quart) infinite; }
@@ -527,7 +616,7 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
 .list-row:active { background: var(--surface-3); }
 
 .card-hover {
-  transition: transform var(--dur-2) var(--ease-spring), box-shadow var(--dur-2) var(--ease-out-quart), border-color var(--dur-2) var(--ease-out-quart);
+  transition: transform var(--spring-panel-ms) var(--spring-panel), box-shadow var(--dur-2) var(--ease-out-quart), border-color var(--dur-2) var(--ease-out-quart);
   will-change: transform;
 }
 .card-hover:hover {
@@ -693,3 +782,81 @@ html.q-low .bloom, html.q-off .bloom { filter: none; }
 .mpe-ring.is-invalid { border-color: var(--danger); box-shadow: 0 0 20px rgba(255,90,90,0.5); }
 .mpe-tick { position: absolute; left: 50%; top: -11px; width: 2px; height: 13px; background: var(--accent); transform: translateX(-50%); }
 .mpe-ring.is-invalid .mpe-tick { background: var(--danger); }
+
+/* ── Image Blaster 3D — studio slider ─────────────────────────────── */
+.blaster-range {
+  -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 999px;
+  background: var(--surface-3);
+  outline: none; cursor: pointer;
+}
+.blaster-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent-bright);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--border-strong), 0 2px 6px rgba(0,0,0,0.4);
+  transition: transform 120ms var(--ease-out-quart);
+}
+.blaster-range::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.blaster-range::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent-bright);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--border-strong), 0 2px 6px rgba(0,0,0,0.4);
+}
+.blaster-range:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ── AI Home Composer — cinematic scanner ─────────────────────────── */
+.composer-scan {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  border-radius: inherit;
+}
+.composer-scan::before {
+  /* the golden sweep line */
+  content: ''; position: absolute; left: 0; right: 0; height: 34%;
+  background: linear-gradient(180deg,
+    rgba(232,200,121,0) 0%,
+    rgba(232,200,121,0.06) 40%,
+    rgba(232,200,121,0.42) 82%,
+    rgba(240,214,140,0.9) 100%);
+  box-shadow: 0 0 26px 6px rgba(232,200,121,0.28);
+  animation: composer-sweep 2.6s var(--ease-out-quart, ease) infinite;
+}
+.composer-scan::after {
+  /* faint aerial grid */
+  content: ''; position: absolute; inset: 0; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(232,200,121,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232,200,121,0.06) 1px, transparent 1px);
+  background-size: 34px 34px, 34px 34px;
+  mask-image: radial-gradient(circle at 50% 50%, #000 55%, transparent 100%);
+}
+@keyframes composer-sweep {
+  0% { transform: translateY(-40%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(300%); opacity: 0; }
+}
+.composer-particle {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%;
+  background: rgba(240,214,140,0.9);
+  box-shadow: 0 0 8px 1px rgba(232,200,121,0.6);
+  animation: composer-rise linear infinite;
+}
+@keyframes composer-rise {
+  0% { transform: translateY(20px) scale(0.6); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-120px) scale(1); opacity: 0; }
+}
+@keyframes composer-glow-rot { to { transform: rotate(360deg); } }
+.composer-glow {
+  position: absolute; inset: -40%; pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(232,200,121,0.14) 60deg, transparent 140deg);
+  animation: composer-glow-rot 7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-scan::before, .composer-particle, .composer-glow { animation: none; }
+}

@@ -179,6 +179,34 @@ export interface Label {
   size?: number
 }
 
+/** How an Image-Blaster asset sits in the room. */
+export type BlasterMount = 'wall' | 'floor'
+
+/**
+ * A generated Image-Blaster-3D asset placed in the plan. Stores the *recipe*
+ * (source image + settings snapshot) rather than geometry — the pipeline is
+ * deterministic, so the 3D view rebuilds the exact mesh on load.
+ */
+export interface PlacedBlasterAsset {
+  id: UUID
+  name: string
+  /** Source image data-URL, longer edge ≤ 512px. */
+  image: string
+  /** Image-Blaster settings snapshot (BlasterSettings shape; normalized on use). */
+  settings: Record<string, unknown>
+  /** Center position in plan coordinates (cm). */
+  position: Point
+  /** Rotation around the vertical axis, degrees. 0 = facing plan +y. */
+  rotation: number
+  /** Physical size of the longer image edge, cm. */
+  width: number
+  /** Height of the asset center above the floor, cm. */
+  elevation: number
+  mount: BlasterMount
+  roomId?: UUID
+  hidden?: boolean
+}
+
 export interface Floor {
   id: UUID
   name: string
@@ -188,6 +216,9 @@ export interface Floor {
   devices: PlacedDevice[]
   furniture: PlacedFurniture[]
   labels: Label[]
+  /** Generated Image-Blaster-3D assets (wall art / objects). Optional for
+   *  back-compat with pre-existing documents; coercePlan normalizes to []. */
+  blasterAssets?: PlacedBlasterAsset[]
   /** visibility per layer */
   layers: Record<LayerKey, boolean>
   /** canvas extent in cm */
@@ -250,6 +281,9 @@ export interface PlanDocument {
   settings: PlanSettings
   /** free-form tags e.g. "penthouse", "studio" */
   tags?: string[]
+  /** Real-world anchor of the plan (composer-generated plans remember where
+   *  they were captured) — enables satellite ground, sun-by-location, … */
+  geo?: { lat: number; lng: number }
   createdAt: ISODateTime
   updatedAt: ISODateTime
   /** Random per-browser-session ID, used to detect echo of own writes

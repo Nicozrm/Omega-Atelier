@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="canonical" href="https://nobleframe.de/leistungen.html">
+    <meta name="theme-color" content="#000000">
+    <title>Leistungen – NobleFrame | Was wir erschaffen</title>
+    <meta name="description" content="Von der ersten Idee bis zum Launch: Websites, E-Commerce, Web-Apps, Branding, Growth und KI-Integration. Entdecken Sie, was sich mit NobleFrame umsetzen lässt.">
+    <meta name="robots" content="index, follow">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NobleFrame">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:description" content="Websites, E-Commerce, Web-Apps, Branding, Growth und KI-Integration – maßgeschneidert vom Premium Digital Atelier.">
+    <meta property="og:url" content="https://nobleframe.de/leistungen.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Leistungen – NobleFrame">
+    <meta name="twitter:description" content="Was sich mit NobleFrame umsetzen lässt – von der Idee bis zum Launch.">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Service","provider":{"@type":"Organization","name":"NobleFrame","url":"https://nobleframe.de"},"serviceType":["Webentwicklung","E-Commerce","Web-Apps","Branding","Growth Marketing","KI-Integration"],"areaServed":"DE","url":"https://nobleframe.de/leistungen.html"}
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23000' width='32' height='32'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23C9A962' stroke-width='2'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23C9A962' stroke-width='1'/%3E%3C/svg%3E">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NobleFrame">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:title" content="Leistungen – NobleFrame | Was wir erschaffen">
+    <meta property="og:description" content="Websites, E-Commerce, Web-Apps, Branding, Growth und KI. Entdecken Sie, was sich mit NobleFrame umsetzen lässt.">
+    <meta property="og:url" content="https://nobleframe.de/leistungen.html">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--gold:#C9A962;--gold-light:#E8D5A3;--gold-dark:#8B7355;--black:#000;--white:#FAFAFA;--white-muted:rgba(250,250,250,.75);--white-subtle:rgba(250,250,250,.55);--gradient:linear-gradient(135deg,#C9A962 0%,#E8D5A3 50%,#C9A962 100%)}
+        html{scroll-behavior:smooth;background:#000;color-scheme:dark}
+        body{font-family:'Outfit',sans-serif;background:#000;color:var(--white);overflow-x:hidden;line-height:1.6;min-height:100vh}
+
+        /* BACKGROUND */
+        .bg-effects{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+        .ambient-glow{position:absolute;border-radius:50%;filter:blur(120px)}
+        .glow-1{width:500px;height:500px;background:rgba(201,169,98,.06);top:-200px;right:-100px}
+        .glow-2{width:400px;height:400px;background:rgba(201,169,98,.04);bottom:-150px;left:-100px}
+        .grid-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(201,169,98,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(201,169,98,.012) 1px,transparent 1px);background-size:80px 80px}
+
+        /* NAVIGATION */
+        .nav-wrapper{position:fixed;top:0;left:0;width:100%;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(201,169,98,.1);transition:all .4s ease}
+        .nav-wrapper.scrolled{background:rgba(0,0,0,.96)}
+        .nav-main{display:flex;justify-content:space-between;align-items:center;padding:20px 60px}
+        .logo{display:flex;align-items:center;gap:15px;text-decoration:none}
+        .logo-icon{width:45px;height:45px}
+        .logo-icon svg{width:100%;height:100%}
+        .logo-text{font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:300;letter-spacing:8px;color:var(--white);text-transform:uppercase}
+
+        .nav-links{display:flex;gap:4px;list-style:none}
+        .nav-links>li{position:relative}
+        .nav-links>li>a{position:relative;display:flex;align-items:center;padding:12px 16px;color:var(--white-muted);text-decoration:none;font-size:.82rem;font-weight:400;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;transition:color .35s ease,letter-spacing .35s ease}
+        .nav-links>li>a::after{content:'';position:absolute;left:16px;right:16px;bottom:7px;height:1px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.65,0,.35,1)}
+        .nav-links>li>a:hover{color:var(--gold-light);letter-spacing:2px}
+        .nav-links>li>a:hover::after{transform:scaleX(1)}
+        .nav-links>li>a.active{color:var(--gold-light)}
+        .nav-links>li>a.active::after{transform:scaleX(1)}
+
+        .nav-cta{display:flex;align-items:center;gap:8px;padding:13px 26px;background:var(--gold);color:var(--black);font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;text-decoration:none;transition:all .4s ease;border:1px solid var(--gold)}
+        .nav-cta:hover{background:transparent;color:var(--gold)}
+
+        .nav-mobile-toggle{display:none;flex-direction:column;gap:5px;padding:12px;background:transparent;border:1px solid rgba(201,169,98,.3);cursor:pointer;min-height:44px;min-width:44px;justify-content:center;align-items:center}
+        .nav-mobile-toggle span{width:24px;height:2px;background:var(--gold);transition:all .3s ease}
+        .nav-mobile-toggle.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+        .nav-mobile-toggle.active span:nth-child(2){opacity:0}
+        .nav-mobile-toggle.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+
+        .mobile-menu{position:fixed;top:0;left:0;width:100%;height:100vh;background:rgba(0,0,0,.98);z-index:999;display:flex;flex-direction:column;padding:100px 40px 40px;opacity:0;visibility:hidden;transition:all .4s ease;overflow-y:auto}
+        .mobile-menu.active{opacity:1;visibility:visible}
+        .mobile-menu-section{margin-bottom:30px}
+        .mobile-menu-section h5{font-size:.7rem;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(201,169,98,.15)}
+        .mobile-menu-nav{counter-reset:m;display:flex;flex-direction:column}
+        .mobile-menu-nav a{position:relative;font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--white);text-decoration:none;padding:14px 0 14px 44px;transition:all .3s ease;border-left:2px solid transparent;display:flex;align-items:center;min-height:44px}
+        .mobile-menu-nav a::before{counter-increment:m;content:counter(m,decimal-leading-zero);position:absolute;left:14px;font-family:'Outfit',sans-serif;font-size:.7rem;letter-spacing:1px;color:var(--gold);opacity:.6;top:50%;transform:translateY(-50%)}
+        .mobile-menu-nav a::after{content:'→';margin-left:auto;color:var(--gold);opacity:0;transform:translateX(-8px);transition:all .3s ease}
+        .mobile-menu-nav a:hover,.mobile-menu-nav a.active{color:var(--gold);border-left-color:var(--gold);padding-left:50px}
+        .mobile-menu-nav a:hover::after,.mobile-menu-nav a.active::after{opacity:1;transform:translateX(0)}
+        .mobile-menu-links{display:flex;flex-direction:column;gap:8px}
+        .mobile-menu-links a{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--white);text-decoration:none;padding:10px 0;transition:color .3s ease}
+        .mobile-menu-links a:hover{color:var(--gold)}
+        .mobile-menu-cta{margin-top:auto;padding:18px 35px;background:var(--gold);color:var(--black);font-size:.9rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+        /* HERO */
+        .page-hero{padding:180px 60px 90px;text-align:center;position:relative;z-index:10;overflow:hidden}
+        .hero-badge{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;background:rgba(201,169,98,.08);border:1px solid rgba(201,169,98,.25);margin-bottom:30px;animation:fadeUp .8s ease .1s both}
+        .hero-badge .dot{width:8px;height:8px;background:var(--gold);border-radius:50%;animation:pulse 2s infinite}
+        .hero-badge span{font-size:.72rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        .hero-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.4rem,5.5vw,4.4rem);font-weight:300;line-height:1.12;margin-bottom:28px;animation:fadeUp .8s ease .25s both}
+        .hero-title .accent{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .hero-type-line{font-family:'Cormorant Garamond',serif;font-size:clamp(1.3rem,2.6vw,2rem);font-weight:300;color:var(--white-muted);margin-bottom:30px;min-height:1.4em;animation:fadeUp .8s ease .4s both}
+        .hero-type{color:var(--gold-light)}
+        .hero-caret{display:inline-block;width:2px;height:1.05em;background:var(--gold);margin-left:4px;vertical-align:text-bottom;animation:blink 1s steps(1) infinite}
+        @keyframes blink{50%{opacity:0}}
+        .hero-subtitle{color:var(--white-muted);font-size:1.08rem;max-width:680px;margin:0 auto 40px;line-height:1.8;animation:fadeUp .8s ease .55s both}
+        .hero-cta-row{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;animation:fadeUp .8s ease .7s both}
+        .btn-primary{display:inline-flex;align-items:center;gap:10px;padding:16px 38px;background:var(--gold);color:var(--black);font-size:.85rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border:1px solid var(--gold);transition:all .4s ease}
+        .btn-primary:hover{background:transparent;color:var(--gold)}
+        .btn-ghost{display:inline-flex;align-items:center;gap:10px;padding:16px 38px;background:transparent;color:var(--white);font-size:.85rem;font-weight:500;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border:1px solid rgba(201,169,98,.3);transition:all .4s ease}
+        .btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+        @keyframes fadeUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+        /* SECTION HEADER */
+        .section-header{text-align:center;margin-bottom:60px}
+        .section-eyebrow{display:inline-block;font-size:.7rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase;padding:8px 16px;border:1px solid rgba(201,169,98,.2);background:rgba(201,169,98,.05);margin-bottom:20px}
+        .section-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:300;margin-bottom:15px}
+        .section-title span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .section-sub{color:var(--white-muted);font-size:1rem;max-width:620px;margin:0 auto}
+
+        /* CAPABILITIES */
+        .capabilities{padding:60px 60px 100px;position:relative;z-index:10}
+        .filter-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:900px;margin:0 auto 50px}
+        .filter-chip{padding:10px 22px;background:rgba(201,169,98,.04);border:1px solid rgba(201,169,98,.18);color:var(--white-muted);font-size:.78rem;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:all .3s ease;font-family:'Outfit',sans-serif}
+        .filter-chip:hover{border-color:rgba(201,169,98,.5);color:var(--gold-light)}
+        .filter-chip.active{background:var(--gold);border-color:var(--gold);color:var(--black);font-weight:600}
+
+        .services-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;max-width:1400px;margin:0 auto}
+        .service-card{background:rgba(201,169,98,.02);border:1px solid rgba(201,169,98,.1);padding:42px 36px;transition:transform .45s cubic-bezier(.2,.7,.3,1),border-color .45s ease,box-shadow .45s ease,opacity .4s ease;position:relative;overflow:hidden;display:flex;flex-direction:column}
+        .service-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .45s ease}
+        .service-card:hover{border-color:rgba(201,169,98,.4);transform:translateY(-8px);box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 40px rgba(201,169,98,.06)}
+        .service-card:hover::before{transform:scaleX(1)}
+        .service-card.hidden{display:none}
+        .service-tag{font-size:.65rem;color:var(--gold);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:18px;opacity:.85}
+        .service-icon{width:58px;height:58px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(201,169,98,.3);margin-bottom:26px;transition:all .4s ease}
+        .service-card:hover .service-icon{background:rgba(201,169,98,.08);border-color:var(--gold)}
+        .service-icon svg{width:26px;height:26px;stroke:var(--gold)}
+        .service-title{font-family:'Cormorant Garamond',serif;font-size:1.55rem;font-weight:400;margin-bottom:14px;line-height:1.2}
+        .service-title span{color:var(--gold)}
+        .service-desc{color:var(--white-muted);font-size:.9rem;line-height:1.75;margin-bottom:24px}
+        .service-features{list-style:none;margin-bottom:26px}
+        .service-features li{padding:9px 0;border-bottom:1px solid rgba(201,169,98,.07);font-size:.84rem;color:var(--white-subtle);display:flex;align-items:center;gap:10px}
+        .service-features li::before{content:'';width:5px;height:5px;background:var(--gold);opacity:.6;flex-shrink:0}
+        .service-cta{margin-top:auto;display:inline-flex;align-items:center;gap:8px;padding-top:22px;border-top:1px solid rgba(201,169,98,.12);color:var(--gold);font-size:.78rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none}
+        .service-cta svg{width:16px;height:16px;stroke:var(--gold);transition:transform .35s ease}
+        .service-card:hover .service-cta svg{transform:translateX(6px)}
+
+        /* PROOF BAR */
+        .proof{padding:90px 60px;position:relative;z-index:10;background:rgba(201,169,98,.02);border-top:1px solid rgba(201,169,98,.08);border-bottom:1px solid rgba(201,169,98,.08)}
+        .proof-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;max-width:1100px;margin:0 auto;border-top:1px solid rgba(201,169,98,.2);border-bottom:1px solid rgba(201,169,98,.2)}
+        .proof-item{text-align:center;padding:36px 20px;border-right:1px solid rgba(201,169,98,.12)}
+        .proof-item:last-child{border-right:none}
+        .proof-number{font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:600;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;margin-bottom:10px}
+        .proof-label{font-size:.7rem;color:var(--white-subtle);letter-spacing:2.5px;text-transform:uppercase;font-weight:500}
+
+        /* PROCESS */
+        .process-section{padding:110px 60px;position:relative;z-index:10}
+        .process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:40px;max-width:1200px;margin:0 auto}
+        .process-step{text-align:center;position:relative}
+        .process-step .connector{content:'';position:absolute;top:30px;left:calc(50% + 40px);width:calc(100% - 80px);height:1px;background:rgba(201,169,98,.25);transform:scaleX(0);transform-origin:left;transition:transform .7s ease}
+        .process-step.visible .connector{transform:scaleX(1)}
+        .process-step:last-child .connector{display:none}
+        .process-number{width:60px;height:60px;margin:0 auto 22px;display:flex;align-items:center;justify-content:center;border:2px solid var(--gold);font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--gold);position:relative;z-index:2;background:var(--black);transition:all .4s ease}
+        .process-step:hover .process-number{background:var(--gold);color:var(--black)}
+        .process-title{font-size:1.05rem;font-weight:500;margin-bottom:10px}
+        .process-desc{font-size:.85rem;color:var(--white-muted);line-height:1.65}
+
+        /* TECH STACK */
+        .tech-section{padding:60px 60px 110px;position:relative;z-index:10}
+        .tech-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:16px;max-width:1100px;margin:0 auto}
+        .tech-item{padding:24px 16px;background:rgba(201,169,98,.02);border:1px solid rgba(201,169,98,.1);text-align:center;transition:all .35s ease}
+        .tech-item:hover{border-color:var(--gold);background:rgba(201,169,98,.06);transform:translateY(-4px)}
+        .tech-name{font-size:.78rem;color:var(--white-muted);letter-spacing:.5px}
+        .tech-item:hover .tech-name{color:var(--gold-light)}
+
+        /* CTA */
+        .cta-section{padding:130px 60px;text-align:center;background:linear-gradient(180deg,transparent,rgba(201,169,98,.03));position:relative;z-index:10}
+        .cta-container{max-width:720px;margin:0 auto}
+        .cta-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3.2rem);font-weight:300;margin-bottom:22px}
+        .cta-title span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .cta-text{color:var(--white-muted);font-size:1.1rem;margin:0 auto 42px;line-height:1.8}
+        .cta-buttons{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}
+
+        /* FOOTER (konsistent zur Index) */
+        .footer{padding:100px 60px 40px;border-top:1px solid rgba(201,169,98,.1);position:relative;z-index:10}
+        .footer-container{max-width:1400px;margin:0 auto}
+        .footer-main{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr;gap:60px;margin-bottom:60px}
+        .footer-brand{max-width:300px}
+        .footer-logo{display:flex;align-items:center;gap:15px;margin-bottom:20px}
+        .footer-logo-icon{width:40px;height:40px}
+        .footer-logo-icon svg{width:100%;height:100%}
+        .footer-logo-text{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:300;letter-spacing:6px;color:var(--white)}
+        .footer-tagline{color:var(--white-muted);font-size:.9rem;line-height:1.7}
+        .footer-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:25px;font-weight:500}
+        .footer-links{list-style:none;display:flex;flex-direction:column;gap:14px}
+        .footer-links a{color:var(--white-muted);text-decoration:none;font-size:.9rem;transition:all .3s ease;display:inline-block}
+        .footer-links a:hover{color:var(--gold);transform:translateX(5px)}
+        .newsletter-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:15px;font-weight:500}
+        .newsletter-desc{color:var(--white-muted);font-size:.85rem;margin-bottom:20px}
+        .newsletter-form{display:flex;flex-direction:column;gap:15px}
+        .newsletter-input{background:rgba(201,169,98,.05);border:1px solid rgba(201,169,98,.2);padding:14px 18px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.9rem;transition:all .3s ease}
+        .newsletter-input:focus{outline:none;border-color:var(--gold)}
+        .newsletter-input::placeholder{color:var(--white-subtle)}
+        .checkbox-wrapper{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+        .checkbox-wrapper input{display:none}
+        .custom-checkbox{width:18px;height:18px;border:1px solid rgba(201,169,98,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .3s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox{background:var(--gold);border-color:var(--gold)}
+        .custom-checkbox svg{width:12px;height:12px;stroke:var(--black);opacity:0;transition:opacity .2s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox svg{opacity:1}
+        .checkbox-label{font-size:.8rem;color:var(--white-muted);line-height:1.4}
+        .checkbox-label a{color:var(--gold);text-decoration:none}
+        .newsletter-btn{padding:14px 30px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease}
+        .newsletter-btn:hover{background:transparent;color:var(--gold)}
+        .form-message{padding:12px 15px;font-size:.85rem;margin-top:10px;display:none}
+        .form-message.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22c55e}
+        .footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:40px;border-top:1px solid rgba(201,169,98,.1)}
+        .copyright{color:var(--white-subtle);font-size:.85rem}
+        .copyright span{color:var(--gold)}
+        .legal-links{display:flex;gap:30px}
+        .legal-links a{color:var(--white-subtle);text-decoration:none;font-size:.8rem;transition:color .3s ease}
+        .legal-links a:hover{color:var(--gold)}
+
+        /* COOKIE BANNER */
+        .cookie-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,10,.98);border-top:1px solid rgba(201,169,98,.2);padding:25px 40px;z-index:10000;transform:translateY(100%);transition:transform .5s cubic-bezier(.25,.46,.45,.94);backdrop-filter:blur(20px)}
+        .cookie-banner.show{transform:translateY(0)}
+        .cookie-content{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:30px;flex-wrap:wrap}
+        .cookie-text{flex:1;min-width:300px}
+        .cookie-text h4{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold);margin-bottom:8px}
+        .cookie-text p{color:var(--white-muted);font-size:.9rem;margin:0}
+        .cookie-text a{color:var(--gold);text-decoration:none}
+        .cookie-buttons{display:flex;gap:15px;flex-wrap:wrap}
+        .cookie-btn{padding:14px 28px;font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:none;cursor:pointer;transition:all .3s}
+        .cookie-accept{background:var(--gold);color:var(--black)}
+        .cookie-accept:hover{background:var(--gold-light)}
+        .cookie-decline{background:transparent;border:1px solid rgba(201,169,98,.3);color:var(--white-muted)}
+        .cookie-decline:hover{border-color:var(--gold);color:var(--gold)}
+
+        /* SCROLL REVEAL */
+        .reveal{opacity:0;transform:translateY(34px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1)}
+        .reveal.visible{opacity:1;transform:translateY(0)}
+        .reveal-stagger>*{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.3,1)}
+        .reveal-stagger.visible>*{opacity:1;transform:translateY(0)}
+
+        @media(max-width:1366px){
+            .nav-main{padding:18px 36px}
+            .nav-links{gap:0}
+            .nav-links>li>a{padding:11px 11px;font-size:.78rem;letter-spacing:.8px}
+            .nav-links>li>a::after{left:11px;right:11px}
+            .nav-links>li>a:hover{letter-spacing:1.1px}
+            .nav-cta{padding:12px 20px;letter-spacing:1.5px}
+            .logo-text{letter-spacing:5px}
+        }
+        @media(max-width:1200px){
+            .services-grid{grid-template-columns:repeat(2,1fr)}
+            .process-grid{grid-template-columns:repeat(2,1fr)}
+            .process-step .connector{display:none}
+            .tech-grid{grid-template-columns:repeat(5,1fr)}
+            .proof-grid{grid-template-columns:repeat(2,1fr)}
+            .proof-item:nth-child(2){border-right:none}
+            .proof-item:nth-child(1),.proof-item:nth-child(2){border-bottom:1px solid rgba(201,169,98,.12)}
+            .footer-main{grid-template-columns:1fr 1fr;gap:40px}
+        }
+        @media(max-width:1024px){
+            .nav-links,.nav-cta{display:none}
+            .nav-mobile-toggle{display:flex}
+            .nav-main{padding:15px 30px}
+            .page-hero{padding:150px 40px 70px}
+            .capabilities{padding:40px 40px 80px}
+            .proof{padding:70px 40px}
+            .process-section{padding:80px 40px}
+            .tech-section{padding:40px 40px 80px}
+            .cta-section{padding:100px 40px}
+        }
+        @media(max-width:768px){
+            .nav-main{padding:15px 20px}
+            .logo-icon{width:35px;height:35px}
+            .logo-text{font-size:1.1rem;letter-spacing:4px}
+            .page-hero{padding:130px 22px 55px}
+            .capabilities{padding:30px 20px 60px}
+            .services-grid{grid-template-columns:1fr;gap:20px}
+            .service-card{padding:34px 26px}
+            .filter-row{margin-bottom:35px}
+            .proof{padding:50px 20px}
+            .proof-grid{grid-template-columns:1fr 1fr}
+            .proof-number{font-size:2rem}
+            .process-section{padding:60px 20px}
+            .process-grid{grid-template-columns:1fr;gap:30px}
+            .tech-section{padding:30px 20px 60px}
+            .tech-grid{grid-template-columns:repeat(3,1fr)}
+            .cta-section{padding:80px 20px}
+            .cta-buttons{flex-direction:column}
+            .btn-primary,.btn-ghost{justify-content:center}
+            .footer{padding:60px 20px 30px}
+            .footer-main{grid-template-columns:1fr;gap:30px}
+            .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+            .legal-links{flex-wrap:wrap;justify-content:center;gap:15px}
+            .cookie-banner{padding:20px}
+            .cookie-content{flex-direction:column;text-align:center}
+            .cookie-buttons{justify-content:center;width:100%}
+            .hero-cta-row{flex-direction:column;align-items:stretch}
+        }
+        @media(prefers-reduced-motion:reduce){
+            *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+            .reveal,.reveal-stagger>*{opacity:1;transform:none}
+            .hero-caret{display:none}
+        }
+        /* ===== ELEVATION: Konsistenz-Schicht ===== */
+        .scroll-progress{position:fixed;top:0;left:0;height:2px;width:0;background:linear-gradient(135deg,#C9A962,#E8D5A3 50%,#C9A962);z-index:1001;transition:width .1s linear}
+        .service-card::before{content:'';position:absolute;width:320px;height:320px;background:radial-gradient(circle,rgba(201,169,98,.14),transparent 65%);top:var(--my,50%);left:var(--mx,50%);transform:translate(-50%,-50%);opacity:0;transition:opacity .4s ease;pointer-events:none;z-index:0}
+        .service-card:hover::before{opacity:1}
+        .service-card>*{position:relative;z-index:1}
+        .magnetic{will-change:transform}
+        a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #C9A962;outline-offset:3px}
+        .skip-link{position:fixed;left:8px;top:-60px;z-index:3000;background:#C9A962;color:#000;padding:10px 18px;font-family:'Outfit',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.04em;text-decoration:none;transition:top .2s ease}
+        .skip-link:focus{top:8px;outline:2px solid #000;outline-offset:2px}
+    </style>
+    <meta property="og:image" content="https://nobleframe.de/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:image" content="https://nobleframe.de/og-image.png">
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://nobleframe.de/"}, {"@type": "ListItem", "position": 2, "name": "Leistungen", "item": "https://nobleframe.de/leistungen.html"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+    <link rel="icon" href="/favicon/favicon.ico" sizes="32x32">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <script defer src="nf-interactions.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#hauptinhalt">Zum Inhalt springen</a>
+
+<div class="bg-effects">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="grid-overlay"></div>
+</div>
+
+<div class="nav-wrapper" id="navWrapper">
+    <nav class="nav-main">
+        <a href="index.html" class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/>
+                    <rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.6"/>
+                    <line x1="50" y1="5" x2="50" y2="95" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/>
+                    <line x1="5" y1="50" x2="95" y2="50" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/>
+                </svg>
+            </div>
+            <span class="logo-text">NobleFrame</span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="leistungen.html" class="active" aria-current="page">Leistungen</a></li>
+            <li><a href="referenzen.html">Referenzen</a></li>
+            <li><a href="showcase.html">Showcase</a></li>
+            <li><a href="tools.html">Tools</a></li>
+            <li><a href="about.html">Über Uns</a></li>
+            <li><a href="kontakt.html">Kontakt</a></li>
+        </ul>
+        <a href="kontakt.html" class="nav-cta">Projekt anfragen</a>
+        <button class="nav-mobile-toggle" id="navMobileToggle" aria-label="Menü">
+            <span></span><span></span><span></span>
+        </button>
+    </nav>
+</div>
+
+<div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-menu-section">
+        <h5>Navigation</h5>
+        <div class="mobile-menu-nav">
+            <a href="index.html">Home</a>
+            <a href="leistungen.html" class="active" aria-current="page">Leistungen</a>
+            <a href="referenzen.html">Referenzen</a>
+            <a href="showcase.html">Showcase</a>
+            <a href="tools.html">Tools</a>
+            <a href="about.html">Über Uns</a>
+            <a href="kontakt.html">Kontakt</a>
+        </div>
+    </div>
+    <div class="mobile-menu-section">
+        <h5>Direkt erreichen</h5>
+        <div class="mobile-menu-links">
+            <a href="tel:+4915292612795">+49 152 92612795</a>
+            <a href="mailto:info@nobleframe.de">info@nobleframe.de</a>
+        </div>
+    </div>
+    <a href="kontakt.html" class="mobile-menu-cta">Projekt anfragen</a>
+</div>
+
+<section class="page-hero" id="hauptinhalt" tabindex="-1">
+    <div class="hero-badge"><span class="dot"></span><span>Full-Service Atelier</span></div>
+    <h1 class="hero-title">Wir bauen, was Sie sich <span class="accent">vorstellen.</span></h1>
+    <p class="hero-type-line">Heute zum Beispiel: <span class="hero-type" id="typeTarget"></span><span class="hero-caret"></span></p>
+    <p class="hero-subtitle">Von der ersten Idee bis zum Launch und darüber hinaus. Entdecken Sie, was sich mit NobleFrame umsetzen lässt – und was Sie in Auftrag geben können.</p>
+    <div class="hero-cta-row">
+        <a href="kontakt.html" class="btn-primary magnetic">Projekt anfragen</a>
+        <a href="#leistungen" class="btn-ghost">Leistungen entdecken</a>
+    </div>
+</section>
+
+<section class="capabilities" id="leistungen">
+    <div class="section-header reveal">
+        <span class="section-eyebrow">Was wir umsetzen</span>
+        <h2 class="section-title">Ihr Projekt, in <span>guten Händen</span></h2>
+        <p class="section-sub">Filtern Sie nach Bereich und sehen Sie, was im Detail enthalten ist. Jede Leistung lässt sich einzeln oder als Gesamtpaket beauftragen.</p>
+    </div>
+
+    <div class="filter-row reveal">
+        <button class="filter-chip active" data-filter="all">Alle</button>
+        <button class="filter-chip" data-filter="websites">Websites</button>
+        <button class="filter-chip" data-filter="ecommerce">E-Commerce</button>
+        <button class="filter-chip" data-filter="apps">Web-Apps</button>
+        <button class="filter-chip" data-filter="branding">Branding</button>
+        <button class="filter-chip" data-filter="growth">Growth</button>
+        <button class="filter-chip" data-filter="ki">KI</button>
+        <button class="filter-chip" data-filter="betrieb">Betrieb</button>
+        <button class="filter-chip" data-filter="beratung">Beratung</button>
+    </div>
+
+    <div class="services-grid reveal-stagger" id="servicesGrid">
+        <div class="service-card" data-cat="websites">
+            <span class="service-tag">Websites</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></div>
+            <h3 class="service-title">Premium <span>Webdesign</span></h3>
+            <p class="service-desc">Maßgeschneiderte Websites, die Ihre Marke perfekt repräsentieren und Besucher in Kunden verwandeln.</p>
+            <ul class="service-features">
+                <li>UX/UI Design</li>
+                <li>Responsive Development</li>
+                <li>CMS-Integration</li>
+                <li>Performance-Optimierung</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="ecommerce">
+            <span class="service-tag">E-Commerce</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg></div>
+            <h3 class="service-title">E-Commerce <span>Solutions</span></h3>
+            <p class="service-desc">Hochperformante Online-Shops mit Headless-Architektur für maximale Conversion und Skalierbarkeit.</p>
+            <ul class="service-features">
+                <li>Shopify Plus / Custom</li>
+                <li>Headless Commerce</li>
+                <li>Payment Integration</li>
+                <li>Conversion-Optimierung</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="apps">
+            <span class="service-tag">Web-Apps</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg></div>
+            <h3 class="service-title">Web-<span>Applikationen</span></h3>
+            <p class="service-desc">Komplexe Web-Apps und SaaS-Plattformen mit modernster Technologie und skalierbarer Architektur.</p>
+            <ul class="service-features">
+                <li>React / Next.js / Vue.js</li>
+                <li>API Development</li>
+                <li>Cloud Infrastructure</li>
+                <li>Real-time Features</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="branding">
+            <span class="service-tag">Branding</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg></div>
+            <h3 class="service-title">Branding & <span>UI Design</span></h3>
+            <p class="service-desc">Unverwechselbare Brand Identities und Interfaces, die Ihre Marke einzigartig machen.</p>
+            <ul class="service-features">
+                <li>Brand Strategy</li>
+                <li>Visual Identity</li>
+                <li>Design Systems</li>
+                <li>Prototyping</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="growth">
+            <span class="service-tag">Growth</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg></div>
+            <h3 class="service-title">Digital <span>Growth</span></h3>
+            <p class="service-desc">Datengetriebene Strategien für nachhaltiges Wachstum und messbare Business-Ergebnisse.</p>
+            <ul class="service-features">
+                <li>SEO & Content Strategy</li>
+                <li>Conversion Optimization</li>
+                <li>Analytics Setup</li>
+                <li>A/B Testing</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="ki">
+            <span class="service-tag">KI & Automation</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg></div>
+            <h3 class="service-title">KI & <span>Automation</span></h3>
+            <p class="service-desc">Intelligente Lösungen für effizientere Prozesse und bessere Kundenerlebnisse.</p>
+            <ul class="service-features">
+                <li>OpenAI / Claude Integration</li>
+                <li>Chatbots & Assistenten</li>
+                <li>Prozessautomatisierung</li>
+                <li>Custom AI Solutions</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="betrieb">
+            <span class="service-tag">Betrieb</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+            <h3 class="service-title">Support & <span>Wartung</span></h3>
+            <p class="service-desc">Laufende Betreuung mit proaktivem Monitoring, Updates und dediziertem Support-Team.</p>
+            <ul class="service-features">
+                <li>24/7 Monitoring</li>
+                <li>Security Updates</li>
+                <li>Performance Reports</li>
+                <li>Priority Support</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+
+        <div class="service-card" data-cat="beratung">
+            <span class="service-tag">Beratung</span>
+            <div class="service-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg></div>
+            <h3 class="service-title">Digital <span>Consulting</span></h3>
+            <p class="service-desc">Strategische Beratung für Ihre digitale Transformation – von der Analyse bis zur Umsetzung.</p>
+            <ul class="service-features">
+                <li>Digital Strategy</li>
+                <li>Technology Assessment</li>
+                <li>Roadmap Planning</li>
+                <li>Vendor Selection</li>
+            </ul>
+            <a href="kontakt.html" class="service-cta">Anfrage stellen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a>
+        </div>
+    </div>
+</section>
+
+<section class="proof">
+    <div class="proof-grid reveal">
+        <div class="proof-item">
+            <span class="proof-number" data-count="25" data-suffix="+">0</span>
+            <span class="proof-label">Projekte</span>
+        </div>
+        <div class="proof-item">
+            <span class="proof-number" data-count="98" data-suffix="%">0</span>
+            <span class="proof-label">Zufriedenheit</span>
+        </div>
+        <div class="proof-item">
+            <span class="proof-number" data-count="8" data-suffix="">0</span>
+            <span class="proof-label">Leistungsfelder</span>
+        </div>
+        <div class="proof-item">
+            <span class="proof-number" data-count="20" data-suffix="+">0</span>
+            <span class="proof-label">Technologien</span>
+        </div>
+    </div>
+</section>
+
+<section class="process-section">
+    <div class="section-header reveal">
+        <span class="section-eyebrow">So entsteht Ihr Projekt</span>
+        <h2 class="section-title">Von der Idee zum <span>Ergebnis</span></h2>
+    </div>
+    <div class="process-grid">
+        <div class="process-step reveal">
+            <div class="connector"></div>
+            <div class="process-number">01</div>
+            <h3 class="process-title">Discovery</h3>
+            <p class="process-desc">Analyse Ihrer Ziele, Zielgruppe und Wettbewerb. Die strategische Grundlage für messbare Ergebnisse.</p>
+        </div>
+        <div class="process-step reveal">
+            <div class="connector"></div>
+            <div class="process-number">02</div>
+            <h3 class="process-title">Konzept & Design</h3>
+            <p class="process-desc">Wireframes, UI Design und Prototypen. Iterative Abstimmung bis ins letzte Detail.</p>
+        </div>
+        <div class="process-step reveal">
+            <div class="connector"></div>
+            <div class="process-number">03</div>
+            <h3 class="process-title">Entwicklung</h3>
+            <p class="process-desc">Moderner Tech-Stack, sauberer Code, Performance-First. Qualität ohne Kompromisse.</p>
+        </div>
+        <div class="process-step reveal">
+            <div class="connector"></div>
+            <div class="process-number">04</div>
+            <h3 class="process-title">Launch & Optimierung</h3>
+            <p class="process-desc">Go-Live mit Monitoring und datenbasierter Optimierung für kontinuierliches Wachstum.</p>
+        </div>
+    </div>
+</section>
+
+<section class="tech-section">
+    <div class="section-header reveal">
+        <span class="section-eyebrow">Womit wir bauen</span>
+        <h2 class="section-title">Unser <span>Tech Stack</span></h2>
+    </div>
+    <div class="tech-grid reveal-stagger">
+        <div class="tech-item"><span class="tech-name">React</span></div>
+        <div class="tech-item"><span class="tech-name">Next.js</span></div>
+        <div class="tech-item"><span class="tech-name">Vue.js</span></div>
+        <div class="tech-item"><span class="tech-name">TypeScript</span></div>
+        <div class="tech-item"><span class="tech-name">Node.js</span></div>
+        <div class="tech-item"><span class="tech-name">Python</span></div>
+        <div class="tech-item"><span class="tech-name">Shopify Plus</span></div>
+        <div class="tech-item"><span class="tech-name">Sanity</span></div>
+        <div class="tech-item"><span class="tech-name">Strapi</span></div>
+        <div class="tech-item"><span class="tech-name">Vercel</span></div>
+        <div class="tech-item"><span class="tech-name">AWS</span></div>
+        <div class="tech-item"><span class="tech-name">Figma</span></div>
+        <div class="tech-item"><span class="tech-name">Supabase</span></div>
+        <div class="tech-item"><span class="tech-name">PostgreSQL</span></div>
+        <div class="tech-item"><span class="tech-name">TailwindCSS</span></div>
+        <div class="tech-item"><span class="tech-name">GSAP</span></div>
+        <div class="tech-item"><span class="tech-name">Three.js</span></div>
+        <div class="tech-item"><span class="tech-name">Stripe</span></div>
+        <div class="tech-item"><span class="tech-name">OpenAI API</span></div>
+        <div class="tech-item"><span class="tech-name">Claude API</span></div>
+        <div class="tech-item"><span class="tech-name">Brevo</span></div>
+    </div>
+</section>
+
+<section class="cta-section">
+    <div class="cta-container reveal">
+        <h2 class="cta-title">Bereit, etwas zu <span>erschaffen</span>?</h2>
+        <p class="cta-text">Erzählen Sie uns von Ihrer Idee. In einem kurzen Gespräch prüfen wir gemeinsam, was möglich ist – unverbindlich.</p>
+        <div class="cta-buttons">
+            <a href="kontakt.html" class="btn-primary magnetic">Projekt anfragen</a>
+            <a href="referenzen.html" class="btn-ghost">Referenzen ansehen</a>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-main">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <div class="footer-logo-icon">
+                        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/>
+                            <rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.7"/>
+                        </svg>
+                    </div>
+                    <span class="footer-logo-text">NOBLEFRAME</span>
+                </div>
+                <p class="footer-tagline">Premium Digital Atelier für Websites, Apps & Growth Solutions.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Navigation</h4>
+                <ul class="footer-links">
+                    <li><a href="leistungen.html">Leistungen</a></li>
+                    <li><a href="referenzen.html">Referenzen</a></li>
+                    <li><a href="about.html">Über Uns</a></li>
+                    <li><a href="kontakt.html">Kontakt</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Mehr</h4>
+                <ul class="footer-links">
+                    <li><a href="showcase.html">Showcase</a></li>
+                    <li><a href="tools.html">Tools</a></li>
+                    <li><a href="faq.html">FAQ</a></li>
+                    <li><a href="karriere.html">Karriere</a></li>
+                </ul>
+            </div>
+            <div class="newsletter-section">
+                <h4>Newsletter</h4>
+                <p class="newsletter-desc">Exklusive Insights und Updates zu unseren Projekten.</p>
+                <form class="newsletter-form" id="newsletterForm">
+                    <input type="email" name="email" class="newsletter-input" placeholder="ihre@email.de" required>
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="privacy" required>
+                        <span class="custom-checkbox">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                        <span class="checkbox-label">Ich akzeptiere die <a href="datenschutz.html">Datenschutzerklärung</a></span>
+                    </label>
+                    <button type="submit" class="newsletter-btn">Newsletter abonnieren</button>
+                    <div class="form-message" id="newsletterMessage"></div>
+                </form>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p class="copyright">© 2026 <span>NobleFrame</span>. Alle Rechte vorbehalten.</p>
+            <div class="legal-links">
+                <a href="impressum.html">Impressum</a>
+                <a href="datenschutz.html">Datenschutz</a>
+                <a href="agb.html">AGB</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<div class="cookie-banner" id="cookieBanner">
+    <div class="cookie-content">
+        <div class="cookie-text">
+            <h4>Cookie-Einstellungen</h4>
+            <p>Wir verwenden technisch notwendige Cookies für den Betrieb dieser Website. <a href="datenschutz.html">Mehr erfahren</a></p>
+        </div>
+        <div class="cookie-buttons">
+            <button class="cookie-btn cookie-accept" id="cookieAccept">Alle akzeptieren</button>
+            <button class="cookie-btn cookie-decline" id="cookieDecline">Nur notwendige</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* NAV scroll state */
+const navWrapper = document.getElementById('navWrapper');
+window.addEventListener('scroll', () => {
+    navWrapper.classList.toggle('scrolled', window.scrollY > 50);
+});
+
+/* MOBILE menu */
+const navMobileToggle = document.getElementById('navMobileToggle');
+const mobileMenu = document.getElementById('mobileMenu');
+navMobileToggle.addEventListener('click', () => {
+    navMobileToggle.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
+    document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+});
+mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+        navMobileToggle.classList.remove('active');
+        mobileMenu.classList.remove('active');
+        document.body.style.overflow = '';
+    });
+});
+
+/* SCROLL reveal + staggered children + count-up + process connectors */
+const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        el.classList.add('visible');
+        if (el.classList.contains('reveal-stagger')) {
+            [...el.children].forEach((child, i) => {
+                child.style.transitionDelay = (reduceMotion ? 0 : i * 0.06) + 's';
+            });
+        }
+        if (el.querySelector && el.querySelectorAll('.proof-number').length) {
+            el.querySelectorAll('.proof-number').forEach(runCount);
+        }
+        io.unobserve(el);
+    });
+}, { threshold: 0.15 });
+document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+
+function runCount(el) {
+    const target = +el.dataset.count;
+    const suffix = el.dataset.suffix || '';
+    if (reduceMotion) { el.textContent = target + suffix; return; }
+    const dur = 1400; const start = performance.now();
+    function tick(now) {
+        const p = Math.min((now - start) / dur, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.floor(eased * target) + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = target + suffix;
+    }
+    requestAnimationFrame(tick);
+}
+
+/* HERO typewriter */
+(function () {
+    const target = document.getElementById('typeTarget');
+    if (!target) return;
+    const words = ['eine E-Commerce-Plattform.', 'eine SaaS-Web-App.', 'ein Markenauftritt.', 'ein Growth-System.', 'eine KI-Integration.', 'ein Design-System.'];
+    if (reduceMotion) { target.textContent = words[0]; return; }
+    let w = 0, c = 0, deleting = false;
+    function loop() {
+        const word = words[w];
+        target.textContent = word.substring(0, c);
+        if (!deleting && c < word.length) { c++; setTimeout(loop, 55); }
+        else if (!deleting && c === word.length) { deleting = true; setTimeout(loop, 1600); }
+        else if (deleting && c > 0) { c--; setTimeout(loop, 28); }
+        else { deleting = false; w = (w + 1) % words.length; setTimeout(loop, 250); }
+    }
+    loop();
+})();
+
+/* FILTER chips */
+const chips = document.querySelectorAll('.filter-chip');
+const cards = document.querySelectorAll('#servicesGrid .service-card');
+chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+        chips.forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const f = chip.dataset.filter;
+        cards.forEach(card => {
+            const show = f === 'all' || card.dataset.cat === f;
+            card.classList.toggle('hidden', !show);
+        });
+    });
+});
+
+/* COOKIE banner */
+const cookieBanner = document.getElementById('cookieBanner');
+function checkCookieConsent() {
+    if (!localStorage.getItem('nobleframe_cookie_consent')) {
+        setTimeout(() => cookieBanner.classList.add('show'), 2500);
+    }
+}
+document.getElementById('cookieAccept').addEventListener('click', () => {
+    localStorage.setItem('nobleframe_cookie_consent', 'all');
+    localStorage.setItem('nobleframe_cookie_date', new Date().toISOString());
+    cookieBanner.classList.remove('show');
+});
+document.getElementById('cookieDecline').addEventListener('click', () => {
+    localStorage.setItem('nobleframe_cookie_consent', 'necessary');
+    localStorage.setItem('nobleframe_cookie_date', new Date().toISOString());
+    cookieBanner.classList.remove('show');
+});
+checkCookieConsent();
+
+/* NEWSLETTER */
+document.getElementById('newsletterForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const email = this.querySelector('input[name="email"]').value;
+    const messageEl = document.getElementById('newsletterMessage');
+    const subject = encodeURIComponent('Newsletter Anmeldung - NobleFrame');
+    const body = encodeURIComponent(`Newsletter Anmeldung\n==================\n\nE-Mail: ${email}\nDatum: ${new Date().toLocaleString('de-DE')}\nQuelle: Leistungen-Seite\n\n---\nDiese Anmeldung wurde über die NobleFrame Website gesendet.`);
+    window.location.href = `mailto:info@nobleframe.de?subject=${subject}&body=${body}`;
+    messageEl.textContent = 'Vielen Dank! Bitte senden Sie die E-Mail ab, um die Anmeldung zu bestätigen.';
+    messageEl.className = 'form-message success';
+    this.reset();
+    setTimeout(() => { messageEl.className = 'form-message'; }, 5000);
+});
+
+/* SMOOTH anchor */
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+});
+
+/* ===== ELEVATION JS (Konsistenz) ===== */
+(function(){
+  const rm=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sp=document.createElement('div');sp.className='scroll-progress';document.body.appendChild(sp);
+  const os=()=>{const h=document.documentElement;const m=h.scrollHeight-h.clientHeight;sp.style.width=(m>0?h.scrollTop/m*100:0)+'%';};
+  window.addEventListener('scroll',os,{passive:true});os();
+  if(rm)return;
+  document.querySelectorAll('.magnetic').forEach(b=>{b.addEventListener('mousemove',e=>{const r=b.getBoundingClientRect();b.style.transform='translate('+((e.clientX-r.left-r.width/2)*0.16)+'px,'+((e.clientY-r.top-r.height/2)*0.26)+'px)';});b.addEventListener('mouseleave',()=>{b.style.transform='';});});
+  document.querySelectorAll('.service-card').forEach(c=>{c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect();c.style.setProperty('--mx',(e.clientX-r.left)+'px');c.style.setProperty('--my',(e.clientY-r.top)+'px');});});
+})();
+
+</script>
+
+</body>
+</html>

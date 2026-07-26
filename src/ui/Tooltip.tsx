@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -11,32 +12,66 @@ export interface TooltipProps {
   className?: string
 }
 
-const SIDE_POS: Record<NonNullable<TooltipProps['side']>, string> = {
-  top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
-  bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
-  left: 'right-full top-1/2 -translate-y-1/2 mr-2',
-  right: 'left-full top-1/2 -translate-y-1/2 ml-2',
+/** Distance between trigger and bubble. */
+const GAP = 8
+
+interface Pos { left: number; top: number; transform: string }
+
+/** Fixed-viewport coordinates for the bubble, anchored to the trigger rect. */
+function place(rect: DOMRect, side: NonNullable<TooltipProps['side']>): Pos {
+  const cx = rect.left + rect.width / 2
+  const cy = rect.top + rect.height / 2
+  switch (side) {
+    case 'top':    return { left: cx, top: rect.top - GAP, transform: 'translate(-50%, -100%)' }
+    case 'bottom': return { left: cx, top: rect.bottom + GAP, transform: 'translate(-50%, 0)' }
+    case 'left':   return { left: rect.left - GAP, top: cy, transform: 'translate(-100%, -50%)' }
+    case 'right':  return { left: rect.right + GAP, top: cy, transform: 'translate(0, -50%)' }
+  }
 }
 
 /**
- * Tooltip — delayed, lightweight label on hover/focus. No portal; relies
- * on a relatively-positioned wrapper. Respects keyboard focus.
+ * Tooltip — delayed, lightweight label on hover/focus. The bubble renders in a
+ * portal on <body> with fixed positioning, so it is never clipped by an
+ * ancestor's overflow (the editor toolbar lives inside an `overflow-x-auto`
+ * rail, which would otherwise cut off a `side="bottom"` tip). The trigger
+ * wrapper stays in flow to catch pointer/focus; only the bubble is portalled.
  */
 export function Tooltip({ label, hint, side = 'top', children, className }: TooltipProps) {
-  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState<Pos | null>(null)
+  const wrapRef = useRef<HTMLSpanElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const open = () => {
+  const compute = useCallback(() => {
+    const el = wrapRef.current
+    if (!el) return
+    setPos(place(el.getBoundingClientRect(), side))
+  }, [side])
+
+  const open = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setShow(true), 380)
-  }
-  const close = () => {
+    timer.current = setTimeout(compute, 380)
+  }, [compute])
+
+  const close = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    setShow(false)
-  }
+    setPos(null)
+  }, [])
+
+  // Keep the bubble glued to the trigger if the layout shifts while it's open.
+  useLayoutEffect(() => {
+    if (!pos) return
+    const onMove = () => compute()
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [pos, compute])
 
   return (
     <span
+      ref={wrapRef}
       className={cn('relative inline-flex', className)}
       onMouseEnter={open}
       onMouseLeave={close}
@@ -44,13 +79,11 @@ export function Tooltip({ label, hint, side = 'top', children, className }: Tool
       onBlur={close}
     >
       {children}
-      {show && (
+      {pos && typeof document !== 'undefined' && createPortal(
         <span
           role="tooltip"
-          className={cn(
-            'pointer-events-none absolute z-[100] flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border border-[color:var(--border-strong)] bg-[color:var(--surface-3)] px-2 py-1 text-xs text-[color:var(--fg)] shadow-[var(--shadow-3)] animate-fade-in',
-            SIDE_POS[side],
-          )}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, transform: pos.transform }}
+          className="pointer-events-none z-[100] flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border border-[color:var(--border-strong)] bg-[color:var(--surface-3)] px-2 py-1 text-xs text-[color:var(--fg)] shadow-[var(--shadow-3)] animate-fade-in"
         >
           {label}
           {hint && (
@@ -58,7 +91,8 @@ export function Tooltip({ label, hint, side = 'top', children, className }: Tool
               {hint}
             </kbd>
           )}
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   )

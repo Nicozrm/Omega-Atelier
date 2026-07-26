@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="canonical" href="https://nobleframe.de/stelle-projekt.html">
+    <meta name="theme-color" content="#000000">
+    <title>Projekt &amp; Sales – Karriere bei NobleFrame</title>
+    <meta name="description" content="Projekt &amp; Sales (m/w/d) bei NobleFrame – Du hältst Projekte und Kunden zusammen – mit Klarheit und Stil. Jetzt mit Drag-&-Drop bewerben.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23000' width='32' height='32'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23C9A962' stroke-width='2'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23C9A962' stroke-width='1'/%3E%3C/svg%3E">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NobleFrame">
+    <meta property="og:title" content="Projekt &amp; Sales – Karriere bei NobleFrame">
+    <meta property="og:url" content="https://nobleframe.de/stelle-projekt.html">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--gold:#C9A962;--gold-light:#E8D5A3;--gold-dark:#8B7355;--black:#000;--white:#FAFAFA;--white-muted:rgba(250,250,250,.75);--white-subtle:rgba(250,250,250,.55);--gradient:linear-gradient(135deg,#C9A962 0%,#E8D5A3 50%,#C9A962 100%);--green:#81C784;--danger:#ef4444}
+        html{scroll-behavior:smooth;background:#000;color-scheme:dark}
+        body{font-family:'Outfit',sans-serif;background:#000;color:var(--white);overflow-x:hidden;line-height:1.6;min-height:100vh}
+        .bg-effects{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+        .ambient-glow{position:absolute;border-radius:50%;filter:blur(120px)}
+        .glow-1{width:500px;height:500px;background:rgba(201,169,98,.06);top:-200px;right:-100px}
+        .glow-2{width:400px;height:400px;background:rgba(201,169,98,.04);bottom:-150px;left:-100px}
+        .grid-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(201,169,98,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(201,169,98,.012) 1px,transparent 1px);background-size:80px 80px}
+        .nav-wrapper{position:fixed;top:0;left:0;width:100%;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(201,169,98,.1);transition:all .4s ease}
+        .nav-wrapper.scrolled{background:rgba(0,0,0,.96)}
+        .nav-main{display:flex;justify-content:space-between;align-items:center;padding:20px 60px}
+        .logo{display:flex;align-items:center;gap:15px;text-decoration:none}
+        .logo-icon{width:45px;height:45px}.logo-icon svg{width:100%;height:100%}
+        .logo-text{font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:300;letter-spacing:8px;color:var(--white);text-transform:uppercase}
+        .nav-links{display:flex;gap:4px;list-style:none}
+        .nav-links>li{position:relative}
+        .nav-links>li>a{position:relative;display:flex;align-items:center;padding:12px 16px;color:var(--white-muted);text-decoration:none;font-size:.82rem;font-weight:400;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;transition:color .35s ease,letter-spacing .35s ease}
+        .nav-links>li>a::after{content:'';position:absolute;left:16px;right:16px;bottom:7px;height:1px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.65,0,.35,1)}
+        .nav-links>li>a:hover{color:var(--gold-light);letter-spacing:2px}
+        .nav-links>li>a:hover::after{transform:scaleX(1)}
+        .nav-cta{display:flex;align-items:center;gap:8px;padding:13px 26px;background:var(--gold);color:var(--black);font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;text-decoration:none;transition:all .4s ease;border:1px solid var(--gold)}
+        .nav-cta:hover{background:transparent;color:var(--gold)}
+        .nav-mobile-toggle{display:none;flex-direction:column;gap:5px;padding:12px;background:transparent;border:1px solid rgba(201,169,98,.3);cursor:pointer;min-height:44px;min-width:44px;justify-content:center;align-items:center}
+        .nav-mobile-toggle span{width:24px;height:2px;background:var(--gold);transition:all .3s ease}
+        .nav-mobile-toggle.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+        .nav-mobile-toggle.active span:nth-child(2){opacity:0}
+        .nav-mobile-toggle.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+        .mobile-menu{position:fixed;top:0;left:0;width:100%;height:100vh;background:rgba(0,0,0,.98);z-index:999;display:flex;flex-direction:column;padding:100px 40px 40px;opacity:0;visibility:hidden;transition:all .4s ease;overflow-y:auto}
+        .mobile-menu.active{opacity:1;visibility:visible}
+        .mobile-menu-section{margin-bottom:30px}
+        .mobile-menu-section h5{font-size:.7rem;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(201,169,98,.15)}
+        .mobile-menu-nav{counter-reset:m;display:flex;flex-direction:column}
+        .mobile-menu-nav a{position:relative;font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--white);text-decoration:none;padding:14px 0 14px 44px;transition:all .3s ease;border-left:2px solid transparent;display:flex;align-items:center;min-height:44px}
+        .mobile-menu-nav a::before{counter-increment:m;content:counter(m,decimal-leading-zero);position:absolute;left:14px;font-family:'Outfit',sans-serif;font-size:.7rem;letter-spacing:1px;color:var(--gold);opacity:.6;top:50%;transform:translateY(-50%)}
+        .mobile-menu-nav a::after{content:'\2192';margin-left:auto;color:var(--gold);opacity:0;transform:translateX(-8px);transition:all .3s ease}
+        .mobile-menu-nav a:hover{color:var(--gold);border-left-color:var(--gold);padding-left:50px}
+        .mobile-menu-nav a:hover::after{opacity:1;transform:translateX(0)}
+        .mobile-menu-links{display:flex;flex-direction:column;gap:8px}
+        .mobile-menu-links a{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--white);text-decoration:none;padding:10px 0;transition:color .3s ease}
+        .mobile-menu-links a:hover{color:var(--gold)}
+        .mobile-menu-cta{margin-top:auto;padding:18px 35px;background:var(--gold);color:var(--black);font-size:.9rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+        /* HERO */
+        .job-hero{padding:150px 60px 40px;position:relative;z-index:10;max-width:1180px;margin:0 auto}
+        .back-link{display:inline-flex;align-items:center;gap:8px;color:var(--white-muted);text-decoration:none;font-size:.82rem;letter-spacing:1px;text-transform:uppercase;margin-bottom:30px;transition:all .3s ease;animation:fadeUp .6s ease both}
+        .back-link svg{width:16px;height:16px;stroke:var(--gold);transition:transform .3s ease}
+        .back-link:hover{color:var(--gold-light)}
+        .back-link:hover svg{transform:translateX(-4px)}
+        .job-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(201,169,98,.08);border:1px solid rgba(201,169,98,.25);font-size:.7rem;color:var(--gold-light);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;animation:fadeUp .7s ease .05s both}
+        .job-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.4rem,5vw,4rem);font-weight:300;line-height:1.05;margin-bottom:14px;animation:fadeUp .7s ease .15s both}
+        .job-tagline{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:var(--gold-light);margin-bottom:30px;animation:fadeUp .7s ease .25s both}
+        .job-meta{display:flex;flex-wrap:wrap;gap:14px;animation:fadeUp .7s ease .35s both}
+        .meta-chip{display:flex;align-items:center;gap:9px;padding:11px 18px;background:rgba(201,169,98,.04);border:1px solid rgba(201,169,98,.16);font-size:.82rem;color:var(--white-muted)}
+        .meta-chip svg{width:16px;height:16px;stroke:var(--gold);flex-shrink:0}
+        .meta-chip b{color:var(--white);font-weight:500}
+        @keyframes fadeUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+        /* BODY */
+        .job-body{max-width:1180px;margin:0 auto;padding:30px 60px 60px;position:relative;z-index:10;display:grid;grid-template-columns:1fr 340px;gap:60px;align-items:start}
+        .job-main .block{margin-bottom:48px}
+        .job-main h2{font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:400;margin-bottom:8px;display:flex;align-items:center;gap:14px}
+        .job-main h2::before{content:'';width:26px;height:1px;background:var(--gold)}
+        .job-main .intro{color:var(--white-muted);font-size:1.02rem;line-height:1.9}
+        .job-list{list-style:none;margin-top:18px}
+        .job-list li{position:relative;padding:13px 0 13px 34px;border-bottom:1px solid rgba(201,169,98,.08);color:rgba(250,250,250,.85);font-size:.95rem}
+        .job-list li::before{content:'';position:absolute;left:4px;top:20px;width:11px;height:11px;border:1px solid var(--gold);transform:rotate(45deg)}
+        .job-list.check li::before{content:'\2713';border:none;font-size:.95rem;color:var(--gold);top:13px;left:2px;transform:none;font-weight:700}
+        .tech-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+        .tech-chip{font-family:'JetBrains Mono',monospace;font-size:.74rem;color:var(--white-subtle);padding:8px 14px;border:1px solid rgba(201,169,98,.16);transition:all .3s ease}
+        .tech-chip:hover{border-color:var(--gold);color:var(--gold-light)}
+
+        /* SIDEBAR */
+        .job-aside{position:sticky;top:110px}
+        .aside-card{border:1px solid rgba(201,169,98,.15);background:rgba(201,169,98,.03);padding:30px;position:relative}
+        .aside-card::before,.aside-card::after{content:'';position:absolute;width:24px;height:24px;border:1px solid var(--gold);opacity:.5}
+        .aside-card::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+        .aside-card::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+        .aside-card h3{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:400;margin-bottom:6px}
+        .aside-card p{color:var(--white-muted);font-size:.88rem;margin-bottom:22px;line-height:1.7}
+        .aside-fact{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(201,169,98,.1);font-size:.84rem}
+        .aside-fact span{color:var(--white-subtle)}
+        .aside-fact b{color:var(--white);font-weight:500}
+        .aside-cta{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:24px;padding:15px;background:var(--gold);color:var(--black);font-size:.8rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;border:1px solid var(--gold);transition:all .4s ease;cursor:pointer}
+        .aside-cta:hover{background:transparent;color:var(--gold)}
+        .aside-cta svg{width:16px;height:16px;transition:transform .3s ease}
+        .aside-cta:hover svg{transform:translateY(3px)}
+
+        /* APPLY / FORM */
+        .apply-section{max-width:880px;margin:0 auto;padding:40px 60px 120px;position:relative;z-index:10;scroll-margin-top:100px}
+        .apply-head{text-align:center;margin-bottom:40px}
+        .apply-head .eyebrow{font-size:.72rem;color:var(--gold);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:14px;display:block}
+        .apply-head h2{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,2.8rem);font-weight:300}
+        .apply-head h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .apply-card{border:1px solid rgba(201,169,98,.15);background:rgba(201,169,98,.03);padding:44px}
+        .field{margin-bottom:22px;position:relative}
+        .field-row{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+        .field label{display:block;font-size:.74rem;color:var(--white-subtle);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px}
+        .field input,.field textarea{width:100%;background:rgba(0,0,0,.4);border:1px solid rgba(201,169,98,.2);padding:14px 16px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.95rem;transition:all .3s ease}
+        .field input:focus,.field textarea:focus{outline:none;border-color:var(--gold);background:rgba(201,169,98,.05);box-shadow:0 0 0 3px rgba(201,169,98,.08)}
+        .field textarea{min-height:120px;resize:vertical}
+
+        .upload-label{font-size:.74rem;color:var(--white-subtle);letter-spacing:1px;text-transform:uppercase;margin-bottom:9px;display:block}
+        .dropzone{border:2px dashed rgba(201,169,98,.3);background:rgba(201,169,98,.03);padding:42px 24px;text-align:center;cursor:pointer;transition:all .3s ease}
+        .dropzone:hover,.dropzone.dragover{border-color:var(--gold);background:rgba(201,169,98,.09)}
+        .dropzone.dragover{transform:scale(1.01)}
+        .dropzone .up{width:44px;height:44px;stroke:var(--gold);margin:0 auto 14px;display:block;transition:transform .3s ease}
+        .dropzone:hover .up,.dropzone.dragover .up{transform:translateY(-4px)}
+        .dropzone h4{font-family:'Outfit',sans-serif;font-size:1.05rem;font-weight:500;margin-bottom:6px;color:var(--white)}
+        .dropzone p{color:var(--white-muted);font-size:.86rem}
+        .dropzone .browse{color:var(--gold);text-decoration:underline}
+        .dropzone small{display:block;margin-top:12px;color:var(--white-subtle);font-size:.72rem;letter-spacing:.3px}
+        .file-list{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+        .file-item{display:flex;align-items:center;gap:13px;padding:12px 14px;border:1px solid rgba(201,169,98,.18);background:rgba(0,0,0,.35);animation:fileIn .3s ease both}
+        @keyframes fileIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .file-item .fi-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(201,169,98,.25);flex-shrink:0}
+        .file-item .fi-icon svg{width:17px;height:17px;stroke:var(--gold)}
+        .file-item .fi-body{flex:1;min-width:0}
+        .file-item .fi-name{font-size:.86rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .file-item .fi-size{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--white-subtle);margin-top:2px}
+        .file-item .fi-remove{background:transparent;border:1px solid rgba(201,169,98,.2);color:var(--white-subtle);width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .3s ease;font-size:1.1rem;line-height:1}
+        .file-item .fi-remove:hover{border-color:var(--danger);color:var(--danger)}
+        .file-error{color:var(--danger);font-size:.82rem;margin-top:12px;display:none;align-items:center;gap:8px}
+        .file-error.show{display:flex}
+
+        .privacy{display:flex;align-items:flex-start;gap:12px;margin:26px 0;cursor:pointer}
+        .privacy input{display:none}
+        .privacy .box{width:20px;height:20px;border:1px solid rgba(201,169,98,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .3s ease;margin-top:1px}
+        .privacy input:checked+.box{background:var(--gold);border-color:var(--gold)}
+        .privacy .box svg{width:13px;height:13px;stroke:var(--black);opacity:0;transition:opacity .2s}
+        .privacy input:checked+.box svg{opacity:1}
+        .privacy span{font-size:.84rem;color:var(--white-muted);line-height:1.5}
+        .privacy a{color:var(--gold);text-decoration:none}
+        .submit-btn{width:100%;padding:17px 40px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease;display:flex;align-items:center;justify-content:center;gap:10px}
+        .submit-btn:hover{background:transparent;color:var(--gold)}
+        .submit-btn svg{width:18px;height:18px;transition:transform .35s ease}
+        .submit-btn:hover svg{transform:translateX(5px)}
+        .form-success{display:none;text-align:center;padding:30px 10px}
+        .form-success.show{display:block;animation:fadeUp .5s ease both}
+        .success-ring{width:74px;height:74px;margin:0 auto 22px;border-radius:50%;border:2px solid var(--green);display:flex;align-items:center;justify-content:center}
+        .success-ring svg{width:34px;height:34px;stroke:var(--green);stroke-width:2.5}
+        .form-success h4{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:400;margin-bottom:12px}
+        .form-success p{color:var(--white-muted);font-size:.95rem;line-height:1.7;max-width:480px;margin:0 auto}
+
+        /* FOOTER */
+        .footer{padding:90px 60px 40px;border-top:1px solid rgba(201,169,98,.1);position:relative;z-index:10}
+        .footer-container{max-width:1400px;margin:0 auto}
+        .footer-main{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr;gap:60px;margin-bottom:60px}
+        .footer-brand{max-width:300px}
+        .footer-logo{display:flex;align-items:center;gap:15px;margin-bottom:20px}
+        .footer-logo-icon{width:40px;height:40px}.footer-logo-icon svg{width:100%;height:100%}
+        .footer-logo-text{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:300;letter-spacing:6px;color:var(--white)}
+        .footer-tagline{color:var(--white-muted);font-size:.9rem;line-height:1.7}
+        .footer-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:25px;font-weight:500}
+        .footer-links{list-style:none;display:flex;flex-direction:column;gap:14px}
+        .footer-links a{color:var(--white-muted);text-decoration:none;font-size:.9rem;transition:all .3s ease;display:inline-block}
+        .footer-links a:hover{color:var(--gold);transform:translateX(5px)}
+        .newsletter-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:15px;font-weight:500}
+        .newsletter-desc{color:var(--white-muted);font-size:.85rem;margin-bottom:20px}
+        .newsletter-form{display:flex;flex-direction:column;gap:15px}
+        .newsletter-input{background:rgba(201,169,98,.05);border:1px solid rgba(201,169,98,.2);padding:14px 18px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.9rem;transition:all .3s ease}
+        .newsletter-input:focus{outline:none;border-color:var(--gold)}
+        .newsletter-input::placeholder{color:var(--white-subtle)}
+        .checkbox-wrapper{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+        .checkbox-wrapper input{display:none}
+        .custom-checkbox{width:18px;height:18px;border:1px solid rgba(201,169,98,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .3s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox{background:var(--gold);border-color:var(--gold)}
+        .custom-checkbox svg{width:12px;height:12px;stroke:var(--black);opacity:0;transition:opacity .2s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox svg{opacity:1}
+        .checkbox-label{font-size:.8rem;color:var(--white-muted);line-height:1.4}
+        .checkbox-label a{color:var(--gold);text-decoration:none}
+        .newsletter-btn{padding:14px 30px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease}
+        .newsletter-btn:hover{background:transparent;color:var(--gold)}
+        .form-message{padding:12px 15px;font-size:.85rem;margin-top:10px;display:none}
+        .form-message.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22c55e}
+        .footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:40px;border-top:1px solid rgba(201,169,98,.1)}
+        .copyright{color:var(--white-subtle);font-size:.85rem}.copyright span{color:var(--gold)}
+        .legal-links{display:flex;gap:30px}
+        .legal-links a{color:var(--white-subtle);text-decoration:none;font-size:.8rem;transition:color .3s ease}
+        .legal-links a:hover{color:var(--gold)}
+        .cookie-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,10,.98);border-top:1px solid rgba(201,169,98,.2);padding:25px 40px;z-index:10000;transform:translateY(100%);transition:transform .5s cubic-bezier(.25,.46,.45,.94);backdrop-filter:blur(20px)}
+        .cookie-banner.show{transform:translateY(0)}
+        .cookie-content{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:30px;flex-wrap:wrap}
+        .cookie-text{flex:1;min-width:300px}
+        .cookie-text h4{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold);margin-bottom:8px}
+        .cookie-text p{color:var(--white-muted);font-size:.9rem;margin:0}
+        .cookie-text a{color:var(--gold);text-decoration:none}
+        .cookie-buttons{display:flex;gap:15px;flex-wrap:wrap}
+        .cookie-btn{padding:14px 28px;font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:none;cursor:pointer;transition:all .3s}
+        .cookie-accept{background:var(--gold);color:var(--black)}.cookie-accept:hover{background:var(--gold-light)}
+        .cookie-decline{background:transparent;border:1px solid rgba(201,169,98,.3);color:var(--white-muted)}
+        .cookie-decline:hover{border-color:var(--gold);color:var(--gold)}
+        .reveal{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.3,1)}
+        .reveal.visible{opacity:1;transform:translateY(0)}
+        @media(max-width:1366px){
+            .nav-main{padding:18px 36px}.nav-links{gap:0}
+            .nav-links>li>a{padding:11px 11px;font-size:.78rem;letter-spacing:.8px}
+            .nav-links>li>a::after{left:11px;right:11px}.nav-links>li>a:hover{letter-spacing:1.1px}
+            .nav-cta{padding:12px 20px;letter-spacing:1.5px}.logo-text{letter-spacing:5px}
+        }
+        @media(max-width:1024px){
+            .nav-links,.nav-cta{display:none}.nav-mobile-toggle{display:flex}.nav-main{padding:15px 30px}
+            .job-hero{padding:130px 40px 30px}
+            .job-body{grid-template-columns:1fr;gap:40px;padding:20px 40px 50px}
+            .job-aside{position:static}
+            .apply-section{padding:30px 40px 90px}
+        }
+        @media(max-width:768px){
+            .nav-main{padding:15px 20px}.logo-icon{width:35px;height:35px}.logo-text{font-size:1.1rem;letter-spacing:4px}
+            .job-hero{padding:120px 20px 20px}
+            .job-body{padding:20px 20px 40px}
+            .apply-section{padding:20px 20px 70px}
+            .apply-card{padding:28px 20px}
+            .field-row{grid-template-columns:1fr}
+            .footer{padding:60px 20px 30px}.footer-main{grid-template-columns:1fr;gap:30px}
+            .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+            .legal-links{flex-wrap:wrap;justify-content:center;gap:15px}
+            .cookie-banner{padding:20px}.cookie-content{flex-direction:column;text-align:center}.cookie-buttons{justify-content:center;width:100%}
+        }
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}.reveal{opacity:1;transform:none}}
+        .skip-link{position:fixed;left:8px;top:-60px;z-index:3000;background:#C9A962;color:#000;padding:10px 18px;font-family:'Outfit',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.04em;text-decoration:none;transition:top .2s ease}
+        .skip-link:focus{top:8px;outline:2px solid #000;outline-offset:2px}
+    </style>
+    <meta property="og:image" content="https://nobleframe.de/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:image" content="https://nobleframe.de/og-image.png">
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "JobPosting", "title": "Projekt & Sales (m/w/d)", "description": "Projekt & Sales (m/w/d) bei NobleFrame – Du hältst Projekte und Kunden zusammen – mit Klarheit und Stil. Jetzt mit Drag-&-Drop bewerben.", "datePosted": "2026-06-01", "validThrough": "2026-12-31", "employmentType": ["FULL_TIME", "PART_TIME"], "hiringOrganization": {"@type": "Organization", "name": "NobleFrame", "sameAs": "https://nobleframe.de", "logo": "https://nobleframe.de/og-image.png"}, "jobLocationType": "TELECOMMUTE", "applicantLocationRequirements": {"@type": "Country", "name": "Deutschland"}, "jobLocation": {"@type": "Place", "address": {"@type": "PostalAddress", "addressLocality": "Steinfurt", "addressRegion": "Nordrhein-Westfalen", "addressCountry": "DE"}}, "url": "https://nobleframe.de/stelle-projekt.html", "directApply": true}
+    </script>
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://nobleframe.de/"}, {"@type": "ListItem", "position": 2, "name": "Karriere", "item": "https://nobleframe.de/karriere.html"}, {"@type": "ListItem", "position": 3, "name": "Projekt & Sales", "item": "https://nobleframe.de/stelle-projekt.html"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+    <link rel="icon" href="/favicon/favicon.ico" sizes="32x32">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <script defer src="nf-interactions.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#hauptinhalt">Zum Inhalt springen</a>
+<div class="bg-effects"><div class="ambient-glow glow-1"></div><div class="ambient-glow glow-2"></div><div class="grid-overlay"></div></div>
+<div class="nav-wrapper" id="navWrapper">
+    <nav class="nav-main">
+        <a href="index.html" class="logo">
+            <div class="logo-icon"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/><rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.6"/><line x1="50" y1="5" x2="50" y2="95" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/><line x1="5" y1="50" x2="95" y2="50" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/></svg></div>
+            <span class="logo-text">NobleFrame</span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="leistungen.html">Leistungen</a></li>
+            <li><a href="referenzen.html">Referenzen</a></li>
+            <li><a href="showcase.html">Showcase</a></li>
+            <li><a href="tools.html">Tools</a></li>
+            <li><a href="about.html">Über Uns</a></li>
+            <li><a href="kontakt.html">Kontakt</a></li>
+        </ul>
+        <a href="karriere.html" class="nav-cta">Alle Stellen</a>
+        <button class="nav-mobile-toggle" id="navMobileToggle" aria-label="Menü"><span></span><span></span><span></span></button>
+    </nav>
+</div>
+<div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-menu-section"><h5>Navigation</h5><div class="mobile-menu-nav">
+        <a href="index.html">Home</a><a href="leistungen.html">Leistungen</a><a href="referenzen.html">Referenzen</a><a href="showcase.html">Showcase</a><a href="tools.html">Tools</a><a href="about.html">Über Uns</a><a href="kontakt.html">Kontakt</a>
+    </div></div>
+    <div class="mobile-menu-section"><h5>Direkt erreichen</h5><div class="mobile-menu-links">
+        <a href="tel:+4915292612795">+49 152 92612795</a><a href="mailto:info@nobleframe.de">info@nobleframe.de</a>
+    </div></div>
+    <a href="karriere.html" class="mobile-menu-cta">Alle Stellen</a>
+</div>
+<header class="job-hero" id="hauptinhalt" tabindex="-1"><a href="karriere.html" class="back-link"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>Zurück zu allen Stellen</a><div class="job-badge">Initiativbewerbung</div><h1 class="job-title">Projekt &amp; Sales <span style="color:var(--white-subtle);font-size:.6em">(m/w/d)</span></h1><p class="job-tagline">Du hältst Projekte und Kunden zusammen – mit Klarheit und Stil.</p><div class="job-meta"><div class="meta-chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>Bereich: <b>Projektmanagement &amp; Sales</b></div><div class="meta-chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Art: <b>Initiativbewerbung</b></div><div class="meta-chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Ort: <b>Remote (DE)</b></div><div class="meta-chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Umfang: <b>Voll- oder Teilzeit</b></div></div></header><div class="job-body"><div class="job-main"><div class="block reveal"><h2>Über die Rolle</h2><p class="intro">In dieser Rolle bist du die Schnittstelle zwischen Kunde und Team. Du berätst, koordinierst und sorgst dafür, dass aus Ideen reibungslose Projekte werden – mit dem richtigen Gespür für Menschen, Qualität und Timing.</p></div><div class="block reveal"><h2>Deine Aufgaben</h2><ul class="job-list"><li>Kommunikation und Beratung unserer Kunden</li><li>Erstellung von Angeboten und Projektabstimmungen</li><li>Koordination von Projekten zwischen Kunde, Design und Development</li><li>Termin-, Budget- und Qualitätskontrolle</li><li>Aufbau langfristiger, vertrauensvoller Kundenbeziehungen</li></ul></div><div class="block reveal"><h2>Dein Profil</h2><ul class="job-list"><li>Kommunikationsstark und souverän im Auftreten</li><li>Strukturierte, organisierte Arbeitsweise</li><li>Echtes Interesse an digitalen Projekten und Design</li><li>Verlässlichkeit und Eigeninitiative</li><li>Plus: Erfahrung in Agentur, Vertrieb oder Projektmanagement</li></ul></div><div class="block reveal"><h2>Was wir bieten</h2><ul class="job-list check"><li>Anspruchsvolle Projekte mit echtem Gestaltungsspielraum</li><li>Flache Strukturen, kurze Wege, Eigenverantwortung ab Tag eins</li><li>100&nbsp;% Remote &amp; flexible Arbeitszeiten</li><li>Moderne Tools und ein kompromissloser Qualitätsanspruch</li><li>Direkter Draht zu den Gründern – keine Zwischenebene</li></ul></div><div class="block reveal"><h2>Schwerpunkte</h2><div class="tech-row"><span class="tech-chip">Kundenberatung</span><span class="tech-chip">Angebote</span><span class="tech-chip">Koordination</span><span class="tech-chip">Account Management</span></div></div></div><aside class="job-aside"><div class="aside-card"><h3>Projekt &amp; Sales</h3><p>Überzeug uns mit deiner Persönlichkeit und deiner Arbeit – wir freuen uns auf deine Bewerbung.</p><div class="aside-fact"><span>Bereich</span><b>Projektmanagement &amp; Sales</b></div><div class="aside-fact"><span>Art</span><b>Initiativ</b></div><div class="aside-fact"><span>Ort</span><b>Remote (DE)</b></div><div class="aside-fact"><span>Umfang</span><b>Voll-/Teilzeit</b></div><button class="aside-cta" data-scroll-apply>Jetzt bewerben <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg></button></div></aside></div><section class="apply-section" id="apply"><div class="apply-head"><span class="eyebrow">Bewerbung</span><h2>Bewirb dich als <span>Projekt &amp; Sales</span></h2></div><div class="apply-card"><form id="applyForm" novalidate><div class="field-row"><div class="field"><label>Name *</label><input type="text" name="name" required placeholder="Dein Name"></div><div class="field"><label>E-Mail *</label><input type="email" name="email" required placeholder="deine@email.de"></div></div><div class="field-row"><div class="field"><label>Telefon</label><input type="tel" name="phone" placeholder="Optional"></div><div class="field"><label>Portfolio / LinkedIn</label><input type="url" name="portfolio" placeholder="https://…"></div></div><div class="field"><label>Deine Nachricht</label><textarea name="message" placeholder="Erzähl uns kurz, warum du zu uns passt…"></textarea></div><span class="upload-label">Deine Bewerbungs-Mappe</span><div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Dateien hochladen"><svg class="up" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.9A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v12"/></svg><h4>Dateien hierher ziehen</h4><p>oder <span class="browse">durchsuchen</span> – Lebenslauf, Portfolio, Arbeitsproben</p><small>PDF, DOC, PNG, JPG, ZIP · max. 10&nbsp;MB pro Datei · bis zu 8 Dateien</small></div><input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip,.txt,.rtf,.odt" style="display:none"><div class="file-list" id="fileList"></div><div class="file-error" id="fileError"></div><label class="privacy"><input type="checkbox" name="privacy" required><span class="box"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span>Ich habe die <a href="datenschutz.html">Datenschutzerklärung</a> gelesen und bin mit der Verarbeitung meiner Bewerbungsdaten einverstanden.</span></label><button type="submit" class="submit-btn">Bewerbung absenden <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></button></form><div class="form-success" id="formSuccess"><div class="success-ring"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg></div><h4>Fast geschafft!</h4><p>Deine Bewerbung wurde vorbereitet und dein Mailprogramm geöffnet. Bitte hänge deine ausgewählten Dateien an die E-Mail an und sende sie ab – wir melden uns innerhalb weniger Tage.</p></div></div></section>
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-main">
+            <div class="footer-brand">
+                <div class="footer-logo"><div class="footer-logo-icon"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/><rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.7"/></svg></div><span class="footer-logo-text">NOBLEFRAME</span></div>
+                <p class="footer-tagline">Premium Digital Atelier für Websites, Apps & Growth Solutions.</p>
+            </div>
+            <div class="footer-section"><h4>Navigation</h4><ul class="footer-links"><li><a href="leistungen.html">Leistungen</a></li><li><a href="referenzen.html">Referenzen</a></li><li><a href="about.html">Über Uns</a></li><li><a href="kontakt.html">Kontakt</a></li></ul></div>
+            <div class="footer-section"><h4>Mehr</h4><ul class="footer-links"><li><a href="showcase.html">Showcase</a></li><li><a href="tools.html">Tools</a></li><li><a href="faq.html">FAQ</a></li><li><a href="karriere.html">Karriere</a></li></ul></div>
+            <div class="newsletter-section">
+                <h4>Newsletter</h4><p class="newsletter-desc">Exklusive Insights und Updates zu unseren Projekten.</p>
+                <form class="newsletter-form" id="newsletterForm">
+                    <input type="email" name="email" class="newsletter-input" placeholder="ihre@email.de" required>
+                    <label class="checkbox-wrapper"><input type="checkbox" name="privacy" required><span class="custom-checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="checkbox-label">Ich akzeptiere die <a href="datenschutz.html">Datenschutzerklärung</a></span></label>
+                    <button type="submit" class="newsletter-btn">Newsletter abonnieren</button>
+                    <div class="form-message" id="newsletterMessage"></div>
+                </form>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p class="copyright">© 2026 <span>NobleFrame</span>. Alle Rechte vorbehalten.</p>
+            <div class="legal-links"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a><a href="agb.html">AGB</a></div>
+        </div>
+    </div>
+</footer>
+<div class="cookie-banner" id="cookieBanner">
+    <div class="cookie-content">
+        <div class="cookie-text"><h4>Cookie-Einstellungen</h4><p>Wir verwenden technisch notwendige Cookies für den Betrieb dieser Website. <a href="datenschutz.html">Mehr erfahren</a></p></div>
+        <div class="cookie-buttons"><button class="cookie-btn cookie-accept" id="cookieAccept">Alle akzeptieren</button><button class="cookie-btn cookie-decline" id="cookieDecline">Nur notwendige</button></div>
+    </div>
+</div>
+<script>
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const navWrapper = document.getElementById('navWrapper');
+window.addEventListener('scroll', () => navWrapper.classList.toggle('scrolled', window.scrollY > 50));
+const navMobileToggle = document.getElementById('navMobileToggle');
+const mobileMenu = document.getElementById('mobileMenu');
+navMobileToggle.addEventListener('click', () => { navMobileToggle.classList.toggle('active'); mobileMenu.classList.toggle('active'); document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : ''; });
+mobileMenu.querySelectorAll('a').forEach(l => l.addEventListener('click', () => { navMobileToggle.classList.remove('active'); mobileMenu.classList.remove('active'); document.body.style.overflow = ''; }));
+const io = new IntersectionObserver((es) => { es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+/* ===== Drag & Drop file upload ===== */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileListEl = document.getElementById('fileList');
+const fileError = document.getElementById('fileError');
+let pickedFiles = [];
+const MAX_SIZE = 10 * 1024 * 1024;       // 10 MB pro Datei
+const MAX_FILES = 8;
+const ALLOWED = ['pdf','doc','docx','png','jpg','jpeg','zip','txt','rtf','odt'];
+function fmtSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(0)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
+function showErr(msg){ fileError.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;stroke:#ef4444"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/></svg>' + msg; fileError.classList.add('show'); }
+function renderFiles(){
+    fileListEl.innerHTML = '';
+    pickedFiles.forEach((f, i) => {
+        const row = document.createElement('div'); row.className = 'file-item';
+        row.innerHTML = '<div class="fi-icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4a2 2 0 012-2h6l6 6v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg></div>' +
+            '<div class="fi-body"><div class="fi-name">' + f.name.replace(/</g,'&lt;') + '</div><div class="fi-size">' + fmtSize(f.size) + '</div></div>' +
+            '<button type="button" class="fi-remove" data-i="' + i + '" aria-label="Entfernen">&times;</button>';
+        fileListEl.appendChild(row);
+    });
+}
+function addFiles(list){
+    fileError.classList.remove('show');
+    [...list].forEach(f => {
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (!ALLOWED.includes(ext)) { showErr('Dateityp nicht erlaubt: ' + f.name); return; }
+        if (f.size > MAX_SIZE) { showErr('Datei zu groß (max. 10 MB): ' + f.name); return; }
+        if (pickedFiles.length >= MAX_FILES) { showErr('Maximal ' + MAX_FILES + ' Dateien.'); return; }
+        if (pickedFiles.some(x => x.name === f.name && x.size === f.size)) return;
+        pickedFiles.push(f);
+    });
+    renderFiles();
+}
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', e => { e.preventDefault(); dropzone.classList.remove('dragover'); });
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+fileListEl.addEventListener('click', e => { const btn = e.target.closest('.fi-remove'); if (btn) { pickedFiles.splice(+btn.dataset.i, 1); renderFiles(); } });
+
+/* Apply CTA scroll */
+document.querySelectorAll('[data-scroll-apply]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); document.getElementById('apply').scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+
+/* Submit application
+   ----------------------------------------------------------------
+   Statischer Versand: öffnet das Mailprogramm mit allen Angaben +
+   Dateiliste. Der Bewerber hängt die Dateien an die geöffnete Mail.
+   Für echten Server-Upload Formspree-Block unten aktivieren:
+   ----------------------------------------------------------------
+   // const FORMSPREE = 'https://formspree.io/f/DEINE_FORM_ID';
+   // const fd = new FormData(form);
+   // pickedFiles.forEach(f => fd.append('anhang', f, f.name));
+   // const r = await fetch(FORMSPREE, { method:'POST', body: fd, headers:{Accept:'application/json'} });
+   // if (r.ok) { showSuccess(); } else { showErr('Versand fehlgeschlagen.'); }
+   ---------------------------------------------------------------- */
+const form = document.getElementById('applyForm');
+form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const f = new FormData(this);
+    const name = (f.get('name') || '').trim();
+    const email = (f.get('email') || '').trim();
+    const msg = (f.get('message') || '').trim();
+    if (!name || !email || !this.querySelector('[name=privacy]').checked) {
+        this.reportValidity ? this.reportValidity() : alert('Bitte Pflichtfelder ausfüllen.');
+        return;
+    }
+    const phone = (f.get('phone') || 'Nicht angegeben').trim() || 'Nicht angegeben';
+    const portfolio = (f.get('portfolio') || 'Nicht angegeben').trim() || 'Nicht angegeben';
+    const fileNames = pickedFiles.length ? pickedFiles.map(x => '  - ' + x.name + ' (' + fmtSize(x.size) + ')').join('\n') : '  (keine Dateien angehängt)';
+    const subject = encodeURIComponent('Bewerbung: Projekt &amp; Sales (m/w/d)');
+    const body = encodeURIComponent(
+        'Bewerbung über NobleFrame\n=========================\n\n' +
+        'Position: Projekt &amp; Sales (m/w/d)\n\n' +
+        'Name: ' + name + '\nE-Mail: ' + email + '\nTelefon: ' + phone + '\nPortfolio/LinkedIn: ' + portfolio +
+        '\n\nNachricht:\n' + (msg || '—') +
+        '\n\nAusgewählte Dateien:\n' + fileNames +
+        '\n\nHinweis: Bitte hängen Sie die oben genannten Dateien dieser E-Mail an, bevor Sie sie absenden.' +
+        '\n\nDatum: ' + new Date().toLocaleString('de-DE'));
+    window.location.href = 'mailto:info@nobleframe.de?subject=' + subject + '&body=' + body;
+    form.style.display = 'none';
+    document.getElementById('formSuccess').classList.add('show');
+});
+
+/* Cookie */
+const cookieBanner = document.getElementById('cookieBanner');
+if (!localStorage.getItem('nobleframe_cookie_consent')) setTimeout(() => cookieBanner.classList.add('show'), 2500);
+document.getElementById('cookieAccept').addEventListener('click', () => { localStorage.setItem('nobleframe_cookie_consent', 'all'); cookieBanner.classList.remove('show'); });
+document.getElementById('cookieDecline').addEventListener('click', () => { localStorage.setItem('nobleframe_cookie_consent', 'necessary'); cookieBanner.classList.remove('show'); });
+/* Newsletter */
+document.getElementById('newsletterForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const email = this.querySelector('input[name="email"]').value;
+    const messageEl = document.getElementById('newsletterMessage');
+    window.location.href = 'mailto:info@nobleframe.de?subject=' + encodeURIComponent('Newsletter Anmeldung - NobleFrame') + '&body=' + encodeURIComponent('Newsletter Anmeldung\nE-Mail: ' + email);
+    messageEl.textContent = 'Vielen Dank! Bitte senden Sie die E-Mail ab, um die Anmeldung zu bestätigen.';
+    messageEl.className = 'form-message success';
+    this.reset();
+    setTimeout(() => { messageEl.className = 'form-message'; }, 5000);
+});
+</script>
+</body>
+</html>

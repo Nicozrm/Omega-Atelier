@@ -17,8 +17,13 @@ import type { Floor, Point, RemoteCursor, Tool, WallSubtype } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { snap, clamp, dist, pointInPolygon } from '@/lib/utils'
+import { play as playSound } from '@/lib/sound'
+import { cinematicReact } from '@/lib/cinematic'
 import { resolveFloorMaterial } from '@/lib/materials'
-import { deriveRoomLighting } from '@/lib/lighting'
+import { deriveRoomLighting, deriveLightSources } from '@/lib/lighting'
+import { daylightWash } from '@/lib/dayCycle'
+import { shadowQuad } from '@/lib/shadow2d'
+import { sunPosition, sunColor, windowLightPatch, sunTimes, sunShadowPolygon } from '@/lib/sunStudy'
 import {
   readTheme,
   drawWall,
@@ -33,6 +38,22 @@ import {
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
 const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
+
+/** Shared offscreen canvas for occluded light pools (one light at a time). */
+let poolScratch: HTMLCanvasElement | null = null
+function getPoolScratch(): HTMLCanvasElement {
+  if (!poolScratch) poolScratch = document.createElement('canvas')
+  return poolScratch
+}
+
+/** `#rrggbb` + a 0…1 alpha → an `rgba()` string (for light-pool gradients). */
+function hexWithAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`
+}
 
 export interface OmegaFloorCanvasProps {
   /** Live cursors from other users (Supabase realtime broadcast). */
@@ -72,6 +93,10 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
   const resizeFurniture = usePlanStore((s) => s.resizeFurniture)
 
   const pushToast = useUIStore((s) => s.pushToast)
+  // Living-Home day cycle: null = off (normal view), else the current hour.
+  const timeOfDay = useUIStore((s) => s.timeOfDay)
+  const timeRef = useRef(timeOfDay)
+  timeRef.current = timeOfDay
 
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [wallStart, setWallStart] = useState<Point | null>(null)
@@ -396,7 +421,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         }
       }
 
-      // Paper edge — thin gold rule
+      // Paper edge — thin accent rule
       ctx.strokeStyle = theme.paperEdge
       ctx.lineWidth = 1
       ctx.strokeRect(paperTL.x, paperTL.y, pw, ph)
@@ -418,6 +443,258 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
           })
           drawRoomFloor(ctx, screenPts, material, lighting)
         }
+      }
+
+      // ── Living-Home daylight wash ──────────────────────────────────────
+      // When the day cycle is running, wash the floor with the time of day:
+      // night multiplies a deep cool blue (so lamp pools glow), day screens a
+      // soft daylight, dawn/dusk warm it. Applied to the floor only — walls,
+      // furniture and labels stay full-strength and legible on top.
+      const tod = timeRef.current
+      const nightF = tod !== null ? daylightWash(tod).night : 0
+      if (tod !== null) {
+        const wash = daylightWash(tod)
+        ctx.save()
+        if (wash.night > 0.01) {
+          ctx.globalCompositeOperation = 'multiply'
+          ctx.fillStyle = hexWithAlpha('#0b1626', 0.66 * wash.night)
+          ctx.fillRect(paperTL.x, paperTL.y, pw, ph)
+        }
+        if (wash.day > 0.01) {
+          ctx.globalCompositeOperation = 'screen'
+          ctx.fillStyle = hexWithAlpha('#fff3da', 0.20 * wash.day)
+          ctx.fillRect(paperTL.x, paperTL.y, pw, ph)
+        }
+        if (wash.dusk > 0.01) {
+          ctx.globalCompositeOperation = 'screen'
+          ctx.fillStyle = hexWithAlpha('#e0873a', 0.14 * wash.dusk)
+          ctx.fillRect(paperTL.x, paperTL.y, pw, ph)
+        }
+        ctx.restore()
+      }
+
+      // ── Sonnenstudie — real sun through the windows ────────────────────
+      // Genuine solar geometry (declination + hour angle for today's date at
+      // 51°N, north = up): every window projects its patch of sunlight onto
+      // the floor — starting past the sill's shadow, lengthening and warming
+      // as the sun sinks. Runs on the day-cycle clock when it's active, on
+      // the real current time otherwise, so the plan always carries the sun
+      // your flat has right now.
+      {
+        const nowDate = new Date()
+        const dayOfYear = Math.floor((nowDate.getTime() - new Date(nowDate.getFullYear(), 0, 0).getTime()) / 86400000)
+        const sunHour = tod ?? nowDate.getHours() + nowDate.getMinutes() / 60
+        const sun = sunPosition(dayOfYear, sunHour)
+        if (sun.altitude > 2) {
+          const indoorRooms = floor.rooms.filter((r) => (r.zoneType ?? 'indoor') === 'indoor' && r.polygon.length >= 3)
+          const hex = sunColor(sun.altitude)
+
+          // Collect valid window patches once — drawn now, dusted later.
+          const patches: Array<{ quad: [Point, Point, Point, Point]; seed: number }> = []
+          floor.walls.forEach((w, wi) => {
+            if ((w.subtype ?? 'wall') !== 'window') return
+            const patch = windowLightPatch(w, sun)
+            if (!patch) return
+            if (!indoorRooms.some((r) => pointInPolygon(patch.probe, r.polygon))) return
+            patches.push({ quad: patch.quad, seed: wi * 37.7 })
+          })
+
+          ctx.save()
+          ctx.globalCompositeOperation = 'lighter'
+          for (const { quad } of patches) {
+            const [a, b, c2, d2] = quad.map((p) => worldToScreen(p))
+            // Brightest at the window edge, fading with reach.
+            const grad = ctx.createLinearGradient(
+              (a.x + b.x) / 2, (a.y + b.y) / 2,
+              (c2.x + d2.x) / 2, (c2.y + d2.y) / 2,
+            )
+            const alpha = 0.34 * Math.min(1, sun.intensity + 0.25)
+            grad.addColorStop(0, hexWithAlpha(hex, alpha))
+            grad.addColorStop(1, hexWithAlpha(hex, 0))
+            ctx.fillStyle = grad
+            ctx.beginPath()
+            ctx.moveTo(a.x, a.y)
+            ctx.lineTo(b.x, b.y)
+            ctx.lineTo(c2.x, c2.y)
+            ctx.lineTo(d2.x, d2.y)
+            ctx.closePath()
+            ctx.fill()
+          }
+          ctx.restore()
+
+          // Furniture throws real sun shadows — long in the evening, tucked
+          // in at noon — multiplied over the floor (they cut visibly through
+          // the window patches, exactly like a sofa blocking the light).
+          if (floor.layers.furniture) {
+            ctx.save()
+            ctx.globalCompositeOperation = 'multiply'
+            ctx.fillStyle = hexWithAlpha('#0d1420', 0.16 * Math.min(1, sun.intensity + 0.3))
+            for (const f of floor.furniture) {
+              if (f.hidden) continue
+              const entry = FURN_MAP[f.furnitureId]
+              const [fw, fh] = f.size ?? entry?.size ?? [60, 60]
+              const rot = ((f.rotation ?? 0) * Math.PI) / 180
+              const cosR = Math.cos(rot)
+              const sinR = Math.sin(rot)
+              const corners: Point[] = [
+                { x: -fw / 2, y: -fh / 2 }, { x: fw / 2, y: -fh / 2 },
+                { x: fw / 2, y: fh / 2 }, { x: -fw / 2, y: fh / 2 },
+              ].map((p) => ({
+                x: f.position.x + p.x * cosR - p.y * sinR,
+                y: f.position.y + p.x * sinR + p.y * cosR,
+              }))
+              const shadow = sunShadowPolygon(corners, sun, 75)
+              if (!shadow) continue
+              ctx.beginPath()
+              shadow.forEach((p, i) => {
+                const s = worldToScreen(p)
+                if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y)
+              })
+              ctx.closePath()
+              ctx.fill()
+            }
+            ctx.restore()
+          }
+
+          // Dust motes drifting in the beams — the atelier moment. Seeded
+          // per window (stable), phased by the day-cycle clock so they float
+          // while the Tagesverlauf plays.
+          {
+            const fract = (x: number) => x - Math.floor(x)
+            ctx.save()
+            ctx.globalCompositeOperation = 'lighter'
+            for (const { quad, seed } of patches) {
+              const [q0, q1, q2, q3] = quad
+              for (let i = 0; i < 12; i++) {
+                const u0 = fract(Math.sin(i * 127.1 + seed) * 43758.5453)
+                const v0 = fract(Math.sin(i * 311.7 + seed * 1.7) * 12543.21)
+                const u = Math.min(1, Math.max(0, u0 + 0.04 * Math.sin(sunHour * 2.1 + i)))
+                const v = fract(v0 + sunHour * 0.05 + i * 0.013)
+                // Bilinear point in the patch: near edge q0→q1, far edge q3→q2.
+                const nx = q0.x + (q1.x - q0.x) * u
+                const ny = q0.y + (q1.y - q0.y) * u
+                const fx = q3.x + (q2.x - q3.x) * u
+                const fy = q3.y + (q2.y - q3.y) * u
+                const s = worldToScreen({ x: nx + (fx - nx) * v, y: ny + (fy - ny) * v })
+                ctx.globalAlpha = 0.10 + 0.16 * fract(u0 * 7.3 + i)
+                ctx.fillStyle = '#fff4dc'
+                ctx.beginPath()
+                ctx.arc(s.x, s.y, 1.1, 0, Math.PI * 2)
+                ctx.fill()
+              }
+            }
+            ctx.restore()
+          }
+        }
+
+        // Architect's sun-path diagram — only while the day cycle plays: a
+        // fine ring around the paper, the day's arc, and the sun disc riding
+        // its true azimuth. Quiet, like a drawing-margin annotation.
+        if (tod !== null) {
+          const cxp = paperTL.x + pw / 2
+          const cyp = paperTL.y + ph / 2
+          const ringR = Math.hypot(pw, ph) / 2 + 30
+          const times = sunTimes(dayOfYear)
+          const azToAngle = (az: number) => (az - 90) * (Math.PI / 180) // north=up → canvas angle
+          ctx.save()
+          ctx.strokeStyle = 'rgba(199,162,78,0.14)'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.arc(cxp, cyp, ringR, 0, Math.PI * 2)
+          ctx.stroke()
+          // Day arc: from sunrise azimuth to sunset azimuth (through south).
+          const azRise = sunPosition(dayOfYear, times.sunrise + 0.1).azimuth
+          const azSet = sunPosition(dayOfYear, times.sunset - 0.1).azimuth
+          ctx.strokeStyle = 'rgba(230,204,134,0.4)'
+          ctx.lineWidth = 1.6
+          ctx.beginPath()
+          ctx.arc(cxp, cyp, ringR, azToAngle(azRise), azToAngle(azSet))
+          ctx.stroke()
+          if (sun.altitude > 0) {
+            const ang = azToAngle(sun.azimuth)
+            const sx2 = cxp + Math.cos(ang) * ringR
+            const sy2 = cyp + Math.sin(ang) * ringR
+            const discR = 4 + 3 * Math.min(1, sun.altitude / 60)
+            const glow = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, discR * 3.2)
+            glow.addColorStop(0, 'rgba(255,224,150,0.85)')
+            glow.addColorStop(0.5, 'rgba(230,180,90,0.25)')
+            glow.addColorStop(1, 'rgba(230,180,90,0)')
+            ctx.fillStyle = glow
+            ctx.beginPath()
+            ctx.arc(sx2, sy2, discR * 3.2, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.fillStyle = '#FFE7AE'
+            ctx.beginPath()
+            ctx.arc(sx2, sy2, discR, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          ctx.restore()
+        }
+      }
+
+      // ── Light pools ────────────────────────────────────────────────────
+      // Every luminaire that is on for the active mode casts a soft pool of its
+      // own colour onto the floor, additively blended so overlapping lights
+      // brighten. Reuses the same per-light model the 3D point lights consume,
+      // so switching an OMEGA mode re-lights the whole plan. Drawn under the
+      // walls/furniture (which then occlude it) and under the pins/labels; at
+      // night the pools burn a little brighter so lamps punch through the dark.
+      if (floor.layers.devices) {
+        const sources = deriveLightSources({
+          devices: floor.devices,
+          lookup: (id) => DEVICE_MAP[id]?.category,
+          mode: activeMode,
+        })
+        const zoom = viewportRef.current.zoom
+        const boost = 1 + 0.7 * nightF
+        // Each pool renders into an offscreen scratch first so the walls'
+        // shadow quads can be erased out of it (destination-out) — light stops
+        // at solid walls and spills through door/window openings, which is
+        // what sells the plan as *lit* rather than decorated. The scratch is
+        // capped in resolution (soft light survives upscaling).
+        const scratch = getPoolScratch()
+        const sctx = scratch.getContext('2d')
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        for (const s of sources) {
+          if (!s.on || s.intensity <= 0) continue
+          const c = worldToScreen(s.position)
+          const radius = (135 + 175 * s.intensity) * zoom // cm → px, grows with brightness
+          const peak = Math.min(0.85, (0.10 + 0.26 * s.intensity) * boost)
+          if (radius < 3 || !sctx) continue
+          const sf = Math.min(1, 520 / radius)
+          const R = radius * sf
+          const size = Math.ceil(R * 2)
+          scratch.width = size
+          scratch.height = size
+          const g = sctx.createRadialGradient(R, R, R * 0.12, R, R, R)
+          g.addColorStop(0, hexWithAlpha(s.color, peak))
+          g.addColorStop(0.55, hexWithAlpha(s.color, peak * 0.42))
+          g.addColorStop(1, hexWithAlpha(s.color, 0))
+          sctx.fillStyle = g
+          sctx.fillRect(0, 0, size, size)
+          // Erase what the walls occlude. A hint of bleed (alpha < 1) keeps a
+          // soft bounce-light feel instead of razor CAD edges.
+          sctx.globalCompositeOperation = 'destination-out'
+          sctx.fillStyle = 'rgba(0,0,0,0.9)'
+          for (const w of floor.walls) {
+            if ((w.subtype ?? 'wall') !== 'wall') continue // doors/windows leak light
+            const a = worldToScreen(w.a)
+            const b = worldToScreen(w.b)
+            const quad = shadowQuad(c, a, b, radius, radius * 2.2)
+            if (!quad) continue
+            sctx.beginPath()
+            sctx.moveTo((quad[0].x - (c.x - radius)) * sf, (quad[0].y - (c.y - radius)) * sf)
+            for (let qi = 1; qi < 4; qi++) {
+              sctx.lineTo((quad[qi].x - (c.x - radius)) * sf, (quad[qi].y - (c.y - radius)) * sf)
+            }
+            sctx.closePath()
+            sctx.fill()
+          }
+          sctx.globalCompositeOperation = 'source-over'
+          ctx.drawImage(scratch, c.x - radius, c.y - radius, radius * 2, radius * 2)
+        }
+        ctx.restore()
       }
 
       // Walls
@@ -508,9 +785,43 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         }
       }
 
+      // Image-Blaster assets — read-only markers on the furniture layer.
+      // Wall art draws as a slim accent bar along its wall, floor objects as a
+      // footprint; placement/management happens in the 3D studio, not here.
+      if (floor.layers.furniture) {
+        for (const a of floor.blasterAssets ?? []) {
+          if (a.hidden) continue
+          const c = worldToScreen(a.position)
+          const z = viewportRef.current.zoom
+          const bw = a.width * z
+          const bh = (a.mount === 'wall' ? 10 : 26) * z
+          ctx.save()
+          ctx.translate(c.x, c.y)
+          // Plan normal is (sin θ, cos θ); the marker bar runs perpendicular.
+          ctx.rotate(-(a.rotation * Math.PI) / 180)
+          ctx.fillStyle = 'rgba(199, 162, 78, 0.26)'
+          ctx.strokeStyle = theme.select
+          ctx.lineWidth = 1.5
+          roundRect(ctx, -bw / 2, -bh / 2, bw, bh, Math.min(5, bh / 2))
+          ctx.fill()
+          ctx.stroke()
+          if (z > 0.35 && bw > 46) {
+            ctx.fillStyle = theme.fg
+            ctx.font = '500 9px Inter, sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(`✦ ${a.name}`, 0, a.mount === 'wall' ? -12 : 0)
+          }
+          ctx.restore()
+        }
+      }
+
       // Devices
       if (floor.layers.devices) {
         const activeMode = doc.activeModeKey
+        // Names are collected here and placed in a decluttered post-pass, so a
+        // dense plan doesn't drown under overlapping labels.
+        const deviceLabels: Array<{ x: number; y: number; name: string; sel: boolean; hov: boolean; supportsMode: boolean }> = []
         for (const d of floor.devices) {
           const entry = DEVICE_MAP[d.deviceId]
           const sel = selection.type === 'device' && selection.ids.includes(d.id)
@@ -545,16 +856,54 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
             theme,
           })
 
-          if (viewportRef.current.zoom > 0.35 && entry) {
-            ctx.save()
-            ctx.globalAlpha = supportsMode ? 1 : 0.4
-            ctx.fillStyle = theme.fg
-            ctx.font = '500 10px Inter, sans-serif'
-            ctx.textAlign = 'center'
-            ctx.textBaseline = 'top'
-            ctx.fillText(entry.name, p.x, p.y + r + 6)
-            ctx.restore()
+          if (entry) deviceLabels.push({ x: p.x, y: p.y + r + 6, name: entry.name, sel, hov, supportsMode })
+        }
+
+        // ── Device labels — decluttered placement ──────────────────────────
+        // Selected/hovered devices always show a crisp chip on top; ambient
+        // names fill in only where they don't collide (and only once zoomed in
+        // enough to read), so the plan stays clean instead of a wall of text.
+        {
+          const zoomNow = viewportRef.current.zoom
+          // Overview stays icon-clean (names via hover/selection chips); ambient
+          // names appear only as you zoom past this, then collision-managed.
+          const AMBIENT_ZOOM = 0.9
+          ctx.save()
+          ctx.font = '500 10px Inter, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'top'
+          const boxes: Array<[number, number, number, number]> = []
+          const hits = (x0: number, y0: number, x1: number, y1: number) =>
+            boxes.some(([bx0, by0, bx1, by1]) => x0 < bx1 && x1 > bx0 && y0 < by1 && y1 > by0)
+          // Place the most important labels first so ambient ones yield the
+          // space: selected → hovered → active-mode devices → the rest.
+          const prio = (l: typeof deviceLabels[number]) => (l.sel ? 3 : l.hov ? 2 : l.supportsMode ? 1 : 0)
+          deviceLabels.sort((a, b) => prio(b) - prio(a))
+          for (const L of deviceLabels) {
+            const focused = L.sel || L.hov
+            if (!focused && zoomNow < AMBIENT_ZOOM) continue
+            const tw = ctx.measureText(L.name).width
+            const x0 = L.x - tw / 2 - 5, x1 = L.x + tw / 2 + 5
+            const y0 = L.y - 2, y1 = L.y + 14
+            if (!focused && hits(x0, y0, x1, y1)) continue
+            boxes.push([x0, y0, x1, y1])
+            if (focused) {
+              ctx.fillStyle = 'rgba(10,10,11,0.82)'
+              roundRect(ctx, x0, y0, x1 - x0, y1 - y0, 5); ctx.fill()
+              ctx.strokeStyle = L.sel ? theme.accent : theme.selectSoft
+              ctx.lineWidth = 1
+              roundRect(ctx, x0, y0, x1 - x0, y1 - y0, 5); ctx.stroke()
+              ctx.globalAlpha = 1
+              ctx.fillStyle = theme.fg
+              ctx.fillText(L.name, L.x, L.y)
+            } else {
+              ctx.globalAlpha = L.supportsMode ? 0.9 : 0.4
+              ctx.fillStyle = theme.fg
+              ctx.fillText(L.name, L.x, L.y)
+              ctx.globalAlpha = 1
+            }
           }
+          ctx.restore()
         }
       }
 
@@ -786,7 +1135,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         if (live) {
           const a = worldToScreen(measureStart)
           const b = worldToScreen(live)
-          // Crisp gold ruler line
+          // Crisp accent ruler line
           ctx.strokeStyle = theme.select
           ctx.lineWidth = 2
           ctx.setLineDash([8, 4])
@@ -865,7 +1214,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
   // Force redraw on state changes
   useEffect(() => {
     needsRedraw.current = true
-  }, [doc, floor, size, viewport, selection, tool, wallStart, terraceStart, measureStart, measureEnd, hoverDevice, hoverFurn, isDragging, isRotating, isResizing])
+  }, [doc, floor, size, viewport, selection, tool, wallStart, terraceStart, measureStart, measureEnd, hoverDevice, hoverFurn, isDragging, isRotating, isResizing, timeOfDay])
 
   // ───── Pointer events ─────
   function getLocalXY(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -1014,11 +1363,13 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         ? wallSnapped
         : snapWorld(world)
       addDevice(hoverDevice, finalPos)
+      cinematicReact(e.clientX, e.clientY, 'place')
       return
     }
     if (tool === 'furniture' && hoverFurn) {
       const entry = FURN_MAP[hoverFurn]
       addFurniture(hoverFurn, snapWorld(world), entry?.size)
+      cinematicReact(e.clientX, e.clientY, 'place')
       return
     }
     if (tool === 'label') {
@@ -1144,6 +1495,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         const g = settings.snapStep
         dx = Math.round(dx / g) * g
         dy = Math.round(dy / g) * g
+        if (dx !== 0 || dy !== 0) playSound('thud') // the piece locks into the grid
       }
       moveSelection(dx, dy)
     }

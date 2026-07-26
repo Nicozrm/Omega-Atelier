@@ -17,8 +17,9 @@
 
 import { useEffect, useMemo, useRef, useState, Suspense, Component } from 'react'
 import type { ReactNode, TouchEvent as ReactTouchEvent } from 'react'
-import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
-import type { Wall, WallSubtype, Room, PlacedDevice, PlacedFurniture, Point, ModeKey } from '@/types'
+import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation, DepthOfField } from '@react-three/postprocessing'
+import type { DepthOfFieldEffect } from 'postprocessing'
+import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point, ModeKey } from '@/types'
 
 // ── v51 Rendering-Layer: Post-Processing (isoliert, tier-gegated, fallback-sicher)
 const CA_OFFSET = new THREE.Vector2(0.0005, 0.0005)
@@ -45,11 +46,21 @@ import { LiveTwinReflection } from './LiveTwinReflection'
 import { VirtualResidents, type ResidentStatus } from './VirtualResidents'
 import { RESIDENT_DOORS } from './residentsBus'
 import { GltfModel } from './GltfModel'
+import { BlasterAsset3D } from './BlasterAsset3D'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, type TextureBundle } from '@/lib/textures'
-import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users } from 'lucide-react'
+import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { computeFloorStack } from '@/lib/floorStack'
+import { useTier } from '@/hooks/useTier'
+import {
+  type HouseStyle, facadeHints, roofHints,
+  FACADE_KINDS, STONE_COLORS, ROOF_KINDS, ROOF_COLORS,
+  DEFAULT_HOUSE_STYLE, loadHouseStyle, saveHouseStyle,
+} from '@/lib/houseStyle'
+import { cinematicReact } from '@/lib/cinematic'
 import { useUIStore } from '@/store/useUIStore'
 import * as THREE from 'three'
 
@@ -422,7 +433,9 @@ function buildMaterials(): MatCache {
       map: makeTex(T.rugWoolC, [2, 2]),
       normalMap: makeTex(T.rugWoolN, [2, 2], false),
       normalScale: new THREE.Vector2(1.2, 1.2),
-      color: '#cfc8ba',
+      // Grounded greige — the reference rugs sit a step darker than the sofa
+      // so the seating island reads anchored, not floating on cream.
+      color: '#bdb3a1',
       roughness: 0.97,
       metalness: 0.0,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
@@ -677,15 +690,51 @@ export interface MaterialSlotEntry {
   swatch: string  // CSS color for the picker swatch
   material: () => THREE.Material
 }
+/**
+ * Tinted, cached clone of a base material: colour variants share the base's
+ * texture set (weave/grain stays, only the tint changes) and are built once.
+ */
+const SLOT_MAT_CACHE = new Map<string, THREE.Material>()
+function tintedSlot(
+  key: string,
+  base: () => THREE.Material,
+  color: string,
+  tune?: (m: THREE.MeshStandardMaterial) => void,
+): () => THREE.Material {
+  return () => {
+    let m = SLOT_MAT_CACHE.get(key)
+    if (!m) {
+      m = base().clone()
+      const p = m as THREE.MeshStandardMaterial
+      p.color = new THREE.Color(color)
+      tune?.(p)
+      SLOT_MAT_CACHE.set(key, m)
+    }
+    return m
+  }
+}
+
 export const UPHOLSTERY_SLOTS: MaterialSlotEntry[] = [
   { key: 'fabricBeige',  label: 'Stoff Beige',  swatch: '#cdb992', material: () => MAT.fabric() },
   { key: 'fabricGray',   label: 'Stoff Grau',   swatch: '#9b9b96', material: () => MAT.fabricGray() },
   { key: 'fabricBlue',   label: 'Stoff Blau',   swatch: '#5a7da0', material: () => MAT.fabricBlue() },
+  { key: 'fabricGreen',  label: 'Stoff Salbei', swatch: '#7f9078', material: tintedSlot('fabricGreen', () => MAT.fabricGray(), '#7f9078') },
+  { key: 'fabricTerra',  label: 'Stoff Terrakotta', swatch: '#c1826a', material: tintedSlot('fabricTerra', () => MAT.fabricGray(), '#c1826a') },
+  { key: 'fabricAnthracite', label: 'Stoff Anthrazit', swatch: '#54565c', material: tintedSlot('fabricAnthracite', () => MAT.fabricGray(), '#54565c') },
   { key: 'leatherBlack', label: 'Leder Schwarz', swatch: '#2a2724', material: () => MAT.leatherBlack() },
+  {
+    key: 'leatherCognac', label: 'Leder Cognac', swatch: '#a3653a',
+    // Keep the leather grain (normal map), drop the near-black colour map —
+    // multiplying a tint onto black could never lighten it.
+    material: tintedSlot('leatherCognac', () => MAT.leatherBlack(), '#8f5a34', (m) => { m.map = null; m.roughness = 0.5 }),
+  },
 ]
 export const WOOD_SLOTS: MaterialSlotEntry[] = [
   { key: 'oak',    label: 'Eiche',   swatch: '#bb8a59', material: () => MAT.woodOak() },
   { key: 'walnut', label: 'Walnuss', swatch: '#7a4d2d', material: () => MAT.woodWalnut() },
+  { key: 'ash',    label: 'Esche Hell', swatch: '#dcc9a8', material: tintedSlot('ash', () => MAT.woodOak(), '#e0d2b4') },
+  { key: 'darkOak', label: 'Dunkel gebeizt', swatch: '#463830', material: () => MAT.woodDark() },
+  { key: 'whiteWash', label: 'Weiß lasiert', swatch: '#eceae2', material: tintedSlot('whiteWash', () => MAT.woodOak(), '#efece4', (m) => { m.roughness = 0.62 }) },
 ]
 
 /** Pick the upholstery material for a furniture item, defaulting to beige fabric. */
@@ -708,7 +757,7 @@ function woodFor(item: PlacedFurniture, defaultKey: 'oak' | 'walnut' = 'walnut')
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Walls — extruded boxes with a subtle gold cap on top
+// Walls — extruded boxes with a subtle accent cap on top
 // ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -1630,7 +1679,7 @@ function DeviceMesh({ deviceId, category, on, hint }: { deviceId?: string; categ
           {/* Emissive diffuser facing the wall (warm-white default) */}
           <mesh position={[0, 0, -0.004]}>
             <boxGeometry args={[0.88, 0.009, 0.0015]} />
-            <meshStandardMaterial color="#fff2da" emissive="#ffd9a0" emissiveIntensity={glowI} toneMapped={false} />
+            <meshStandardMaterial color="#fff2da" emissive="#ffd9a0" emissiveIntensity={glowI} />
           </mesh>
           {/* Controller nub at one end */}
           <mesh position={[-0.47, 0, 0]} castShadow material={MAT.matteWhite()}>
@@ -1687,7 +1736,7 @@ function DeviceMesh({ deviceId, category, on, hint }: { deviceId?: string; categ
           {/* Emissive diffuser on the underside */}
           <mesh position={[0, -0.015, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <circleGeometry args={[0.10, 40]} />
-            <meshStandardMaterial color="#fff4e2" emissive="#ffe9c8" emissiveIntensity={glow} toneMapped={false} side={THREE.DoubleSide} />
+            <meshStandardMaterial color="#fff4e2" emissive="#ffe9c8" emissiveIntensity={glow} side={THREE.DoubleSide} />
           </mesh>
         </group>
       )
@@ -1989,7 +2038,7 @@ function Device3D({ d }: { d: PlacedDevice }) {
         <group scale={DEVICE_VIEW_SCALE}>
           <GltfModel id={d.deviceId} fallback={<DeviceMesh deviceId={d.deviceId} category={cat} on={on} hint={d.note} />} />
         </group>
-        {/* Selection ring (thin gold disc on the floor) */}
+        {/* Selection ring (thin accent disc on the floor) */}
         {(isSelected || hovered) && (
           <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[0.095, 0.11, 48]} />
@@ -2461,7 +2510,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         {/* LED backlight halo — emissive plate behind the TV panel */}
         <mesh position={[0, 1.45, -hM / 2 + 0.016]}>
           <planeGeometry args={[wM * 0.80, 0.88]} />
-          <meshStandardMaterial color="#fff0da" emissive="#ffc890" emissiveIntensity={1.6} toneMapped={false} />
+          <meshStandardMaterial color="#f2debe" emissive="#ffb877" emissiveIntensity={1.5} />
         </mesh>
         {/* Open shelf compartments flanking the TV, with books + a vase */}
         {([[-1, 1.12], [-1, 1.62], [1, 1.38]] as const).map(([side, sy], i) => {
@@ -2507,7 +2556,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         {/* Cove LED line above the TV wall — warm horizontal light accent */}
         <mesh position={[0, 2.28, -hM / 2 + 0.02]}>
           <boxGeometry args={[wM * 0.9, 0.018, 0.02]} />
-          <meshStandardMaterial color="#fff0da" emissive="#ffc890" emissiveIntensity={1.7} toneMapped={false} />
+          <meshStandardMaterial color="#f2debe" emissive="#ffb877" emissiveIntensity={1.5} />
         </mesh>
         {readTier() !== 'off' && (
           <pointLight position={[0, 1.4, -hM / 2 + 0.35]} color="#ffd9ae" intensity={1.8} distance={2.4} decay={2.4} castShadow={false} />
@@ -2614,7 +2663,9 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
             {/* Warm LED strip tucked under the plank, facing forward */}
             <mesh position={[0, -shelfT / 2 - 0.006, depth / 2 - 0.02]}>
               <boxGeometry args={[wM - 0.08, 0.012, 0.02]} />
-              <meshStandardMaterial color="#fff1d8" emissive="#ffbf82" emissiveIntensity={2.6} toneMapped={false} />
+              {/* Warm shelf LED (the reference's floating-shelf glow) — tone-
+                  mapped so it reads amber, not a clipped white line. */}
+              <meshStandardMaterial color="#eccfa2" emissive="#ffab5c" emissiveIntensity={2.0} />
             </mesh>
             {/* Props: a leaning book stack on the left, a vase on the right,
                 alternated per level so the shelves don't look cloned. */}
@@ -2886,7 +2937,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         </mesh>
         <mesh position={[-wM / 2 - 0.03, 1.30, 0.06]}>
           <sphereGeometry args={[0.012, 8, 8]} />
-          <meshStandardMaterial color="#ffcf7a" emissive="#ff9a3c" emissiveIntensity={2.4} toneMapped={false} />
+          <meshStandardMaterial color="#ffcf7a" emissive="#ff9a3c" emissiveIntensity={2.4} />
         </mesh>
         <mesh position={[-wM / 2 - 0.03, 1.27, -0.08]} castShadow material={MAT.matteBlack()}>
           <cylinderGeometry args={[0.03, 0.026, 0.06, 12]} />
@@ -3179,7 +3230,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         twigs.push(
           <mesh key={`d${i}_${j}`} position={[tx * f, vaseH + th * f, tz * f]}>
             <sphereGeometry args={[0.012, 8, 8]} />
-            <meshStandardMaterial color="#fff1c8" emissive="#ffd98a" emissiveIntensity={2.6} toneMapped={false} />
+            <meshStandardMaterial color="#fff1c8" emissive="#ffd98a" emissiveIntensity={2.6} />
           </mesh>,
         )
       }
@@ -3212,7 +3263,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         </mesh>
         <mesh position={[0, shadeY, 0]}>
           <sphereGeometry args={[0.05, 16, 16]} />
-          <meshStandardMaterial color="#fff2d6" emissive="#ffcf8a" emissiveIntensity={2.4} toneMapped={false} />
+          <meshStandardMaterial color="#fff2d6" emissive="#ffcf8a" emissiveIntensity={2.4} />
         </mesh>
       </group>
     )
@@ -3355,7 +3406,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         {[top, ...shelfYs].map((sy, i) => (
           <mesh key={`gl${i}`} position={[0, sy - 0.022, hM / 2 - 0.02]}>
             <boxGeometry args={[wM - 0.08, 0.01, 0.014]} />
-            <meshStandardMaterial color="#fff3d8" emissive="#ffcf82" emissiveIntensity={2.3} toneMapped={false} />
+            <meshStandardMaterial color="#fff3d8" emissive="#ffcf82" emissiveIntensity={2.3} />
           </mesh>
         ))}
         {/* On the top: red-marble table lamp (left), Jordan box (right), succulent */}
@@ -3464,7 +3515,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         </mesh>
         <mesh position={[0, 0.235, 0]}>
           <sphereGeometry args={[0.09, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
-          <meshStandardMaterial color="#fff4e0" emissive="#ffdca6" emissiveIntensity={1.9} toneMapped={false} side={THREE.DoubleSide} />
+          <meshStandardMaterial color="#fff4e0" emissive="#ffdca6" emissiveIntensity={1.9} side={THREE.DoubleSide} />
         </mesh>
       </group>
     )
@@ -3549,7 +3600,7 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
     }
     for (let i = 0; i < 14; i++) {
       const x = (rnd() - 0.5) * fw * 0.85, y = (rnd() - 0.5) * fh * 0.85
-      parts.push(<mesh key={`md${i}`} position={[x, y, 0.065]}><sphereGeometry args={[0.011, 8, 8]} /><meshStandardMaterial color="#fff1c8" emissive="#ffd98a" emissiveIntensity={2.6} toneMapped={false} /></mesh>)
+      parts.push(<mesh key={`md${i}`} position={[x, y, 0.065]}><sphereGeometry args={[0.011, 8, 8]} /><meshStandardMaterial color="#fff1c8" emissive="#ffd98a" emissiveIntensity={2.6} /></mesh>)
     }
     for (let i = 0; i < 5; i++) {
       parts.push(<mesh key={`mv${i}`} position={[-fw * 0.16 + i * 0.03, -fh / 2 - 0.06 - rnd() * 0.1, 0.04]}><sphereGeometry args={[0.03, 8, 8]} /><meshStandardMaterial color="#4f7a41" roughness={0.9} /></mesh>)
@@ -3559,6 +3610,132 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         <mesh castShadow material={MAT.softBlack()}><boxGeometry args={[fw + 0.04, fh + 0.04, 0.04]} /></mesh>
         <mesh position={[0, 0, 0.012]}><planeGeometry args={[fw, fh]} /><meshStandardMaterial color="#243318" roughness={1} /></mesh>
         {parts}
+      </group>
+    )
+  }
+
+  // ── Outdoor: SWIMMING POOL — travertine coping frame, reflective water that
+  // mirrors the sky (IBL), a dark aqua liner, a waterline LED glow and entry
+  // steps. One renderer serves the garden pool, the wellness indoor pool and the
+  // rooftop plunge pool — the "Pools" the Omega residence is built around.
+  if (/^pool/i.test(id)) {
+    const cop = 0.16                         // coping width (m)
+    const rim = 0.1                          // coping height above grade
+    const depth = 0.6
+    const iw = Math.max(0.4, wM - cop * 2)
+    const ih = Math.max(0.4, hM - cop * 2)
+    const waterY = rim - 0.05
+    return (
+      <group>
+        {/* Coping — light travertine frame around the basin */}
+        {([[0, -hM / 2 + cop / 2, wM, cop], [0, hM / 2 - cop / 2, wM, cop], [-wM / 2 + cop / 2, 0, cop, hM - cop * 2], [wM / 2 - cop / 2, 0, cop, hM - cop * 2]] as const).map(([x, z, bw, bd], i) => (
+          <mesh key={`cp${i}`} position={[x, rim / 2, z]} castShadow receiveShadow>
+            <boxGeometry args={[bw, rim, bd]} />
+            <meshStandardMaterial color="#d7cdb8" roughness={0.85} metalness={0.02} />
+          </mesh>
+        ))}
+        {/* Basin liner — inward-facing dark aqua walls + floor */}
+        <mesh position={[0, -depth / 2 + waterY, 0]}>
+          <boxGeometry args={[iw, depth, ih]} />
+          <meshStandardMaterial color="#0f5468" roughness={0.32} metalness={0.05} side={THREE.BackSide} />
+        </mesh>
+        {/* Water surface — low roughness so it reflects the sky */}
+        <mesh position={[0, waterY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[iw - 0.02, ih - 0.02]} />
+          <meshPhysicalMaterial color="#2b93bf" roughness={0.07} metalness={0} transparent opacity={0.82} transmission={0.35} ior={1.33} emissive="#0e4f6b" emissiveIntensity={0.16} />
+        </mesh>
+        {/* Waterline LED — a faint cool glow just under the surface */}
+        <mesh position={[0, waterY - 0.05, 0]}>
+          <boxGeometry args={[iw - 0.08, 0.02, ih - 0.08]} />
+          <meshStandardMaterial color="#bfeaff" emissive="#79cff5" emissiveIntensity={0.9} transparent opacity={0.4} />
+        </mesh>
+        {/* Entry steps in the near corner */}
+        {[0, 1, 2].map((s) => (
+          <mesh key={`st${s}`} position={[wM / 2 - cop - 0.2 - s * 0.16, waterY - 0.05 - s * 0.12, -hM / 2 + cop + 0.32]} castShadow>
+            <boxGeometry args={[0.34, 0.06, 0.52]} />
+            <meshStandardMaterial color="#cfe6ef" roughness={0.4} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
+
+  // ── Outdoor: SUN LOUNGER — teak frame on legs, thick cream cushion, a raised
+  // backrest and a rust accent pillow (the poolside piece).
+  if (/^sunbed|^lounger|^deck-chair/i.test(id)) {
+    return (
+      <group>
+        <RoundedBox position={[0, 0.18, 0]} args={[wM, 0.06, hM]} radius={0.02} smoothness={2} castShadow material={MAT.woodOak()} />
+        {([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).map(([sx, sz], i) => (
+          <mesh key={`lg${i}`} position={[sx * (wM / 2 - 0.09), 0.09, sz * (hM / 2 - 0.09)]} castShadow material={MAT.woodDark()}>
+            <boxGeometry args={[0.05, 0.18, 0.05]} />
+          </mesh>
+        ))}
+        <RoundedBox position={[0, 0.26, hM * 0.08]} args={[wM - 0.14, 0.1, hM * 0.64]} radius={0.04} smoothness={3} castShadow>
+          <meshStandardMaterial color="#ece6d9" roughness={0.96} />
+        </RoundedBox>
+        <RoundedBox position={[0, 0.44, -hM / 2 + hM * 0.15]} rotation={[-0.95, 0, 0]} args={[wM - 0.14, 0.1, hM * 0.34]} radius={0.04} smoothness={3} castShadow>
+          <meshStandardMaterial color="#ece6d9" roughness={0.96} />
+        </RoundedBox>
+        <RoundedBox position={[0, 0.52, -hM / 2 + hM * 0.1]} rotation={[-0.5, 0, 0]} args={[0.42, 0.3, 0.1]} radius={0.05} smoothness={3} castShadow>
+          <meshStandardMaterial color="#8a5a3c" roughness={0.9} />
+        </RoundedBox>
+      </group>
+    )
+  }
+
+  // ── Outdoor: KETTLE GRILL — anthracite cart, domed lid with a chrome handle,
+  // a stainless side shelf, control knobs and wheels.
+  if (/^grill|^bbq/i.test(id)) {
+    return (
+      <group>
+        <RoundedBox position={[0, 0.55, 0]} args={[wM * 0.6, 0.5, hM * 0.78]} radius={0.05} smoothness={3} castShadow material={MAT.softBlack()} />
+        <mesh position={[0, 0.86, 0]} castShadow>
+          <sphereGeometry args={[hM * 0.42, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#26272b" roughness={0.4} metalness={0.5} />
+        </mesh>
+        <mesh position={[0, 0.87 + hM * 0.42, 0]} castShadow material={MAT.chrome()}>
+          <boxGeometry args={[0.16, 0.04, 0.04]} />
+        </mesh>
+        <mesh position={[wM * 0.4, 0.6, 0]} castShadow material={MAT.steel()}>
+          <boxGeometry args={[wM * 0.2, 0.03, hM * 0.6]} />
+        </mesh>
+        {([-1, 1] as const).map((sx) => (
+          <group key={`leg${sx}`}>
+            <mesh position={[sx * wM * 0.22, 0.28, hM * 0.28]} castShadow material={MAT.softBlack()}>
+              <boxGeometry args={[0.05, 0.56, 0.05]} />
+            </mesh>
+            <mesh position={[sx * wM * 0.22, 0.11, -hM * 0.28]} rotation={[0, 0, Math.PI / 2]} castShadow>
+              <cylinderGeometry args={[0.1, 0.1, 0.05, 16]} />
+              <meshStandardMaterial color="#111214" roughness={0.8} />
+            </mesh>
+          </group>
+        ))}
+        {[-0.12, 0.12].map((x, i) => (
+          <mesh key={`kn${i}`} position={[x, 0.78, hM * 0.38]} rotation={[Math.PI / 2, 0, 0]} castShadow material={MAT.chrome()}>
+            <cylinderGeometry args={[0.03, 0.03, 0.03, 12]} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
+
+  // ── Outdoor: DINING/LOUNGE TABLE — teak slatted top on solid legs.
+  if (/^outdoor-table/i.test(id)) {
+    return (
+      <group>
+        <RoundedBox position={[0, 0.42, 0]} args={[wM, 0.06, hM]} radius={0.02} smoothness={2} castShadow material={MAT.woodOak()} />
+        {Array.from({ length: 6 }).map((_, i) => (
+          <mesh key={`sl${i}`} position={[0, 0.452, -hM / 2 + (i + 0.5) * (hM / 6)]}>
+            <boxGeometry args={[wM - 0.06, 0.004, 0.012]} />
+            <meshStandardMaterial color="#6b4f33" roughness={0.8} />
+          </mesh>
+        ))}
+        {([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).map(([sx, sz], i) => (
+          <mesh key={`lg${i}`} position={[sx * (wM / 2 - 0.1), 0.2, sz * (hM / 2 - 0.1)]} castShadow material={MAT.woodDark()}>
+            <boxGeometry args={[0.06, 0.4, 0.06]} />
+          </mesh>
+        ))}
       </group>
     )
   }
@@ -3827,6 +4004,12 @@ function WalkController({ floor }: { floor: { rooms: Room[]; furniture: PlacedFu
     camera.position.set(M(spawn.pos[0]), 1.65, M(spawn.pos[1]))
     camera.lookAt(M(spawn.look[0]), 1.1, M(spawn.look[1]))
     euler.current.setFromQuaternion(camera.quaternion)
+    // Wide interior lens — the dollhouse's 42° reads like a telephoto in a
+    // closet at eye level; interior tours shoot wide (~66°). Restored on exit.
+    const persp = camera as THREE.PerspectiveCamera
+    const prevFov = persp.fov
+    persp.fov = 66
+    persp.updateProjectionMatrix()
 
     // ── Touch look: one finger on the right side of the screen drags to look ──
     const el = gl.domElement
@@ -3861,6 +4044,8 @@ function WalkController({ floor }: { floor: { rooms: Room[]; furniture: PlacedFu
       el.addEventListener('touchcancel', onEnd)
     }
     return () => {
+      persp.fov = prevFov
+      persp.updateProjectionMatrix()
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup',   up)
       el.removeEventListener('touchstart', onStart)
@@ -4259,7 +4444,9 @@ function _mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  t.anisotropy = 8
+  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
+  // floors, walls and roofs crisp at grazing angles instead of blurring out.
+  t.anisotropy = 16
   return t
 }
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).
@@ -4268,7 +4455,7 @@ function _texRnd(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6
 let _brickTex: { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } | null = null
 function brickTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
   if (_brickTex) return _brickTex
-  const W = 256, H = 256, rows = 13, bh = H / rows, mortar = 3
+  const W = 512, H = 512, rows = 13, bh = H / rows, mortar = 3
   const rnd = _texRnd(7)
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H
   const cx = cv.getContext('2d')!
@@ -4299,10 +4486,47 @@ function brickTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture 
   return _brickTex
 }
 
+// Vertical timber cladding (Holzverschalung) — warm planks with grain streaks
+// and recessed grooves between boards, for the 'board' facade construction.
+let _boardTex: { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } | null = null
+function boardTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
+  if (_boardTex) return _boardTex
+  const W = 512, H = 512, planks = 6, pw = W / planks
+  const rnd = _texRnd(23)
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cx = cv.getContext('2d')!
+  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bx = bv.getContext('2d')!
+  cx.fillStyle = '#6b4a2c'; cx.fillRect(0, 0, W, H)
+  bx.fillStyle = '#8a8a8a'; bx.fillRect(0, 0, W, H)
+  for (let p = 0; p < planks; p++) {
+    const x = p * pw
+    const base = 0.82 + rnd() * 0.3
+    const rr = Math.floor(120 * base), gg = Math.floor(82 * base), bb = Math.floor(48 * base)
+    cx.fillStyle = `rgb(${rr},${gg},${bb})`
+    cx.fillRect(x + 1, 0, pw - 2, H)
+    // grain streaks
+    for (let g = 0; g < 22; g++) {
+      cx.strokeStyle = `rgba(${rr - 30},${gg - 22},${bb - 16},${0.18 + rnd() * 0.22})`
+      cx.lineWidth = 0.6 + rnd()
+      cx.beginPath()
+      const gx = x + 2 + rnd() * (pw - 4)
+      cx.moveTo(gx, 0); cx.bezierCurveTo(gx + (rnd() - 0.5) * 6, H / 3, gx + (rnd() - 0.5) * 6, (2 * H) / 3, gx + (rnd() - 0.5) * 4, H)
+      cx.stroke()
+    }
+    // plank body slightly raised, grooves recessed (bump)
+    bx.fillStyle = `rgb(${185 + Math.floor(base * 30)},${185 + Math.floor(base * 30)},${185 + Math.floor(base * 30)})`
+    bx.fillRect(x + 2, 0, pw - 4, H)
+    bx.fillStyle = '#2a2a2a'; bx.fillRect(x, 0, 2, H)
+  }
+  _boardTex = { map: _mkTex(cv, true), bump: _mkTex(bv, false) }
+  return _boardTex
+}
+
 let _roofTex: { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } | null = null
 function roofTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTexture } {
   if (_roofTex) return _roofTex
-  const W = 256, H = 256, rows = 16, rh = H / rows
+  const W = 512, H = 512, rows = 16, rh = H / rows
   const rnd = _texRnd(23)
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H
   const cx = cv.getContext('2d')!
@@ -4468,16 +4692,22 @@ function nightCityTexture(): THREE.CanvasTexture {
  * Only shown in the evening/night phases (where a black void reads worst).
  * Unlit (MeshBasicMaterial) so the city glows on its own like distant lights.
  */
-function CityBackdrop({ span, cx, cz, phase }: { span: number; cx: number; cz: number; phase: DayPhase }) {
+function CityBackdrop({ span, cx, cz, daylightScale }: { span: number; cx: number; cz: number; daylightScale: number }) {
   const tex = useMemo(() => nightCityTexture(), [])
-  const visible = phase === 'night' || phase === 'dusk'
+  const matRef = useRef<THREE.MeshBasicMaterial>(null)
   const radius = Math.max(span * 2.6, 26)
   const cylH = Math.max(span * 2.2, 22)
-  if (!visible) return null
+  // Distant city glow fades IN as the surroundings darken, instead of snapping
+  // on at the dusk border. Full by deep night (scale ≈ 0.07), gone before
+  // golden hour (scale ≥ 0.5) — the same continuous exterior factor the rest of
+  // the world dims on, so the whole night transition reads as one smooth dissolve.
+  const opacity = Math.max(0, Math.min(1, (0.5 - daylightScale) / 0.44))
+  useEffect(() => { if (matRef.current) matRef.current.opacity = opacity }, [opacity])
+  if (opacity <= 0.001) return null
   return (
     <mesh position={[cx, 2, cz]} rotation={[0, 0, 0]}>
       <cylinderGeometry args={[radius, radius, cylH, 48, 1, true]} />
-      <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} toneMapped={false} depthWrite={false} />
+      <meshBasicMaterial ref={matRef} map={tex} side={THREE.BackSide} fog={false} toneMapped={false} depthWrite={false} transparent opacity={opacity} />
     </mesh>
   )
 }
@@ -4610,45 +4840,437 @@ function presetPose(preset: CamPreset, frame: { cx: number; cz: number; span: nu
   const target = new THREE.Vector3(cx, 0.2, cz)
   switch (preset) {
     case 'top':    return { pos: new THREE.Vector3(cx + 0.01, D * 1.4, cz), target }
-    case 'front':  return { pos: new THREE.Vector3(cx, D * 0.46, cz + D * 1.08), target }
+    // Front stays INSIDE the street gap — D*1.08 parked the camera in the
+    // neighbour row across the street (a black frame of backfaces).
+    case 'front':  return { pos: new THREE.Vector3(cx, D * 0.85, cz + D * 0.7), target }
     case 'corner': return { pos: new THREE.Vector3(cx - horiz, D * 0.72, cz + horiz), target }
     case 'persp':
     default:       return { pos: new THREE.Vector3(cx + horiz, D * 0.78, cz + horiz), target }
   }
 }
 
-/** Smoothly flies the orbit camera to a preset pose (disables controls while
- *  animating, then hands control back). Retriggers on `req.nonce`. */
-function CameraRig({ req }: { req: { preset: CamPreset; nonce: number } | null }) {
+function easeInOutQuint(t: number): number {
+  return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2
+}
+function easeInOutSine(t: number): number {
+  return -(Math.cos(Math.PI * t) - 1) / 2
+}
+
+// ── Cinematic flight system ───────────────────────────────────────────
+// Every camera move is a FLIGHT along an eased spline — never a jump. Three
+// kinds: a preset pose, a glide INTO a selected room (AAA dolly-in), and the
+// Kino-Tour: a product-video style steadicam pass through every room that can
+// also be recorded straight to a .webm.
+export type FlightReq =
+  | { kind: 'preset'; preset: CamPreset; nonce: number }
+  | { kind: 'room'; roomId: string; nonce: number }
+  | { kind: 'tour'; nonce: number }
+
+interface TourHud { title: HTMLElement | null; bar: HTMLElement | null }
+
+function roomCentroid(r: Room): { x: number; z: number } {
+  let x = 0, z = 0
+  for (const p of r.polygon) { x += p.x; z += p.y }
+  return { x: M(x / r.polygon.length), z: M(z / r.polygon.length) }
+}
+
+/** Interior eye-level pose for a room: the camera lands INSIDE the room —
+ *  pulled back toward where it came from — looking at the room's heart. */
+function roomPose(room: Room, camPos: THREE.Vector3): { pos: THREE.Vector3; target: THREE.Vector3 } {
+  const c = roomCentroid(room)
+  const xs = room.polygon.map((p) => p.x), zs = room.polygon.map((p) => p.y)
+  const spanR = Math.max(M(Math.max(...xs) - Math.min(...xs)), M(Math.max(...zs) - Math.min(...zs)))
+  const dir = new THREE.Vector3(camPos.x - c.x, 0, camPos.z - c.z)
+  if (dir.lengthSq() < 1e-4) dir.set(1, 0, 1)
+  dir.normalize()
+  const back = Math.min(Math.max(spanR * 0.29, 0.7), 2.1)
+  return {
+    pos: new THREE.Vector3(c.x + dir.x * back, 1.45, c.z + dir.z * back),
+    target: new THREE.Vector3(c.x, 0.95, c.z),
+  }
+}
+
+/** Record the WebGL canvas to a downloadable .webm (product video on demand). */
+function startCanvasRecording(canvas: HTMLCanvasElement): { stop: () => void } | null {
+  if (typeof MediaRecorder === 'undefined' || !('captureStream' in canvas)) return null
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m))
+  if (!mime) return null
+  const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 14_000_000 })
+  const chunks: BlobPart[] = []
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+  rec.onstop = () => {
+    const url = URL.createObjectURL(new Blob(chunks, { type: mime }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `omega-tour-${Date.now()}.webm`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+  }
+  rec.start(250)
+  return { stop: () => { if (rec.state !== 'inactive') rec.stop() } }
+}
+const CAN_RECORD = typeof window !== 'undefined'
+  && typeof MediaRecorder !== 'undefined'
+  && typeof HTMLCanvasElement !== 'undefined'
+  && 'captureStream' in HTMLCanvasElement.prototype
+
+interface ActiveFlight {
+  curve: THREE.CatmullRomCurve3
+  tgtFrom: THREE.Vector3
+  tgtTo?: THREE.Vector3
+  lookAhead?: number
+  duration: number
+  t: number
+  tour: boolean
+  restoreFov?: number
+}
+
+/**
+ * Shared camera-focus channel: the CinematicDirector writes where the story
+ * looks and how hard to pull focus; `CinematicFocus` (the DOF driver) reads
+ * it each frame. A plain mutable object — no React state at 60 fps.
+ */
+const cameraFocus = {
+  point: new THREE.Vector3(0, 1, 0),
+  /** 0 = ambient depth … 1 = full cinematic focus pull (mid-glide). */
+  pull: 0,
+}
+
+/**
+ * Contextual depth of field. At rest the focal plane sits exactly on the
+ * orbit target (whatever the user frames is sharp); during a glide the
+ * director pulls focus onto the destination and the bokeh swells, then the
+ * landing relaxes back — the classic focus pull, never a static blur.
+ */
+// Foto-Look — swap the renderer tone-map at runtime. AgX (photographic) has a
+// gentler highlight roll-off and truer colour than ACES; a one-time material
+// recompile applies it. Off by default so the tuned "Brillant" (ACES) look is
+// the baseline; the toggle is the opt-in maximum-photorealism path.
+// Freezes a fully static subtree's world-matrix updates after first commit —
+// the neighbourhood, house shell, terrace court and ghost floors never move,
+// so skipping their per-frame matrix work saves real CPU on large scenes.
+// Transforms only; materials (e.g. lit windows on phase change) still update.
+function Static({ children }: { children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null)
+  useEffect(() => {
+    const g = ref.current
+    if (!g) return
+    g.updateMatrixWorld(true)
+    g.traverse((o) => { o.matrixWorldAutoUpdate = false })
+    return () => { g.traverse((o) => { o.matrixWorldAutoUpdate = true }) }
+  }, [children])
+  return <group ref={ref}>{children}</group>
+}
+
+function ToneMapController({ photo }: { photo: boolean }) {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    gl.toneMapping = photo ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping
+    gl.toneMappingExposure = photo ? 1.0 : 0.95
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material
+      if (Array.isArray(m)) m.forEach((mm) => { mm.needsUpdate = true })
+      else if (m) (m as THREE.Material).needsUpdate = true
+    })
+  }, [gl, scene, photo])
+  return null
+}
+
+// One row of the Bau-Studio popover — chips (labelled) or colour dots.
+function BauRow({ label, options, active, onPick, shape }: {
+  label: string
+  options: { id: string; label: string; swatch: string }[]
+  active: string
+  onPick: (id: string) => void
+  shape: 'chip' | 'dot'
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] text-[color:var(--muted)]">{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {options.map((o) => (shape === 'dot' ? (
+          <button
+            key={o.id}
+            onClick={() => onPick(o.id)}
+            title={o.label}
+            className={`h-5 w-5 rounded-full border transition-transform ${active === o.id ? 'scale-110 border-[color:var(--accent)] ring-1 ring-[color:var(--accent)]' : 'border-[color:var(--border-strong)] hover:scale-105'}`}
+            style={{ background: o.swatch }}
+          />
+        ) : (
+          <button
+            key={o.id}
+            onClick={() => onPick(o.id)}
+            className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] transition-colors ${active === o.id ? 'border-[color:var(--accent)] bg-[color:var(--accent)] text-white' : 'border-[color:var(--border)] text-[color:var(--muted)] hover:text-[color:var(--fg)]'}`}
+          >
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: o.swatch }} />{o.label}
+          </button>
+        )))}
+      </div>
+    </div>
+  )
+}
+
+function CinematicFocus({ walkMode }: { walkMode: boolean }) {
+  const fx = useRef<DepthOfFieldEffect>(null)
+  const controls = useThree((s) => s.controls) as { target?: THREE.Vector3 } | null
+  useFrame((_, dt) => {
+    const eff = fx.current
+    if (!eff || !eff.target) return
+    const anchor = cameraFocus.pull > 0.02 || !controls?.target ? cameraFocus.point : controls.target
+    eff.target.x = THREE.MathUtils.damp(eff.target.x, anchor.x, 7, dt)
+    eff.target.y = THREE.MathUtils.damp(eff.target.y, anchor.y, 7, dt)
+    eff.target.z = THREE.MathUtils.damp(eff.target.z, anchor.z, 7, dt)
+    // Eye-level walking wants uniform sharpness — the bokeh breathes to zero.
+    const scale = walkMode ? 0 : 1.2 + cameraFocus.pull * 2.2
+    eff.bokehScale = THREE.MathUtils.damp(eff.bokehScale, scale, 5, dt)
+  })
+  return <DepthOfField ref={fx} target={[0, 1, 0]} focalLength={0.08} bokehScale={1.2} height={480} />
+}
+
+/** Flies the orbit camera like a AAA game: eased arcs to presets/rooms and the
+ *  full Kino-Tour. Controls are paused during a flight and handed back after;
+ *  any tap/drag or Esc cancels and returns control instantly. */
+function CinematicDirector({ req, hud, onTourEnd }: {
+  req: FlightReq | null
+  hud: React.MutableRefObject<TourHud>
+  onTourEnd: () => void
+}) {
   const camera = useThree((s) => s.camera)
+  const gl = useThree((s) => s.gl)
   const controls = useThree((s) => s.controls) as { target: THREE.Vector3; enabled: boolean; update: () => void } | null
+  const controlsRef = useRef(controls); controlsRef.current = controls
+  const onTourEndRef = useRef(onTourEnd); onTourEndRef.current = onTourEnd
   const doc = usePlanStore((s) => s.doc)
+  const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
   const frame = useMemo(() => {
-    const floor = doc?.floors.find((f) => f.id === doc?.activeFloorId)
     const w = M(floor?.extent.width ?? 1000), h = M(floor?.extent.height ?? 800)
     return { cx: w / 2, cz: h / 2, span: Math.max(w, h) }
-  }, [doc])
-  const anim = useRef<{ fromPos: THREE.Vector3; fromTgt: THREE.Vector3; toPos: THREE.Vector3; toTgt: THREE.Vector3; t: number } | null>(null)
+  }, [floor])
+  const flight = useRef<ActiveFlight | null>(null)
+  const tourRooms = useRef<Array<{ name: string; x: number; z: number }>>([])
+  const lastTitle = useRef('')
+
+  const finish = (cancelled: boolean) => {
+    const f = flight.current
+    const wasTour = f?.tour
+    if (f?.restoreFov !== undefined) {
+      const persp = camera as THREE.PerspectiveCamera
+      persp.fov = f.restoreFov
+      persp.updateProjectionMatrix()
+    }
+    flight.current = null
+    cameraFocus.pull = 0 // release the focus pull; ambient depth takes over
+    const c = controlsRef.current
+    if (c) { c.enabled = true; c.update() }
+    if (wasTour) onTourEndRef.current()
+    void cancelled
+  }
+
   useEffect(() => {
-    if (!req) return
-    const pose = presetPose(req.preset, frame)
+    if (!req || !floor) return
+    const fromPos = camera.position.clone()
     const fromTgt = controls?.target?.clone() ?? new THREE.Vector3(frame.cx, 0.2, frame.cz)
-    anim.current = { fromPos: camera.position.clone(), fromTgt, toPos: pose.pos, toTgt: pose.target, t: 0 }
     if (controls) controls.enabled = false
+
+    if (req.kind === 'tour') {
+      // Route: start at the Flur/Eingang, then a nearest-neighbour chain
+      // through the indoor rooms; outdoor zones (terrace) close the tour.
+      const rooms = floor.rooms.filter((r) => r.polygon.length >= 3)
+      const indoor = rooms.filter((r) => (r.zoneType ?? 'indoor') !== 'outdoor')
+      const outdoor = rooms.filter((r) => (r.zoneType ?? 'indoor') === 'outdoor')
+      const pts = indoor.map((r) => ({ r, ...roomCentroid(r) }))
+      if (!pts.length) return
+      const startIdx = Math.max(0, pts.findIndex((p) => /flur|eingang|diele/i.test(p.r.name)))
+      const route: typeof pts = []
+      const left = [...pts]
+      let cur = left.splice(startIdx, 1)[0]
+      while (cur) {
+        route.push(cur)
+        if (!left.length) break
+        let bi = 0, bd = Infinity
+        left.forEach((p, i) => { const d = (p.x - cur.x) ** 2 + (p.z - cur.z) ** 2; if (d < bd) { bd = d; bi = i } })
+        cur = left.splice(bi, 1)[0]
+      }
+      for (const o of outdoor) route.push({ r: o, ...roomCentroid(o) })
+
+      // Waypoints: current pose → high establishing shot → dolphin path (eye
+      // height inside each room, lifting over the walls between rooms) → a
+      // slow pull-back reveal at the end.
+      const est = presetPose('persp', frame)
+      const way: THREE.Vector3[] = [fromPos.clone(), est.pos.clone()]
+      route.forEach((p, i) => {
+        if (i === 0) {
+          way.push(new THREE.Vector3(p.x, 4.4, p.z))
+        } else {
+          const q = route[i - 1]
+          way.push(new THREE.Vector3((p.x + q.x) / 2, 3.7, (p.z + q.z) / 2))
+        }
+        way.push(new THREE.Vector3(p.x, 1.5, p.z))
+      })
+      way.push(presetPose('corner', frame).pos.clone())
+      const curve = new THREE.CatmullRomCurve3(way, false, 'centripetal', 0.5)
+      const len = curve.getLength()
+      tourRooms.current = route.map((p) => ({ name: p.r.name, x: p.x, z: p.z }))
+      lastTitle.current = ''
+      // Filmic compression for the walkthrough: a narrower FOV makes each room
+      // read larger and more life-size as the steadicam passes through. Restored
+      // in finish() (also on cancel/unmount).
+      const persp = camera as THREE.PerspectiveCamera
+      const prevFov = persp.fov
+      persp.fov = 34
+      persp.updateProjectionMatrix()
+      flight.current = {
+        curve,
+        tgtFrom: fromTgt,
+        lookAhead: Math.max(0.02, 1.1 / len),
+        duration: Math.min(70, Math.max(22, len * 1.15)),
+        t: 0,
+        tour: true,
+        restoreFov: prevFov,
+      }
+      return
+    }
+
+    // Single glide — preset pose or room fly-in, along a lifted arc so the
+    // camera swoops instead of tracking a straight line.
+    const pose = req.kind === 'preset'
+      ? presetPose(req.preset, frame)
+      : roomPose(floor.rooms.find((r) => r.id === req.roomId) ?? floor.rooms[0], fromPos)
+    const dist = fromPos.distanceTo(pose.pos)
+    const lift = Math.min(3.2, Math.max(0.25, dist * 0.22))
+    const mid = fromPos.clone().lerp(pose.pos, 0.5); mid.y += lift
+    const points = dist < 0.4 ? [fromPos, pose.pos] : [fromPos, mid, pose.pos]
+    flight.current = {
+      curve: new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5),
+      tgtFrom: fromTgt,
+      tgtTo: pose.target,
+      duration: Math.min(3.0, Math.max(1.15, 0.7 + dist * 0.14)),
+      t: 0,
+      tour: false,
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req?.nonce])
+
+  // A tap/drag on the canvas or Esc hands control straight back.
+  useEffect(() => {
+    const cancel = () => { if (flight.current) finish(true) }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') cancel() }
+    const el = gl.domElement
+    el.addEventListener('pointerdown', cancel)
+    window.addEventListener('keydown', key)
+    return () => { el.removeEventListener('pointerdown', cancel); window.removeEventListener('keydown', key) }
+    // finish is intentionally omitted — listeners attach once per gl surface.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gl])
+
+  // Unmount safety (e.g. switching to walk mode mid-flight): re-enable
+  // controls, restore any tour FOV, and close an active tour so the
+  // HUD/recorder/FOV never leak.
+  useEffect(() => () => {
+    const f = flight.current
+    if (f?.tour) onTourEndRef.current()
+    if (f?.restoreFov !== undefined) {
+      const persp = camera as THREE.PerspectiveCamera
+      persp.fov = f.restoreFov
+      persp.updateProjectionMatrix()
+    }
+    flight.current = null
+    if (controlsRef.current) controlsRef.current.enabled = true
+  }, [camera])
+
   useFrame((_, dt) => {
-    const a = anim.current
-    if (!a) return
-    a.t = Math.min(1, a.t + dt / 0.75)
-    const e = easeInOutCubic(a.t)
-    camera.position.lerpVectors(a.fromPos, a.toPos, e)
-    const t = new THREE.Vector3().lerpVectors(a.fromTgt, a.toTgt, e)
-    camera.lookAt(t)
-    if (controls) { controls.target.copy(t); controls.update() }
-    if (a.t >= 1) { anim.current = null; if (controls) controls.enabled = true }
+    const f = flight.current
+    if (!f) return
+    // Clamp the step: a jank spike (tab switch, shader compile) must stretch
+    // the glide, never teleport it — choreography beats wall-clock accuracy.
+    f.t = Math.min(1, f.t + Math.min(dt, 0.12) / f.duration)
+    if (f.tour) {
+      const u = easeInOutSine(f.t)
+      const pos = f.curve.getPointAt(Math.min(u, 1))
+      const look = f.curve.getPointAt(Math.min(1, u + (f.lookAhead ?? 0.03)))
+      look.y = Math.min(look.y, 1.3)
+      camera.position.copy(pos)
+      camera.lookAt(look)
+      if (controls) { controls.target.copy(look); controls.update() }
+      // The tour keeps a steady, moderate focus on where the steadicam looks.
+      cameraFocus.point.copy(look)
+      cameraFocus.pull = 0.55
+      // HUD — imperative DOM writes (no React re-renders at 60fps).
+      const h = hud.current
+      if (h.bar) h.bar.style.width = `${(f.t * 100).toFixed(1)}%`
+      if (h.title) {
+        let best = '', bd = 25
+        for (const r of tourRooms.current) {
+          const d = (r.x - pos.x) ** 2 + (r.z - pos.z) ** 2
+          if (d < bd) { bd = d; best = r.name }
+        }
+        if (best !== lastTitle.current) { lastTitle.current = best; h.title.textContent = best }
+      }
+      if (f.t >= 1) finish(false)
+      return
+    }
+    const e = easeInOutQuint(f.t)
+    camera.position.copy(f.curve.getPointAt(e))
+    const tgt = new THREE.Vector3().lerpVectors(f.tgtFrom, f.tgtTo ?? f.tgtFrom, e)
+    camera.lookAt(tgt)
+    if (controls) { controls.target.copy(tgt); controls.update() }
+    // Focus pull: strongest mid-glide, relaxed again as the camera lands.
+    cameraFocus.point.copy(tgt)
+    cameraFocus.pull = Math.sin(Math.PI * f.t)
+    if (f.t >= 1) finish(false)
   })
   return null
+}
+
+/**
+ * Ceilings that FADE with walk mode instead of hard-mounting: entering the
+ * apartment breathes the roof in over the head, leaving lets the dollhouse
+ * open up softly — an alpha fade, never a cut. Materials are per-room clones
+ * so the shared catalog materials never inherit transparency.
+ */
+function CeilingFade({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean }) {
+  const group = useRef<THREE.Group>(null)
+  const level = useRef(walkMode ? 1 : 0)
+  const items = useMemo(() =>
+    rooms
+      .filter((r) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
+      .map((r) => {
+        const shape = new THREE.Shape()
+        shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
+        for (let i = 1; i < r.polygon.length; i++) shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
+        shape.closePath()
+        const material = matFromCatalog(resolveCeilingMaterial(r), { doubleSide: true }).clone()
+        material.transparent = true
+        material.opacity = level.current
+        return { id: r.id, shape, material }
+      }),
+  [rooms])
+  useEffect(() => () => { for (const it of items) it.material.dispose() }, [items])
+  useFrame((_, dt) => {
+    const target = walkMode ? 1 : 0
+    if (Math.abs(level.current - target) < 0.002 && (level.current === 0 || level.current === 1)) return
+    let next = THREE.MathUtils.damp(level.current, target, 5.5, dt)
+    if (Math.abs(next - target) < 0.002) next = target
+    level.current = next
+    const g = group.current
+    if (!g) return
+    g.visible = next > 0.02
+    for (const it of items) {
+      it.material.opacity = next
+      // Fully solid ceilings leave the transparency pipeline (correct depth).
+      it.material.transparent = next < 0.999
+    }
+  })
+  return (
+    <group ref={group} visible={level.current > 0.02}>
+      {items.map((it) => (
+        <mesh key={`ceil-${it.id}`} position={[0, M(250), 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow material={it.material}>
+          <shapeGeometry args={[it.shape]} />
+        </mesh>
+      ))}
+    </group>
+  )
 }
 
 /** Registers a screenshot capture fn on the shared ref. Grabs the composed
@@ -4685,8 +5307,8 @@ function mulberry32(seed: number) {
   }
 }
 
-function Neighborhood({ wM, hM, cx, cz, phase }: {
-  wM: number; hM: number; cx: number; cz: number; phase: DayPhase
+function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
+  wM: number; hM: number; cx: number; cz: number; phase: DayPhase; daylightScale: number
 }) {
   const built = useMemo(() => {
     const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
@@ -4698,9 +5320,11 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
     // interior lights are shadowless and would keep painting the lawn, so the
     // exterior albedo itself follows the sky (cheaper and more reliable than
     // shadow-mapping every light). Lit windows, sconces and lamps stay warm.
-    // NOTE: multiplyScalar dims in LINEAR space — perceived brightness ~√K —
-    // so the night factor must be far below the intended perceptual level.
-    const K = phase === 'night' ? 0.07 : phase === 'dusk' ? 0.26 : phase === 'dawn' ? 0.38 : phase === 'goldenHour' ? 0.62 : 1.0
+    // The scale is the environment's single continuous exterior-albedo factor
+    // (`exteriorLightScale`), so scrubbing the clock dims the surroundings
+    // smoothly instead of stepping between per-phase buckets.
+    // NOTE: multiplyScalar dims in LINEAR space — perceived brightness ~√K.
+    const K = daylightScale
     const dimc = (c: string) => '#' + new THREE.Color(c).multiplyScalar(K).getHexString()
     const S = (c: string, rough = 0.9, metal = 0) => new THREE.MeshStandardMaterial({ color: dimc(c), roughness: rough, metalness: metal })
     // Foliage reads best faceted — flat shading gives crisp low-poly canopies.
@@ -4713,6 +5337,14 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
       walk:      S('#9a948a', 0.95),
       dash:      S('#7d776c', 0.9),
       drive:     S('#8f8a80', 0.9),
+      // Street polish — painted edge lines, zebra crossings, worn joints and
+      // cast-iron drains/manholes that make the asphalt read as a real road.
+      edgeLine:  S('#cfc9bb', 0.9),
+      zebra:     S('#ddd8ca', 0.9),
+      joint:     S('#7f7a70', 0.96),
+      drain:     S('#2c2d31', 0.6, 0.45),
+      manhole:   S('#3a3b40', 0.6, 0.5),
+      mailbox:   S('#2b2c30', 0.5, 0.4),
       soil:      S('#453728', 1),
       roofDark:  new THREE.MeshStandardMaterial({ color: '#232327', roughness: 0.82, metalness: 0.06 }),
       roofTile:  S('#4a3f38', 0.85),
@@ -4812,20 +5444,51 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
       for (let d = -Math.floor(groundSize / 3); d <= Math.floor(groundSize / 3); d++) {
         dashes.push(<mesh key={d} position={[cx + d * 3, -0.1245, z]} rotation={[-Math.PI / 2, 0, 0]} material={m.dash}><planeGeometry args={[1.1, 0.12]} /></mesh>)
       }
+      // Painted edge lines just inside each kerb — the biggest "real road" cue.
+      const edges = [-1, 1].map((s) => (
+        <mesh key={`edge${s}`} position={[cx, -0.1244, z + s * (roadW / 2 - 0.14)]} rotation={[-Math.PI / 2, 0, 0]} material={m.edgeLine}><planeGeometry args={[groundSize, 0.1]} /></mesh>
+      ))
+      // Cast-iron manhole covers dropped into the carriageway at intervals.
+      const covers: React.ReactNode[] = []
+      if (rich) {
+        for (let c = -N; c <= N + 1; c++) {
+          covers.push(<mesh key={`mh${c}`} position={[cx + c * LP + LP * 0.18, -0.1242, z + (c % 2 ? 0.6 : -0.6)]} rotation={[-Math.PI / 2, 0, 0]} material={m.manhole}><circleGeometry args={[0.32, 20]} /></mesh>)
+        }
+      }
       nodes.push(
         <group key={`st-${j}`}>
           <mesh position={[cx, -0.126, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={m.road}><planeGeometry args={[groundSize, roadW]} /></mesh>
           {dashes}
+          {edges}
+          {covers}
           {[-1, 1].map((s) => (
             <group key={s}>
               {/* raised curb */}
               <mesh position={[cx, -0.11, z + s * (roadW / 2 + 0.09)]} material={m.curb}><boxGeometry args={[groundSize, 0.06, 0.18]} /></mesh>
               {/* sidewalk */}
               <mesh position={[cx, -0.1255, z + s * (roadW / 2 + 0.75)]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={m.walk}><planeGeometry args={[groundSize, 1.2]} /></mesh>
+              {/* recessed gutter drains at the kerb line */}
+              {rich && [-1, 0, 1].map((g) => (
+                <mesh key={`dr${g}`} position={[cx + g * LP + LP * 0.32, -0.1243, z + s * (roadW / 2 - 0.28)]} rotation={[-Math.PI / 2, 0, 0]} material={m.drain}><planeGeometry args={[0.5, 0.22]} /></mesh>
+              ))}
+              {/* sidewalk expansion joints — thin recessed lines across the walk */}
+              {rich && Array.from({ length: 2 * N + 3 }).map((_, k) => (
+                <mesh key={`jt${k}`} position={[cx + (k - N - 1) * LP * 0.9, -0.1252, z + s * (roadW / 2 + 0.75)]} rotation={[-Math.PI / 2, 0, 0]} material={m.joint}><planeGeometry args={[0.05, 1.2]} /></mesh>
+              ))}
             </group>
           ))}
         </group>,
       )
+    }
+
+    // ── Zebra crossing across the street in front of the plot ──────────
+    {
+      const zf = cz - 0.5 * LP
+      const bars: React.ReactNode[] = []
+      for (let b = -3; b <= 3; b++) {
+        bars.push(<mesh key={`zb${b}`} position={[cx + b * 0.62, -0.1243, zf]} rotation={[-Math.PI / 2, 0, 0]} material={m.zebra}><planeGeometry args={[0.42, roadW - 0.5]} /></mesh>)
+      }
+      nodes.push(<group key="crosswalk">{bars}</group>)
     }
 
     // ── Builders ──────────────────────────────────────────────────────
@@ -5139,6 +5802,18 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
           <mesh position={[0, 3.82, 0]} material={m.lampPole}><cylinderGeometry args={[0.1, 0.055, 0.16, 8]} /></mesh>
         </group>,
       )
+      // Kerbside letterbox stand beside every other lamp — a small "lived-in"
+      // street detail (anthracite box + slot + red flag on a slim post).
+      if (rich && k % 2 === 0) {
+        nodes.push(
+          <group key={`mbox-${k}`} position={[tx + LP * 0.25 - 0.55, -0.13, tz + 0.15]}>
+            <mesh position={[0, 0.55, 0]} castShadow material={m.lampPole}><cylinderGeometry args={[0.035, 0.04, 1.1, 8]} /></mesh>
+            <RoundedBox position={[0, 1.16, 0]} args={[0.3, 0.22, 0.4]} radius={0.04} smoothness={3} castShadow material={m.mailbox} />
+            <mesh position={[0, 1.16, 0.205]} material={m.frame}><boxGeometry args={[0.2, 0.03, 0.01]} /></mesh>
+            <mesh position={[0.17, 1.24, 0.05]} material={m.carTail}><boxGeometry args={[0.02, 0.1, 0.06]} /></mesh>
+          </group>,
+        )
+      }
     }
 
     // ── Loose meadow trees beyond the last row — soften the estate's edge ─
@@ -5155,15 +5830,34 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
       }
     }
 
+    // ── Roadside parked cars — the biggest "lived-in" cue. Cars line the
+    // kerbs (length along the road, in the parking lane just inside the curb,
+    // scattered beside plots rather than on the driveways) so the street reads
+    // used, not staged. Deterministic; high tier only for a smooth silhouette.
+    if (rich) {
+      const rc = mulberry32(9173)
+      for (let jj = -N; jj <= N + 1; jj++) {
+        const sz = cz + (jj - 0.5) * LP // this street's centre line
+        for (let i = -N - 1; i <= N + 1; i++) {
+          if (rc() > 0.4) continue
+          const side = rc() > 0.5 ? 1 : -1
+          const px = cx + i * LP + (0.28 + rc() * 0.14) * LP * (rc() > 0.5 ? 1 : -1)
+          const pz = sz + side * (roadW / 2 - 0.95) // parking lane at the kerb
+          const body = carCols[Math.floor(rc() * carCols.length) % carCols.length]
+          nodes.push(car(`rc-${jj}-${i}`, px, pz, Math.PI / 2, body))
+        }
+      }
+    }
+
     return { nodes, allMats, extraTex }
-  }, [wM, hM, cx, cz, phase])
+  }, [wM, hM, cx, cz, phase, daylightScale])
 
   useEffect(() => {
     const mats = built.allMats, texs = built.extraTex
     return () => { mats.forEach((mm) => mm.dispose()); texs.forEach((t) => t.dispose()) }
   }, [built])
 
-  return <group>{built.nodes}</group>
+  return <Static>{built.nodes}</Static>
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -5173,8 +5867,18 @@ function Neighborhood({ wM, hM, cx, cz, phase }: {
 // dollhouse. Toggleable; when off the interior stays visible. Materials +
 // textures disposed on unmount.
 // ─────────────────────────────────────────────────────────────────────
-function HouseShell({ rooms, lit }: { rooms: Room[]; lit: boolean }) {
+// Bau-Studio — the facade construction, stone/roof colours and roof shape live
+// in the pure `houseStyle` domain (src/lib/houseStyle.ts). HouseShell reads its
+// hints; the toolbar UI reads its catalogs.
+
+function HouseShell({ rooms, phase, daylightScale, style }: { rooms: Room[]; phase: DayPhase; daylightScale: number; style: HouseStyle }) {
   const built = useMemo(() => {
+    const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
+    // Same night recession as the neighbourhood, on the same continuous
+    // exterior-albedo scale — dark brick + warm glowing windows is the
+    // reference night read; linear-space K, hence the low values.
+    const K = daylightScale
+    const dimc = (c: string) => '#' + new THREE.Color(c).multiplyScalar(K).getHexString()
     // Indoor bounding box only (exclude the outdoor terrace).
     const indoor = rooms.filter((r) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
     if (!indoor.length) return null
@@ -5188,17 +5892,28 @@ function HouseShell({ rooms, lit }: { rooms: Room[]; lit: boolean }) {
 
     const texs: THREE.Texture[] = []
     const clone = (t: THREE.Texture, rx: number, ry: number) => { const c = t.clone(); c.needsUpdate = true; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(rx, ry); texs.push(c); return c }
-    const brick = brickTextures(), roofT = roofTextures()
-    const klinker = (rx: number, ry: number) => { const mm = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.86 }); mm.map = clone(brick.map, rx, ry); mm.bumpMap = clone(brick.bump, rx, ry); mm.bumpScale = 0.014; return mm }
-    const roofMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.82 }); roofMat.map = clone(roofT.map, Math.max(3, fw / 1.2), 4); roofMat.bumpMap = clone(roofT.bump, Math.max(3, fw / 1.2), 4); roofMat.bumpScale = 0.012
+    const roofT = roofTextures()
+    // Facade material from the Bau-Studio choice. `facadeHints` decides whether
+    // to carry the brick / board map or render smooth (Putz); the tint is the
+    // stone/render colour; stone reuses the brick map greyed and rougher.
+    const fh = facadeHints(style.facade)
+    const src = fh.map === 'board' ? boardTextures() : brickTextures()
+    const klinker = (rx: number, ry: number) => {
+      const mm = new THREE.MeshStandardMaterial({ color: dimc(style.facadeTint), roughness: fh.roughness, metalness: fh.metalness })
+      if (fh.textured) { mm.map = clone(src.map, rx, ry); mm.bumpMap = clone(src.bump, rx, ry); mm.bumpScale = fh.bumpScale }
+      return mm
+    }
+    const roofMat = new THREE.MeshStandardMaterial({ color: dimc(style.roofTint), roughness: 0.82 }); roofMat.map = clone(roofT.map, Math.max(3, fw / 1.2), 4); roofMat.bumpMap = clone(roofT.bump, Math.max(3, fw / 1.2), 4); roofMat.bumpScale = 0.012
     const mats: THREE.Material[] = [roofMat]
-    const M2 = (c: string, rough = 0.8, metal = 0) => { const mm = new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal }); mats.push(mm); return mm }
+    const M2 = (c: string, rough = 0.8, metal = 0) => { const mm = new THREE.MeshStandardMaterial({ color: dimc(c), roughness: rough, metalness: metal }); mats.push(mm); return mm }
     const plinth = M2('#3a3634', 0.9)
     const frame = M2('#23242a', 0.5, 0.2)
     const sill = M2('#d6d1c6', 0.85)
     const trim = M2('#eae6dd', 0.85)
     const door = M2('#20222a', 0.5, 0.2)
-    const glass = new THREE.MeshStandardMaterial({ color: lit ? '#ffe3b0' : '#20252e', roughness: 0.12, metalness: 0.0, emissive: new THREE.Color(lit ? '#ffb457' : '#000'), emissiveIntensity: lit ? 1.1 : 0 }); mats.push(glass)
+    const glassLit = new THREE.MeshStandardMaterial({ color: lit ? '#ffdda2' : '#20252e', roughness: 0.12, metalness: 0.0, emissive: new THREE.Color(lit ? '#ffb057' : '#000'), emissiveIntensity: lit ? 0.85 : 0 }); mats.push(glassLit)
+    const glassDim = new THREE.MeshStandardMaterial({ color: lit ? '#b98f5e' : '#242d3a', roughness: 0.14, metalness: lit ? 0 : 0.2, emissive: new THREE.Color(lit ? '#c9812e' : '#000'), emissiveIntensity: lit ? 0.32 : 0 }); mats.push(glassDim)
+    const glassDark = new THREE.MeshStandardMaterial({ color: '#1a212c', roughness: 0.14, metalness: 0.3 }); mats.push(glassDark)
     // face klinker: front/back tile denser horizontally than the sides
     const fWall = klinker(fw / 0.9, eaves / 0.85)
     const sWall = klinker(fd / 0.9, eaves / 0.85)
@@ -5216,12 +5931,19 @@ function HouseShell({ rooms, lit }: { rooms: Room[]; lit: boolean }) {
 
     // ── Window helper on a facade (normal = ±x or ±z) ──
     const winW = 1.15, winH = 1.3
+    const paneStates = [0, 0, 1, 0, 2, 1, 0, 2, 0, 1, 2, 0]
+    let paneI = 0
     const addWin = (key: string, x: number, y: number, z: number, along: 'x' | 'z', w = winW, h = winH) => {
-      const wx = along === 'x' ? w : 0.06, wz = along === 'x' ? 0.06 : w
+      const glass = [glassLit, glassDim, glassDark][paneStates[paneI++ % paneStates.length]]
+      // Pane protrudes past the frame slab in the facade-normal direction —
+      // otherwise the bigger frame box swallows it and windows render dead.
+      const wx = along === 'x' ? w : 0.1, wz = along === 'x' ? 0.1 : w
       nodes.push(
         <group key={key} position={[x, y, z]}>
           <mesh material={glass}><boxGeometry args={[wx, h, wz]} /></mesh>
-          <mesh material={frame}><boxGeometry args={[wx + (along === 'x' ? 0.1 : 0.02), h + 0.1, wz + (along === 'x' ? 0.02 : 0.1)]} /></mesh>
+          {/* Frame is a surround: wider tangentially, THINNER along the facade
+              normal — deriving it as glass+0.02 swallowed the pane entirely. */}
+          <mesh material={frame}><boxGeometry args={[wx + (along === 'x' ? 0.1 : -0.04), h + 0.1, wz + (along === 'x' ? -0.04 : 0.1)]} /></mesh>
           <mesh position={[0, -h / 2 - 0.05, 0]} material={sill}><boxGeometry args={[wx + (along === 'x' ? 0.2 : 0.14), 0.06, wz + (along === 'x' ? 0.14 : 0.2)]} /></mesh>
         </group>,
       )
@@ -5251,31 +5973,61 @@ function HouseShell({ rooms, lit }: { rooms: Room[]; lit: boolean }) {
     nodes.push(<mesh key="door" position={[bx0 - th / 2 - 0.02, 1.1, bcz]} castShadow material={door}><boxGeometry args={[0.08, 2.2, 1.0]} /></mesh>)
     nodes.push(<mesh key="canopy" position={[bx0 - 0.45, 2.35, bcz]} castShadow material={trim}><boxGeometry args={[0.9, 0.1, 1.6]} /></mesh>)
 
-    // ── Pitched Ziegel roof (ridge along the longer axis) ──
+    // ── Roof — Bau-Studio Dachform (Satteldach · Walmdach · Flachdach) ──
+    const rhints = roofHints(style.roof)
     const ridgeAlongX = fw >= fd
     const spanPerp = ridgeAlongX ? fd : fw
     const spanRidge = ridgeAlongX ? fw : fd
-    const rh = (spanPerp / 2 + oh) * 0.62
-    const slope = Math.hypot(spanPerp / 2 + oh, rh)
-    const ang = Math.atan2(rh, spanPerp / 2 + oh)
     const gableMat = fWall
     const roofGroup: React.ReactNode[] = []
-    // two slopes
-    roofGroup.push(<mesh key="s1" position={[0, rh / 2, -(spanPerp / 4 + oh / 2)]} rotation={[-ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-    roofGroup.push(<mesh key="s2" position={[0, rh / 2, (spanPerp / 4 + oh / 2)]} rotation={[ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-    // two gable triangles (close the ends)
-    for (const s of [-1, 1]) {
-      const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
-      roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
+
+    if (rhints.flat) {
+      // Flachdach — a shallow slab with a low parapet + gravel bed on top.
+      const zinc = M2('#7b7f85', 0.5, 0.55)
+      roofGroup.push(<mesh key="slab" position={[0, 0.1, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.2, spanPerp + oh * 2]} /></mesh>)
+      roofGroup.push(<mesh key="gravel" position={[0, 0.22, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={M2('#9b968c', 1)}><planeGeometry args={[spanRidge + oh, spanPerp + oh]} /></mesh>)
+      for (const [k, x, z, w, d] of [['pa', 0, (spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pb', 0, -(spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pl', (spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2], ['pr', -(spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2]] as const) {
+        roofGroup.push(<mesh key={k} position={[x, 0.34, z]} castShadow material={zinc}><boxGeometry args={[w, 0.36, d]} /></mesh>)
+      }
+    } else {
+      const rh = (spanPerp / 2 + oh) * rhints.pitch
+      const slope = Math.hypot(spanPerp / 2 + oh, rh)
+      const ang = Math.atan2(rh, spanPerp / 2 + oh)
+      // Walmdach: the ridge is pulled in from the ends by the hip inset, so the
+      // main slopes become trapezoids and the ends become sloped hips instead
+      // of vertical gables. Satteldach keeps a full-length ridge + gable walls.
+      const hipInset = style.roof === 'hip' ? Math.min(spanPerp / 2 + oh, (spanRidge + oh * 2) * 0.22) : 0
+      const ridgeLen = spanRidge + oh * 2 - 2 * hipInset
+      // main slopes (front/back)
+      roofGroup.push(<mesh key="s1" position={[0, rh / 2, -(spanPerp / 4 + oh / 2)]} rotation={[-ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
+      roofGroup.push(<mesh key="s2" position={[0, rh / 2, (spanPerp / 4 + oh / 2)]} rotation={[ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
+      if (style.roof === 'hip') {
+        // Two hip end-slopes, tilted inward from each short end to the ridge.
+        const hang = Math.atan2(rh, hipInset || 0.001)
+        const hslope = Math.hypot(hipInset, rh)
+        for (const s of [-1, 1]) {
+          roofGroup.push(
+            <mesh key={`hip${s}`} position={[s * (spanRidge / 2 + oh - hipInset / 2), rh / 2, 0]} rotation={[0, 0, s * hang]} castShadow receiveShadow material={roofMat}>
+              <boxGeometry args={[hslope, 0.12, spanPerp + oh * 2]} />
+            </mesh>,
+          )
+        }
+      } else {
+        // Satteldach gable triangles close the two ends.
+        for (const s of [-1, 1]) {
+          const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
+          roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
+        }
+      }
+      // ridge cap
+      roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[ridgeLen, 0.12, 0.2]} /></mesh>)
     }
-    // ridge cap
-    roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, 0.2]} /></mesh>)
     nodes.push(
       <group key="roof" position={[bcx, eaves, bcz]} rotation={[0, ridgeAlongX ? 0 : Math.PI / 2, 0]}>{roofGroup}</group>,
     )
 
     return { nodes, mats, texs }
-  }, [rooms, lit])
+  }, [rooms, phase, daylightScale, style])
 
   useEffect(() => {
     if (!built) return
@@ -5283,13 +6035,13 @@ function HouseShell({ rooms, lit }: { rooms: Room[]; lit: boolean }) {
     return () => { mats.forEach((m) => m.dispose()); texs.forEach((t) => t.dispose()) }
   }, [built])
 
-  return built ? <group>{built.nodes}</group> : null
+  return built ? <Static>{built.nodes}</Static> : null
 }
 
 // Privacy fences around the terrace + a paver parking court beyond them with
 // four distinct premium cars (Tesla / Mercedes / Audi / BMW), matching the
 // reference exterior. Positions derive from the outdoor terrace room's bounds.
-function TerraceParking({ rooms, phase }: { rooms: Room[]; phase: DayPhase }) {
+function TerraceParking({ rooms, daylightScale }: { rooms: Room[]; daylightScale: number }) {
   const built = useMemo(() => {
     const terr = rooms.find((r) => r.zoneType === 'outdoor' && r.polygon.length >= 3)
     if (!terr) return null
@@ -5297,9 +6049,10 @@ function TerraceParking({ rooms, phase }: { rooms: Room[]; phase: DayPhase }) {
     const x0 = M(Math.min(...xs)), x1 = M(Math.max(...xs))
     const z0 = M(Math.min(...zs)), z1 = M(Math.max(...zs))
 
-    // Same night recession as the neighbourhood — the parking court's albedo
-    // follows the sky so interior light spill can't keep it daylight-bright.
-    const K = phase === 'night' ? 0.09 : phase === 'dusk' ? 0.3 : phase === 'dawn' ? 0.38 : phase === 'goldenHour' ? 0.62 : 1.0
+    // Same continuous night recession as the neighbourhood — the parking court's
+    // albedo follows the sky (no per-phase pop) so interior light spill can't
+    // keep it daylight-bright.
+    const K = daylightScale
     const dimc = (c: string) => '#' + new THREE.Color(c).multiplyScalar(K).getHexString()
     const mats: THREE.Material[] = []
     const paint = (c: string, metal = 0.62, rough = 0.32) => { const m = new THREE.MeshStandardMaterial({ color: dimc(c), metalness: metal, roughness: rough }); mats.push(m); return m }
@@ -5375,9 +6128,8 @@ function TerraceParking({ rooms, phase }: { rooms: Room[]; phase: DayPhase }) {
       { c: '#16233f', L: 4.77, W: 1.85, roof: 'coupe' as const, rim: '#2a2d33', grille: 'kidney' as const },
     ]
     specs.forEach((sp, i) => nodes.push(car(`car-${i}`, ccx, pz0 + 1.1 + (i * (pz1 - pz0 - 2.0)) / 3, -Math.PI / 2, sp)))
-
     return { nodes, mats }
-  }, [rooms, phase])
+  }, [rooms, daylightScale])
 
   useEffect(() => {
     if (!built) return
@@ -5385,12 +6137,70 @@ function TerraceParking({ rooms, phase }: { rooms: Room[]; phase: DayPhase }) {
     return () => mats.forEach((m) => m.dispose())
   }, [built])
 
-  return built ? <group>{built.nodes}</group> : null
+  return built ? <Static>{built.nodes}</Static> : null
 }
 
-function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, residents, onResidentStatus }: {
+// ─────────────────────────────────────────────────────────────────────
+// Etagen-Stack — the exploded multi-storey view. The active floor stays the
+// fully rendered dollhouse; every OTHER storey appears as a translucent ghost
+// shell (floor slab + walls) floated above / sunk below at its storey offset
+// (geometry from lib/floorStack), so the whole house reads at a glance without
+// touching the main renderer. Purely additive; materials disposed on unmount.
+// ─────────────────────────────────────────────────────────────────────
+const GHOST_GAP = 3.6 // m of vertical separation per storey in the exploded view
+function GhostFloors({ floors, activeId }: { floors: Floor[]; activeId: string }) {
+  const built = useMemo(() => {
+    const wallMat = new THREE.MeshStandardMaterial({ color: '#aab0ba', transparent: true, opacity: 0.16, depthWrite: false, roughness: 0.9 })
+    const slabMat = new THREE.MeshStandardMaterial({ color: '#c7a24e', transparent: true, opacity: 0.07, depthWrite: false, roughness: 1 })
+    const edgeMat = new THREE.MeshBasicMaterial({ color: '#c7a24e', transparent: true, opacity: 0.35 })
+    const mats = [wallMat, slabMat, edgeMat]
+    const levels = computeFloorStack(floors.map((f) => ({ id: f.id, index: f.index })), activeId, GHOST_GAP)
+    const nodes: React.ReactNode[] = []
+    for (const lv of levels) {
+      if (lv.active) continue
+      const fl = floors.find((f) => f.id === lv.id)
+      if (!fl) continue
+      const w = M(fl.extent.width), h = M(fl.extent.height)
+      nodes.push(
+        <group key={lv.id} position={[0, lv.yOffset, 0]}>
+          {/* floor slab + a hairline gold frame so each storey reads as a tray */}
+          <mesh position={[w / 2, 0.01, h / 2]} rotation={[-Math.PI / 2, 0, 0]} material={slabMat}><planeGeometry args={[w, h]} /></mesh>
+          {[[w / 2, 0.02, 0.01, w, 0.02], [w / 2, 0.02, h - 0.01, w, 0.02], [0.01, 0.02, h / 2, 0.02, h], [w - 0.01, 0.02, h / 2, 0.02, h]].map(([x, y, z, sx, sz], i) => (
+            <mesh key={i} position={[x, y, z]} rotation={[-Math.PI / 2, 0, 0]} material={edgeMat}><planeGeometry args={[sx, sz]} /></mesh>
+          ))}
+          {/* walls as translucent volumes */}
+          {fl.walls.map((wl: Wall) => {
+            const ax = M(wl.a.x), az = M(wl.a.y), bx = M(wl.b.x), bz = M(wl.b.y)
+            const len = Math.hypot(bx - ax, bz - az)
+            if (len < 0.01) return null
+            return (
+              <mesh
+                key={wl.id}
+                position={[(ax + bx) / 2, 1.25, (az + bz) / 2]}
+                rotation={[0, -Math.atan2(bz - az, bx - ax), 0]}
+                material={wallMat}
+              >
+                <boxGeometry args={[len, 2.5, Math.max(0.06, M(wl.thickness))]} />
+              </mesh>
+            )
+          })}
+        </group>,
+      )
+    }
+    return { nodes, mats }
+  }, [floors, activeId])
+
+  useEffect(() => {
+    const mats = built.mats
+    return () => mats.forEach((m) => m.dispose())
+  }, [built])
+
+  return <Static>{built.nodes}</Static>
+}
+
+function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus }: {
   env: EnvironmentState; floorVariant: FloorVariant; wallMaterialId: string; walkMode: boolean; envPreset: EnvPreset; showHouse: boolean;
-  residents: number; onResidentStatus?: (s: ResidentStatus) => void;
+  stackView: boolean; houseStyle: HouseStyle; residents: number; onResidentStatus?: (s: ResidentStatus) => void;
 }) {
   const doc = usePlanStore((s) => s.doc)
   const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
@@ -5399,8 +6209,6 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
   const wM = M(width), hM = M(height)
   const cx = wM / 2
   const cz = hM / 2
-  const lit = env.phase === 'night' || env.phase === 'dusk' || env.phase === 'goldenHour'
-
   const wallMaterial = resolveSurfaceMaterialId(wallMaterialId, 'wall')
 
   return (
@@ -5424,14 +6232,14 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           intensity={env.lighting.sun.intensity}
           color={env.lighting.sun.color}
           castShadow={env.lighting.sun.castShadow}
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={readTier() === 'high' ? 4096 : 2048}
+          shadow-mapSize-height={readTier() === 'high' ? 4096 : 2048}
           shadow-camera-near={0.1}
           shadow-camera-far={50}
-          shadow-camera-left={-16}
-          shadow-camera-right={16}
-          shadow-camera-top={16}
-          shadow-camera-bottom={-16}
+          shadow-camera-left={-(Math.max(wM, hM) + 4)}
+          shadow-camera-right={Math.max(wM, hM) + 4}
+          shadow-camera-top={Math.max(wM, hM) + 4}
+          shadow-camera-bottom={-(Math.max(wM, hM) + 4)}
           shadow-bias={-0.0005}
           shadow-normalBias={0.02}
           shadow-radius={5}
@@ -5447,7 +6255,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
       <CoveLighting rooms={floor.rooms} />
 
       {/* Night-city backdrop — visible through windows in evening/night */}
-      <CityBackdrop span={Math.max(wM, hM)} cx={cx} cz={cz} phase={env.phase} />
+      <CityBackdrop span={Math.max(wM, hM)} cx={cx} cz={cz} daylightScale={env.lighting.exteriorAlbedoScale} />
 
       {/* Live Digital Twin — same runtime + same room aggregation as the 2D floorplan. */}
       <LiveTwinReflection rooms={floor.rooms} />
@@ -5464,38 +6272,25 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
       )}
 
       {/* Surrounding new-build neighbourhood — environmental context around the plan. */}
-      <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} />
+      <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />
 
       {/* Own-house exterior envelope (Klinker + Ziegel roof) — toggleable so the
           plan can be seen as the real building instead of an open dollhouse. */}
-      {showHouse && <HouseShell rooms={floor.rooms} lit={lit} />}
+      {showHouse && <HouseShell rooms={floor.rooms} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} style={houseStyle} />}
+
+      {/* Etagen-Stack — ghost shells of the other storeys, exploded vertically */}
+      {stackView && !walkMode && doc && doc.floors.length > 1 && (
+        <GhostFloors floors={doc.floors} activeId={floor.id} />
+      )}
 
       {/* Terrace privacy fences + parking court with premium cars. */}
-      <TerraceParking rooms={floor.rooms} phase={env.phase} />
+      <TerraceParking rooms={floor.rooms} daylightScale={env.lighting.exteriorAlbedoScale} />
 
       {/* Floor + contact shadows. Position contact shadows just below items, not at the floor itself */}
       <FloorPlane width={width} height={height} variant={floorVariant} />
-      {/* Ceilings — only in walk mode (an opaque ceiling must not block the
-          dollhouse view). Material comes from the catalog via the resolver. */}
-      {walkMode && floor.rooms
-        .filter((r: Room) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
-        .map((r: Room) => {
-          const shape = new THREE.Shape()
-          shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
-          for (let i = 1; i < r.polygon.length; i++) shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
-          shape.closePath()
-          return (
-            <mesh
-              key={`ceil-${r.id}`}
-              position={[0, M(250), 0]}
-              rotation={[Math.PI / 2, 0, 0]}
-              receiveShadow
-              material={matFromCatalog(resolveCeilingMaterial(r), { doubleSide: true })}
-            >
-              <shapeGeometry args={[shape]} />
-            </mesh>
-          )
-        })}
+      {/* Ceilings — visible in walk mode, faded (never hard-cut) on the way
+          in and out. An opaque ceiling must not block the dollhouse view. */}
+      <CeilingFade rooms={floor.rooms} walkMode={walkMode} />
       {/* v18/v26 — per-room floor overrides via Shape geometry.
           Outdoor zones (terraces) render as a raised wood deck with a low curb. */}
       {floor.rooms.filter((r: Room) => (r.floorMaterialId || r.floorVariant || r.zoneType === 'outdoor') && r.polygon.length >= 3).map((r: Room) => {
@@ -5552,12 +6347,35 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         scale={Math.max(wM, hM) * 1.4}
         blur={2.4}
         far={2.5}
+        resolution={readTier() === 'high' ? 1024 : 512}
       />
 
       {/* Walls — with corner extensions and pillars for clean joints */}
       {(() => {
         const wallsArr = floor.walls as WallLike[]
         const corners = findCorners(wallsArr)
+        // Per-room wall paint: a wall whose midpoint hugs a room's polygon
+        // edge takes that room's wall material; unmatched walls (hallway
+        // stubs, freestanding) keep the global one. Nearest edge wins, so a
+        // partition between two differently painted rooms stays deterministic.
+        const segDist = (px: number, py: number, a: Point, b: Point): number => {
+          const vx = b.x - a.x, vy = b.y - a.y
+          const t = Math.max(0, Math.min(1, ((px - a.x) * vx + (py - a.y) * vy) / (vx * vx + vy * vy || 1)))
+          return Math.hypot(px - (a.x + vx * t), py - (a.y + vy * t))
+        }
+        const wallCatalogFor = (wall: Wall): Material => {
+          const mx = (wall.a.x + wall.b.x) / 2, my = (wall.a.y + wall.b.y) / 2
+          let best: string | undefined
+          let bestD = wall.thickness / 2 + 12
+          for (const r of floor.rooms as Room[]) {
+            if (!r.wallMaterialId || r.polygon.length < 3) continue
+            for (let i = 0, j = r.polygon.length - 1; i < r.polygon.length; j = i++) {
+              const d = segDist(mx, my, r.polygon[j], r.polygon[i])
+              if (d < bestD) { bestD = d; best = r.wallMaterialId }
+            }
+          }
+          return best ? resolveSurfaceMaterialId(best, 'wall') : wallMaterial
+        }
         return (
           <>
             {wallsArr.map((wall: Wall) => {
@@ -5581,7 +6399,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
                   id={wall.id}
                   a={wall.a} b={wall.b} thickness={wall.thickness}
                   selected={false}
-                  material={wallMaterial}
+                  material={wallCatalogFor(wall)}
                   extA={extA} extB={extB}
                   subtype={wall.subtype}
                   openingWidth={wall.openingWidth}
@@ -5609,6 +6427,9 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 
       {/* Furniture */}
       {floor.furniture.filter((f: PlacedFurniture) => !f.hidden).map((f: PlacedFurniture) => <Furniture3D key={f.id} f={f} />)}
+
+      {/* Image-Blaster assets — wall art & generated objects */}
+      {(floor.blasterAssets ?? []).filter((a) => !a.hidden).map((a) => <BlasterAsset3D key={a.id} asset={a} />)}
 
       {/* Frame the dollhouse to the plan size on entry */}
       {!walkMode && <CameraFit wM={wM} hM={hM} cx={cx} cz={cz} />}
@@ -5677,8 +6498,18 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // Default to evening — the archviz-reference mood (warm lit rooms against a
   // dark, receded surrounding) is the product's hero look; daylight stays one
   // slider-drag away.
-  const [timeOfDay, setTimeOfDay] = useState(20)
-  const env = useMemo(() => deriveEnvironment({ timeOfDay }), [timeOfDay])
+  // Time-of-day starts at the real current time ("von Grund auf die aktuelle
+  // Zeit"), but stays freely settable via the slider / the "Jetzt" button.
+  const nowHours = () => { const d = new Date(); return Math.round((d.getHours() + d.getMinutes() / 60) * 4) / 4 }
+  const [timeOfDay, setTimeOfDay] = useState(nowHours)
+  // Location-true sun: composer-generated plans carry their real-world anchor
+  // (doc.geo) — the sun study then runs on the actual latitude instead of the
+  // central-European default.
+  const geoLat = usePlanStore((s) => s.doc?.geo?.lat)
+  const env = useMemo(
+    () => deriveEnvironment(geoLat != null ? { timeOfDay, latitudeDeg: geoLat } : { timeOfDay }),
+    [timeOfDay, geoLat],
+  )
   const [floorVariant, setFloorVariant] = useState<FloorVariant>('walnut')
   const [wallMaterialId, setWallMaterialId] = useState<string>(DEFAULT_WALL_MATERIAL_ID)
   const [walkMode, setWalkMode] = useState(false)
@@ -5687,30 +6518,90 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // Own-house exterior shell — off by default (open dollhouse); on wraps the
   // apartment in its real Klinker building with a Ziegel roof.
   const [showHouse, setShowHouse] = useState(false)
+  // Etagen-Stack (exploded multi-storey view) — Pro feature.
+  const [stackView, setStackView] = useState(false)
+  const { can } = useTier()
+  const navigate = useNavigate()
+  const canStack = can('floor-stack')
+  // Bau-Studio — Max feature; the chosen build persists locally.
+  const canFacade = can('facade-studio')
+  const [houseStyle, setHouseStyle] = useState<HouseStyle>(() => loadHouseStyle())
+  const [studioOpen, setStudioOpen] = useState(false)
+  const patchHouseStyle = (p: Partial<HouseStyle>) => setHouseStyle((s) => { const n = { ...s, ...p }; saveHouseStyle(n); return n })
+  // Foto-Look — AgX tone mapping is the default (modern archviz: physically
+  // correct highlight roll-off). Toggle reverts to the "Brillant" ACES look.
+  const [photoLook, setPhotoLook] = useState(true)
   // Virtual residents: 0 = off, then 1 or 2 people walking their daily routine.
   const [residents, setResidents] = useState(0)
   const [residentStatus, setResidentStatus] = useState<ResidentStatus | null>(null)
   const compassNeedleRef = useRef<HTMLDivElement | null>(null)
-  // Cinematic camera presets, screenshot capture + fullscreen (3D-view UX).
-  const [camReq, setCamReq] = useState<{ preset: CamPreset; nonce: number } | null>(null)
+  // Cinematic camera: every move is an eased AAA-style flight (presets, room
+  // fly-ins, and the recordable Kino-Tour). Screenshot capture + fullscreen.
+  const [flyReq, setFlyReq] = useState<FlightReq | null>(null)
   const [activePreset, setActivePreset] = useState<CamPreset>('persp')
+  const [tourActive, setTourActive] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const tourHud = useRef<TourHud>({ title: null, bar: null })
+  const recorderRef = useRef<{ stop: () => void } | null>(null)
   const captureRef = useRef<(() => void) | undefined>(undefined)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const goPreset = (preset: CamPreset) => {
     setActivePreset(preset)
-    setCamReq((r) => ({ preset, nonce: (r?.nonce ?? 0) + 1 }))
+    setFlyReq((r) => ({ kind: 'preset', preset, nonce: (r?.nonce ?? 0) + 1 }))
   }
+  const flyToRoom = (roomId: string) => {
+    setFlyReq((r) => ({ kind: 'room', roomId, nonce: (r?.nonce ?? 0) + 1 }))
+    // Cinematic beat on the dolly-in: a soft pulse where the glide will land
+    // (viewport focus point) + the subtle select tick. No-op when the mode is off.
+    const vr = viewportRef.current?.getBoundingClientRect()
+    if (vr) cinematicReact(vr.left + vr.width / 2, vr.top + vr.height * 0.42, 'select')
+  }
+  const startTour = (record: boolean) => {
+    if (walkMode) setWalkMode(false)
+    if (record) {
+      const canvas = viewportRef.current?.querySelector('canvas')
+      recorderRef.current = canvas ? startCanvasRecording(canvas) : null
+      setRecording(!!recorderRef.current)
+    }
+    setTourActive(true)
+    setFlyReq((r) => ({ kind: 'tour', nonce: (r?.nonce ?? 0) + 1 }))
+  }
+  const endTour = () => {
+    setTourActive(false)
+    setRecording(false)
+    recorderRef.current?.stop()
+    recorderRef.current = null
+  }
+  // Rooms of the active floor — the fly-to chips under the header.
+  const planDoc = usePlanStore((s) => s.doc)
+  const updateDoc = usePlanStore((s) => s.updateDoc)
+  const roomChips = useMemo(() => {
+    const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
+    return (fl?.rooms ?? []).filter((r) => r.polygon.length >= 3).map((r) => ({ id: r.id, name: r.name }))
+  }, [planDoc])
+
+  // Material target: the whole plan or ONE room — every room is individually
+  // stylable. Writes go into the document (persisted, undoable, 2D↔3D sync),
+  // never into throwaway component state.
+  const [matRoom, setMatRoom] = useState<string>('all')
+  const matProbe = useMemo(() => {
+    const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
+    const rooms = fl?.rooms ?? []
+    return rooms.find((r) => r.id === matRoom) ?? rooms[0]
+  }, [planDoc, matRoom])
   const toggleFullscreen = () => {
     const el = viewportRef.current
     if (!el) return
     if (document.fullscreenElement) void document.exitFullscreen()
     else void el.requestFullscreen?.()
   }
-  // Adaptive resolution: cap pixel ratio (hi-dpi screens otherwise render 2–4×
-  // the pixels, which — with SSAO + the richer PBR materials — causes jank).
-  // PerformanceMonitor drops it further and disables heavy post-processing if
-  // the frame budget is still missed. Quality of the materials is untouched.
-  const [dprMax, setDprMax] = useState(1.5)
+  // Adaptive resolution: render at up to the device's real pixel ratio (capped
+  // at 2 so 3× phones don't melt), which keeps edges crisp on hi-dpi screens
+  // instead of the old flat 1.5. PerformanceMonitor then steps it DOWN under
+  // load and back UP when headroom returns — a smooth ramp, not the old
+  // one-way drop to 1. Material quality is never touched.
+  const dprCap = useMemo(() => Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), [])
+  const [dprMax, setDprMax] = useState(() => Math.min(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), 1.75))
   // v17 — warm the texture cache (IndexedDB or generate) before mounting the 3D Canvas
   const [texturesReady, setTexturesReady] = useState(false)
   useEffect(() => {
@@ -5728,6 +6619,20 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
     { id: 'tile',       label: 'Fliesen',      swatch: '#e6e3dd' },
   ]
   const wallOptions = materialsForSurface('wall')
+  const applyRoomSurface = (surface: 'floor' | 'wall' | 'ceiling', id: string) => {
+    updateDoc((d) => {
+      const fl = d.floors.find((f) => f.id === d.activeFloorId)
+      if (!fl) return
+      for (const r of fl.rooms) {
+        if (matRoom !== 'all' && r.id !== matRoom) continue
+        if (surface === 'floor') r.floorMaterialId = id
+        else if (surface === 'wall') r.wallMaterialId = id
+        else r.ceilingMaterialId = id
+      }
+    })
+    // "Alle Räume" also retunes the global fallback walls outside any room.
+    if (surface === 'wall' && matRoom === 'all') setWallMaterialId(id)
+  }
 
   return (
     <div className={embedded
@@ -5756,19 +6661,24 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             </div>
             {/* Time-of-day pill */}
             <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg"
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg"
               title="Tageszeit – bewegt Sonne, Licht, Himmel und Schatten"
             >
               {env.sun.aboveHorizon ? <Sun size={14} className="text-[color:var(--accent)]" /> : <Moon size={14} className="text-[color:var(--muted)]" />}
               <input
                 type="range" min={0} max={24} step={0.25} value={timeOfDay}
                 onChange={(e) => setTimeOfDay(parseFloat(e.target.value))}
-                className="w-20 accent-[color:var(--accent)] cursor-pointer"
+                className="w-14 sm:w-20 accent-[color:var(--accent)] cursor-pointer"
                 aria-label="Tageszeit"
               />
               <span className="text-[11px] tabular-nums whitespace-nowrap">
-                {formatClock(timeOfDay)} · {PHASE_LABEL[env.phase]}
+                {formatClock(timeOfDay)}<span className="hidden sm:inline"> · {PHASE_LABEL[env.phase]}</span>
               </span>
+              <button
+                onClick={() => setTimeOfDay(nowHours())}
+                className="spring-press rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
+                title="Auf aktuelle Uhrzeit zurücksetzen"
+              >Jetzt</button>
             </div>
             {/* Material popover toggle */}
             <button
@@ -5778,26 +6688,79 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             >
               <Palette size={14} />
             </button>
+            {/* Kino-Tour — a product-video style camera pass, on demand */}
+            {!walkMode && (
+              <button
+                onClick={() => startTour(false)}
+                className="flex items-center justify-center h-8 w-8 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 shadow-lg backdrop-blur-md text-[color:var(--muted)] hover:text-[color:var(--fg)] transition-colors"
+                title="Kino-Tour — cinematischer Rundflug durch alle Räume"
+              >
+                <Clapperboard size={14} />
+              </button>
+            )}
+            {!walkMode && CAN_RECORD && (
+              <button
+                onClick={() => startTour(true)}
+                className={`flex items-center justify-center h-8 w-8 rounded-xl border shadow-lg backdrop-blur-md transition-colors ${recording ? 'border-[#e04848] bg-[#e04848] text-white' : 'border-[color:var(--border)] bg-[color:var(--surface)]/85 text-[color:var(--muted)] hover:text-[#e04848]'}`}
+                title="Kino-Tour als Video aufnehmen (.webm) — dein Produktvideo auf Knopfdruck"
+              >
+                <CircleDot size={14} />
+              </button>
+            )}
           </div>
-          {/* Material swatch popover */}
+          {/* Room fly-to chips — select a room and the camera glides inside */}
+          {!walkMode && roomChips.length > 0 && (
+            <div className="flex items-center gap-0.5 max-w-[94vw] overflow-x-auto px-1 py-0.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
+              {roomChips.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => flyToRoom(r.id)}
+                  className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
+                  title={`In „${r.name}" hineingleiten`}
+                >{r.name}</button>
+              ))}
+            </div>
+          )}
+          {/* Material popover — room-aware, document-persistent. */}
           {matPanelOpen && (
-            <div className="flex items-center gap-2 flex-wrap justify-center px-3 py-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/90 backdrop-blur-md shadow-lg animate-fade-in">
+            <div className="flex flex-col items-center gap-1.5 max-w-[94vw] px-3 py-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/90 backdrop-blur-md shadow-lg animate-fade-in">
+              <div className="flex items-center gap-1 flex-wrap justify-center">
+                <span className="text-[9px] uppercase tracking-wider text-[color:var(--muted)]">Für</span>
+                {[{ id: 'all', name: 'Alle Räume' }, ...roomChips].map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => setMatRoom(r.id)}
+                    className={`spring-press shrink-0 px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors ${matRoom === r.id ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'}`}
+                  >{r.name}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-[9px] uppercase tracking-wider text-[color:var(--muted)]">Boden</span>
-              {floorOptions.map((opt) => (
+              {materialsForSurface('floor').map((opt) => (
                 <button
                   key={opt.id}
-                  onClick={() => setFloorVariant(opt.id)}
-                  className={`w-6 h-6 rounded border transition-all ${floorVariant === opt.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
-                  style={{ background: opt.swatch }}
-                  title={opt.label}
+                  onClick={() => applyRoomSurface('floor', opt.id)}
+                  className={`w-6 h-6 rounded border transition-all ${matProbe && resolveFloorMaterial(matProbe).id === opt.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
+                  style={{ background: opt.color }}
+                  title={opt.name}
                 />
               ))}
               <span className="ml-2 text-[9px] uppercase tracking-wider text-[color:var(--muted)]">Wand</span>
               {wallOptions.map((opt) => (
                 <button
                   key={opt.id}
-                  onClick={() => setWallMaterialId(opt.id)}
-                  className={`w-6 h-6 rounded border transition-all ${wallMaterialId === opt.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
+                  onClick={() => applyRoomSurface('wall', opt.id)}
+                  className={`w-6 h-6 rounded border transition-all ${(matProbe?.wallMaterialId ?? wallMaterialId) === opt.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
+                  style={{ background: opt.color }}
+                  title={opt.name}
+                />
+              ))}
+              <span className="ml-2 text-[9px] uppercase tracking-wider text-[color:var(--muted)]">Decke</span>
+              {materialsForSurface('ceiling').map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => applyRoomSurface('ceiling', opt.id)}
+                  className={`w-6 h-6 rounded border transition-all ${matProbe && resolveCeilingMaterial(matProbe).id === opt.id ? 'border-[color:var(--accent)] scale-110' : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)]'}`}
                   style={{ background: opt.color }}
                   title={opt.name}
                 />
@@ -5813,6 +6776,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
                   {ENV_PRESET_LABEL[p]}
                 </button>
               ))}
+              </div>
             </div>
           )}
         </div>
@@ -5879,6 +6843,11 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             <span className="text-[11px] tabular-nums text-[color:var(--text)] whitespace-nowrap">
               {formatClock(timeOfDay)} · {PHASE_LABEL[env.phase]}
             </span>
+            <button
+              onClick={() => setTimeOfDay(nowHours())}
+              className="spring-press rounded-md px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--muted)] hover:text-[color:var(--fg)] transition-colors"
+              title="Auf aktuelle Uhrzeit zurücksetzen"
+            >Jetzt</button>
           </div>
           {onClose && (
             <button onClick={onClose} className="btn btn-ghost btn-icon" title="Schließen (Esc)">
@@ -5895,27 +6864,38 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {texturesReady && (
         <Suspense fallback={<LoadingFallback />}>
           <Canvas
-            camera={{ position: [6, 6, 8], fov: 42 }}
+            camera={{ position: [6, 6, 8], fov: 38 }}
             shadows="soft"
             dpr={[1, dprMax]}
             gl={{
               antialias: true,
               alpha: false,
               preserveDrawingBuffer: true,
-              toneMapping: THREE.ACESFilmicToneMapping,
-              toneMappingExposure: 0.95,
+              powerPreference: 'high-performance',
+              toneMapping: THREE.AgXToneMapping,
+              toneMappingExposure: 1.0,
               outputColorSpace: THREE.SRGBColorSpace,
             }}
             style={{ background: `linear-gradient(180deg, ${env.sky.zenithColor} 0%, ${env.sky.horizonColor} 100%)` }}
           >
-            <PerformanceMonitor onDecline={() => setDprMax(1)} />
+            <PerformanceMonitor
+              bounds={(rate) => (rate > 90 ? [55, 90] : [48, 60])}
+              flipflops={3}
+              onDecline={() => setDprMax((d) => Math.max(1, Math.round((d - 0.25) * 100) / 100))}
+              onIncline={() => setDprMax((d) => Math.min(dprCap, Math.round((d + 0.25) * 100) / 100))}
+              onFallback={() => setDprMax(1)}
+            />
             <CompassTracker needle={compassNeedleRef} />
             <CaptureHelper captureRef={captureRef} />
-            {!walkMode && <CameraRig req={camReq} />}
-            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} residents={residents} onResidentStatus={setResidentStatus} />
+            {!walkMode && <CinematicDirector req={flyReq} hud={tourHud} onTourEnd={endTour} />}
+            <ToneMapController photo={photoLook} />
+            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} />
             <RenderFXBoundary>
               {readTier() === 'high' && dprMax > 1 ? (
-                <EffectComposer multisampling={2}>
+                /* MSAA 4× resolves geometry edges BEFORE post, then SMAA cleans
+                   the shaded/sub-pixel edges — together they kill the jaggies on
+                   walls, furniture and the neighbourhood roofs. */
+                <EffectComposer multisampling={4}>
                   {/* N8AO — modern high-quality ambient occlusion (contact darkening
                       in corners / under furniture), a big step up from SSAO for the
                       grounded archviz look. Half-res + medium quality stays perf-safe. */}
@@ -5927,22 +6907,25 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
                     halfRes
                     color="#080810"
                   />
+                  {/* Contextual DOF — focal plane rides the orbit target; the
+                      CinematicDirector pulls focus during glides. */}
+                  <CinematicFocus walkMode={walkMode} />
                   <Bloom luminanceThreshold={0.88} intensity={0.24} mipmapBlur radius={0.55} />
-                  <HueSaturation saturation={0.05} />
+                  <HueSaturation saturation={0.08} />
                   <BrightnessContrast contrast={0.05} />
                   <ChromaticAberration offset={CA_OFFSET} radialModulation modulationOffset={0.35} />
                   <Vignette offset={0.3} darkness={0.42} />
-                  {/* SMAA — crisp subpixel edge AA on top of the light MSAA. */}
                   <SMAA />
                 </EffectComposer>
               ) : readTier() !== 'off' && (
-                /* Cheap depth/mood pass for mid tiers that would otherwise get a
-                   flat, unshaped scene. No SSAO / no normal pass — just two
-                   single-pass fullscreen shaders (contrast + vignette) that give
-                   the grounded "render" look without the AO cost that caused jank. */
-                <EffectComposer multisampling={0}>
+                /* Mid tier: MSAA 2× + SMAA so edges are smooth here too (the old
+                   pass had NO anti-aliasing → the "pixelig an Ecken" look), plus
+                   the cheap contrast/vignette mood shaders. No AO/bloom → still
+                   light enough for weaker GPUs. */
+                <EffectComposer multisampling={2}>
                   <BrightnessContrast contrast={0.07} brightness={-0.008} />
                   <Vignette offset={0.32} darkness={0.4} />
+                  <SMAA />
                 </EffectComposer>
               )}
             </RenderFXBoundary>
@@ -5950,15 +6933,37 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         </Suspense>
         )}
 
-        {/* Mobile material picker — collapsed pill-row at bottom on small screens */}
-        {!preview && (
-        <div className="md:hidden absolute top-2 left-1/2 -translate-x-1/2 z-10 flex flex-wrap gap-1 px-2 py-1.5 rounded-md surface-elevated">
-          <span className="text-[9px] uppercase tracking-wider text-[color:var(--muted)] self-center mr-1">Boden</span>
+        {/* Kino-Tour HUD — letterbox bars, room title, progress hairline. The
+            title/progress nodes are written imperatively by the director. */}
+        {tourActive && (
+          <div className="pointer-events-none absolute inset-0 z-20 animate-fade-in">
+            <div className="absolute top-0 left-0 right-0 h-[7%] bg-black/90" />
+            <div className="absolute bottom-0 left-0 right-0 h-[7%] bg-black/90" />
+            <div className="absolute bottom-[9%] left-5 sm:left-8 flex flex-col gap-0.5">
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.3em] text-[color:var(--accent)]">
+                {recording ? '● REC · OMEGA Kino-Tour' : 'OMEGA Kino-Tour'}
+              </span>
+              <span ref={(el) => { tourHud.current.title = el }} className="font-display text-xl sm:text-3xl text-white drop-shadow-lg" />
+            </div>
+            <div className="absolute top-[9%] right-5 sm:right-8 text-[9px] sm:text-[10px] uppercase tracking-wider text-white/60">
+              Tippen zum Beenden
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/10">
+              <div ref={(el) => { tourHud.current.bar = el }} className="h-full bg-[color:var(--accent)]" style={{ width: '0%' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Mobile material picker — collapsed pill-row at the bottom on small
+            screens (kept clear of the centered header, which it used to overlap). */}
+        {!preview && !tourActive && (
+        <div className="md:hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-10 flex flex-nowrap gap-1 px-2 py-1.5 rounded-md surface-elevated max-w-[94vw] overflow-x-auto">
+          <span className="text-[9px] uppercase tracking-wider text-[color:var(--muted)] self-center mr-1 shrink-0">Boden</span>
           {floorOptions.map((opt) => (
             <button
               key={opt.id}
               onClick={() => setFloorVariant(opt.id)}
-              className={`w-5 h-5 rounded border ${floorVariant === opt.id ? 'border-[color:var(--accent)]' : 'border-[color:var(--border)]'}`}
+              className={`w-5 h-5 shrink-0 rounded border ${floorVariant === opt.id ? 'border-[color:var(--accent)]' : 'border-[color:var(--border)]'}`}
               style={{ background: opt.swatch }}
               title={opt.label}
             />
@@ -5995,9 +7000,9 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         </div>
         )}
 
-        {/* Quality tip */}
+        {/* Quality tip — desktop only (overlaps the toolbar on phones) */}
         {!preview && (
-        <div className="absolute top-4 right-4 z-10 surface-elevated px-3 py-2 text-xs text-[color:var(--muted)] flex items-center gap-2">
+        <div className="absolute top-4 right-4 z-10 surface-elevated px-3 py-2 text-xs text-[color:var(--muted)] hidden md:flex items-center gap-2">
           <Camera size={12} className="text-[color:var(--accent)]" />
           PBR · Texturen · Soft Shadows · ACES
         </div>
@@ -6028,7 +7033,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             (Twinmotion/Forma feel). Presets fly the camera smoothly; capture
             grabs the composed frame; fullscreen expands the viewport. */}
         {!preview && (
-        <div className="absolute right-4 top-20 z-10 flex flex-col items-center gap-1 p-1 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
+        <div className="absolute right-2 sm:right-4 top-20 z-10 flex flex-col items-center gap-1 p-1 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
           {!walkMode && ([
             ['persp', Box], ['corner', Boxes], ['top', LayoutGrid], ['front', Square],
           ] as Array<[CamPreset, typeof Box]>).map(([preset, Icon]) => (
@@ -6036,7 +7041,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               key={preset}
               onClick={() => goPreset(preset)}
               title={CAM_PRESET_LABEL[preset]}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
                 activePreset === preset ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
               }`}
             >
@@ -6047,7 +7052,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             <button
               onClick={() => setShowHouse((v) => !v)}
               title={showHouse ? 'Eigenes Haus ausblenden (Puppenhaus)' : 'Eigenes Haus einblenden (Klinker-Außenansicht)'}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
                 showHouse ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
               }`}
             >
@@ -6056,9 +7061,56 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
           )}
           {!walkMode && (
             <button
+              onClick={() => { if (!canStack) { navigate('/#preise'); return } setStackView((v) => !v) }}
+              title={!canStack ? 'Etagen-Stack — ab Pro' : stackView ? 'Etagen-Stack ausblenden' : 'Etagen-Stack: alle Stockwerke übereinander'}
+              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
+                stackView ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
+              }`}
+            >
+              {canStack ? <Layers size={15} /> : <Lock size={15} />}
+            </button>
+          )}
+          {/* Bau-Studio — construction · stone colour · roof shape · roof colour */}
+          {!walkMode && showHouse && (
+            <div className="relative">
+              <button
+                onClick={() => { if (canFacade) setStudioOpen((v) => !v); else navigate('/#preise') }}
+                title={canFacade ? 'Bau-Studio: Fassade, Dach & Farben' : 'Bau-Studio — ab Max'}
+                className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
+                  studioOpen ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
+                }`}
+              >
+                {canFacade ? <Palette size={15} /> : <Lock size={15} />}
+              </button>
+              {canFacade && studioOpen && (
+                <div className="absolute right-full top-0 z-30 mr-2 w-56 origin-top-right animate-scale-in space-y-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--glass-bg)] p-3 shadow-xl backdrop-blur-xl">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--muted)]">Bau-Studio</div>
+                  <BauRow label="Bauart" options={FACADE_KINDS} active={houseStyle.facade} onPick={(id) => patchHouseStyle({ facade: id as HouseStyle['facade'] })} shape="chip" />
+                  <BauRow label="Steinfarbe" options={STONE_COLORS} active={STONE_COLORS.find((o) => o.swatch === houseStyle.facadeTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ facadeTint: STONE_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
+                  <BauRow label="Dachform" options={ROOF_KINDS} active={houseStyle.roof} onPick={(id) => patchHouseStyle({ roof: id as HouseStyle['roof'] })} shape="chip" />
+                  <BauRow label="Dachfarbe" options={ROOF_COLORS} active={ROOF_COLORS.find((o) => o.swatch === houseStyle.roofTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ roofTint: ROOF_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
+                  <button onClick={() => patchHouseStyle(DEFAULT_HOUSE_STYLE)} className="w-full rounded-md border border-[color:var(--border)] py-1 text-[11px] text-[color:var(--muted)] transition-colors hover:text-[color:var(--fg)]">Zurücksetzen</button>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Foto-Look — opt-in AgX tone mapping for maximum photorealism */}
+          {!walkMode && (
+            <button
+              onClick={() => setPhotoLook((v) => !v)}
+              title={photoLook ? 'Foto-Look aus (Brillant/ACES)' : 'Foto-Look an (AgX — natürlicher Kontrast)'}
+              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
+                photoLook ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
+              }`}
+            >
+              <Aperture size={15} />
+            </button>
+          )}
+          {!walkMode && (
+            <button
               onClick={() => setResidents((v) => (v + 1) % 3)}
               title={residents === 0 ? 'Virtuelle Bewohner einblenden' : residents === 1 ? 'Zweiten Bewohner hinzufügen' : 'Bewohner ausblenden'}
-              className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              className={`relative flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
                 residents > 0 ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
               }`}
             >
@@ -6074,14 +7126,14 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
           <button
             onClick={() => captureRef.current?.()}
             title="Screenshot speichern"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
+            className="flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
           >
             <ImageDown size={15} />
           </button>
           <button
             onClick={toggleFullscreen}
             title="Vollbild"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
+            className="flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
           >
             <Maximize2 size={15} />
           </button>
@@ -6091,7 +7143,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {/* Compass + scale — the reference's right-edge viewport widgets.
             The needle div is rotated imperatively by CompassTracker. */}
         {!preview && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2">
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
           <div className="relative flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
             <div ref={compassNeedleRef} className="flex flex-col items-center will-change-transform">
               <span className="text-[9px] font-semibold leading-none text-[color:var(--accent)]">N</span>

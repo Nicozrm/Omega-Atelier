@@ -34,5 +34,8 @@ export { Toolbar, ToolbarGroup } from './Toolbar'
 export { Dialog } from './Dialog'
 export type { DialogProps } from './Dialog'
 
+export { Menu } from './Menu'
+export type { MenuProps, MenuItemProps } from './Menu'
+
 export { useModalA11y } from './useModalA11y'
 export type { ModalA11yOptions } from './useModalA11y'

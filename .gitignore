@@ -6,6 +6,10 @@ node_modules
 dist
 build
 *.tsbuildinfo
+# tsc output of vite.config.ts — must never be committed, a stale
+# vite.config.js would silently shadow vite.config.ts at dev/build time
+vite.config.js
+vite.config.d.ts
 
 # Environment
 .env

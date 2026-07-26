@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="canonical" href="https://nobleframe.de/tools.html">
+<meta name="theme-color" content="#000000">
+<title>Tools – NobleFrame | Website-Analyse & Rechner</title>
+<meta name="description" content="Kostenlose NobleFrame-Tools: echte Website-Analyse per Google PageSpeed Insights mit professionellem Report sowie ROI-, Kosten- und Conversion-Rechner.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23000' width='32' height='32'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23C9A962' stroke-width='2'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23C9A962' stroke-width='1'/%3E%3C/svg%3E">
+<meta property="og:type" content="website"><meta property="og:site_name" content="NobleFrame">
+<meta property="og:title" content="Tools – NobleFrame"><meta property="og:url" content="https://nobleframe.de/tools.html">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--gold:#C9A962;--gold-light:#E8D5A3;--gold-dark:#8B7355;--black:#000;--white:#FAFAFA;--white-muted:rgba(250,250,250,.75);--white-subtle:rgba(250,250,250,.55);--gradient:linear-gradient(135deg,#C9A962 0%,#E8D5A3 50%,#C9A962 100%);--green:#22c55e;--amber:#f59e0b;--red:#ef4444}
+html{scroll-behavior:smooth;background:#000;color-scheme:dark}
+body{font-family:'Outfit',sans-serif;background:#000;color:var(--white);overflow-x:hidden;line-height:1.6;min-height:100vh}
+.bg-effects{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.ambient-glow{position:absolute;border-radius:50%;filter:blur(120px)}
+.glow-1{width:500px;height:500px;background:rgba(201,169,98,.06);top:-200px;right:-100px}
+.glow-2{width:400px;height:400px;background:rgba(201,169,98,.04);bottom:-150px;left:-100px}
+.grid-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(201,169,98,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(201,169,98,.012) 1px,transparent 1px);background-size:80px 80px}
+.nav-wrapper{position:fixed;top:0;left:0;width:100%;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(201,169,98,.1);transition:all .4s ease}
+.nav-wrapper.scrolled{background:rgba(0,0,0,.96)}
+.nav-main{display:flex;justify-content:space-between;align-items:center;padding:20px 60px}
+.logo{display:flex;align-items:center;gap:15px;text-decoration:none}
+.logo-icon{width:45px;height:45px}.logo-icon svg{width:100%;height:100%}
+.logo-text{font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:300;letter-spacing:8px;color:var(--white);text-transform:uppercase}
+.nav-links{display:flex;gap:4px;list-style:none}.nav-links>li{position:relative}
+.nav-links>li>a{position:relative;display:flex;align-items:center;padding:12px 16px;color:var(--white-muted);text-decoration:none;font-size:.82rem;font-weight:400;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;transition:color .35s ease,letter-spacing .35s ease}
+.nav-links>li>a::after{content:'';position:absolute;left:16px;right:16px;bottom:7px;height:1px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.65,0,.35,1)}
+.nav-links>li>a:hover{color:var(--gold-light);letter-spacing:2px}.nav-links>li>a:hover::after{transform:scaleX(1)}
+.nav-links>li>a.active{color:var(--gold-light)}.nav-links>li>a.active::after{transform:scaleX(1)}
+.nav-cta{display:flex;align-items:center;gap:8px;padding:13px 26px;background:var(--gold);color:var(--black);font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;text-decoration:none;transition:all .4s ease;border:1px solid var(--gold)}
+.nav-cta:hover{background:transparent;color:var(--gold)}
+.nav-mobile-toggle{display:none;flex-direction:column;gap:5px;padding:12px;background:transparent;border:1px solid rgba(201,169,98,.3);cursor:pointer;min-height:44px;min-width:44px;justify-content:center;align-items:center}
+.nav-mobile-toggle span{width:24px;height:2px;background:var(--gold);transition:all .3s ease}
+.nav-mobile-toggle.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+.nav-mobile-toggle.active span:nth-child(2){opacity:0}
+.nav-mobile-toggle.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+.mobile-menu{position:fixed;top:0;left:0;width:100%;height:100vh;background:rgba(0,0,0,.98);z-index:999;display:flex;flex-direction:column;padding:100px 40px 40px;opacity:0;visibility:hidden;transition:all .4s ease;overflow-y:auto}
+.mobile-menu.active{opacity:1;visibility:visible}
+.mobile-menu-section{margin-bottom:30px}
+.mobile-menu-section h5{font-size:.7rem;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(201,169,98,.15)}
+.mobile-menu-nav{counter-reset:m;display:flex;flex-direction:column}
+.mobile-menu-nav a{position:relative;font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--white);text-decoration:none;padding:14px 0 14px 44px;transition:all .3s ease;border-left:2px solid transparent;display:flex;align-items:center;min-height:44px}
+.mobile-menu-nav a::before{counter-increment:m;content:counter(m,decimal-leading-zero);position:absolute;left:14px;font-family:'Outfit',sans-serif;font-size:.7rem;letter-spacing:1px;color:var(--gold);opacity:.6;top:50%;transform:translateY(-50%)}
+.mobile-menu-nav a.active,.mobile-menu-nav a:hover{color:var(--gold);border-left-color:var(--gold);padding-left:50px}
+.mobile-menu-links{display:flex;flex-direction:column;gap:8px}
+.mobile-menu-links a{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--white);text-decoration:none;padding:10px 0;transition:color .3s ease}
+.mobile-menu-links a:hover{color:var(--gold)}
+.mobile-menu-cta{margin-top:auto;padding:18px 35px;background:var(--gold);color:var(--black);font-size:.9rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center}
+.page-hero{padding:175px 60px 30px;text-align:center;position:relative;z-index:10}
+.hero-badge{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;background:rgba(201,169,98,.08);border:1px solid rgba(201,169,98,.25);margin-bottom:28px;animation:fadeUp .8s ease .1s both}
+.hero-badge span{font-size:.72rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase}
+.hero-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.6rem,5.5vw,4.6rem);font-weight:300;line-height:1.1;margin-bottom:22px;animation:fadeUp .8s ease .25s both}
+.hero-title span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+.hero-subtitle{color:var(--white-muted);font-size:1.1rem;max-width:640px;margin:0 auto;line-height:1.75;animation:fadeUp .8s ease .4s both}
+@keyframes fadeUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+.audit{max-width:900px;margin:30px auto 0;padding:0 60px;position:relative;z-index:10}
+.audit-card{border:1px solid rgba(201,169,98,.2);background:rgba(201,169,98,.03);padding:44px;position:relative}
+.audit-card::before,.audit-card::after{content:'';position:absolute;width:30px;height:30px;border:1px solid var(--gold);opacity:.5}
+.audit-card::before{top:-1px;left:-1px;border-right:none;border-bottom:none}
+.audit-card::after{bottom:-1px;right:-1px;border-left:none;border-top:none}
+.audit-eyebrow{font-size:.72rem;color:var(--gold);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:12px;display:block}
+.audit-card h2{font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:400;margin-bottom:8px}
+.audit-card p.lead{color:var(--white-muted);font-size:.95rem;margin-bottom:26px;line-height:1.7}
+.audit-form{display:flex;gap:12px;flex-wrap:wrap}
+.audit-input{flex:1;min-width:240px;background:rgba(0,0,0,.4);border:1px solid rgba(201,169,98,.25);padding:16px 18px;color:var(--white);font-family:'Outfit',sans-serif;font-size:1rem;transition:all .3s ease}
+.audit-input:focus{outline:none;border-color:var(--gold);background:rgba(201,169,98,.05);box-shadow:0 0 0 3px rgba(201,169,98,.08)}
+.audit-input::placeholder{color:var(--white-subtle)}
+.audit-btn{padding:16px 32px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.82rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.audit-btn:hover{background:transparent;color:var(--gold)}
+.audit-btn:disabled{opacity:.55;cursor:not-allowed}
+.audit-btn svg{width:17px;height:17px}
+.audit-note{margin-top:14px;font-size:.76rem;color:var(--white-subtle);display:flex;align-items:center;gap:8px}
+.audit-note svg{width:15px;height:15px;stroke:var(--gold);flex-shrink:0}
+.audit-error{margin-top:18px;padding:14px 16px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#fca5a5;font-size:.88rem;display:none;align-items:center;gap:10px}
+.audit-error.show{display:flex}
+.audit-loading{display:none;margin-top:30px;text-align:center;padding:30px}
+.audit-loading.show{display:block}
+.spinner{width:54px;height:54px;margin:0 auto 18px;border:2px solid rgba(201,169,98,.2);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.audit-loading p{color:var(--white-muted);font-size:.9rem}
+.audit-loading .ld-url{color:var(--gold-light);font-family:'JetBrains Mono',monospace;font-size:.82rem;margin-top:6px;word-break:break-all}
+.report-wrap{display:none;max-width:900px;margin:40px auto 0;padding:0 20px;position:relative;z-index:10}
+.report-wrap.show{display:block;animation:fadeUp .6s ease both}
+.report-actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:18px}
+.report-actions .ra-label{font-size:.74rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase}
+.report-actions .ra-btns{display:flex;gap:10px}
+.ra-btn{padding:12px 22px;font-family:'Outfit',sans-serif;font-size:.76rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .3s ease;border:1px solid var(--gold);background:transparent;color:var(--gold);display:flex;align-items:center;gap:8px}
+.ra-btn.primary{background:var(--gold);color:var(--black)}
+.ra-btn:hover{background:var(--gold-light);color:var(--black);border-color:var(--gold-light)}
+.ra-btn svg{width:15px;height:15px}
+.letter{background:#fff;color:#333;font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;line-height:1.6;padding:18mm 18mm 14mm;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.letter .lt-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:7mm;border-bottom:2px solid #C9A962;margin-bottom:9mm}
+.letter .lt-logo{display:flex;align-items:center;gap:13px}
+.letter .lt-logo-mark{width:44px;height:44px;border:2px solid #C9A962;display:flex;align-items:center;justify-content:center;position:relative}
+.letter .lt-logo-mark::before{content:'';position:absolute;width:24px;height:24px;border:1.5px solid #C9A962;opacity:.6}
+.letter .lt-logo-text{font-family:Georgia,serif;font-size:20px;font-weight:300;letter-spacing:6px;color:#000;text-transform:uppercase}
+.letter .lt-contact{text-align:right;font-size:8.5pt;color:#666;line-height:1.7}
+.letter .lt-contact strong{color:#C9A962}
+.letter .lt-meta{display:flex;justify-content:space-between;font-size:9pt;color:#777;margin-bottom:7mm}
+.letter .lt-subject{font-size:15pt;font-weight:600;color:#000;margin-bottom:2mm}
+.letter .lt-url{font-family:Consolas,monospace;font-size:10pt;color:#C9A962;margin-bottom:7mm;word-break:break-all}
+.letter h3.lt-h{font-size:11pt;font-weight:600;color:#000;margin:7mm 0 3mm;padding-bottom:2mm;border-bottom:1px solid #eee;text-transform:uppercase;letter-spacing:1px}
+.score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-bottom:3mm}
+.score-box{border:1px solid #e7e7e7;padding:5mm 3mm;text-align:center}
+.score-ring{--v:0;--c:#C9A962;width:62px;height:62px;border-radius:50%;margin:0 auto 3mm;display:flex;align-items:center;justify-content:center;background:conic-gradient(var(--c) calc(var(--v)*1%),#eee 0);position:relative}
+.score-ring::before{content:'';position:absolute;inset:6px;background:#fff;border-radius:50%}
+.score-ring span{position:relative;font-weight:700;font-size:15pt;color:#222}
+.score-label{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.5px;line-height:1.3}
+.overall-line{display:flex;align-items:center;gap:14px;padding:4mm 5mm;background:rgba(201,169,98,.06);border-left:3px solid #C9A962;margin-bottom:3mm}
+.overall-line .ov-num{font-family:Georgia,serif;font-size:30pt;font-weight:700;color:#C9A962;line-height:1}
+.overall-line .ov-txt{font-size:9.5pt;color:#444}.overall-line .ov-txt strong{color:#000}
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:3mm;margin-bottom:2mm}
+.metric{border:1px solid #eee;padding:3.5mm 2mm;text-align:center}
+.metric .m-val{font-weight:700;font-size:11pt;color:#222}
+.metric .m-lab{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-top:1.5mm}
+.rec-list{list-style:none}
+.rec-list li{padding:3mm 0;border-bottom:1px solid #f0f0f0;display:flex;gap:10px;align-items:flex-start;font-size:9.5pt;color:#444}
+.rec-list li .rc-dot{width:7px;height:7px;background:#C9A962;border-radius:50%;margin-top:5px;flex-shrink:0}
+.rec-list li strong{color:#000;font-weight:600}
+.lt-closing{margin-top:7mm;font-size:9.5pt;color:#444;line-height:1.7}
+.lt-sign{margin-top:7mm}.lt-sign .s-name{font-weight:600;color:#000}.lt-sign .s-role{font-size:9pt;color:#C9A962}
+.lt-footer{margin-top:9mm;padding-top:4mm;border-top:1px solid #C9A962;font-size:7.5pt;color:#999;display:flex;justify-content:space-between;gap:10px}
+.lt-footer .f-c{text-align:center}.lt-footer .f-r{text-align:right}
+.calc-section{max-width:1180px;margin:90px auto 0;padding:0 60px;position:relative;z-index:10}
+.calc-head{text-align:center;margin-bottom:44px}
+.calc-head .section-eyebrow{font-size:.72rem;color:var(--gold);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:14px;display:block}
+.calc-head h2{font-family:'Cormorant Garamond',serif;font-size:clamp(1.9rem,3.5vw,2.6rem);font-weight:300}
+.calc-head h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.calc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
+.calc-card{border:1px solid rgba(201,169,98,.14);background:rgba(201,169,98,.02);padding:34px;transition:border-color .3s ease}
+.calc-card:hover{border-color:rgba(201,169,98,.3)}
+.calc-card h3{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.calc-card h3 svg{width:24px;height:24px;stroke:var(--gold);flex-shrink:0}
+.calc-card .cd{color:var(--white-muted);font-size:.86rem;margin-bottom:22px;line-height:1.6}
+.cf{display:flex;flex-direction:column;gap:14px}
+.cf label{font-size:.74rem;color:var(--white-subtle);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;display:block}
+.cf input,.cf select{width:100%;background:rgba(0,0,0,.4);border:1px solid rgba(201,169,98,.2);padding:12px 14px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.92rem;transition:all .3s ease}
+.cf input:focus,.cf select:focus{outline:none;border-color:var(--gold);background:rgba(201,169,98,.05)}
+.cf select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23C9A962'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px}
+.cf select option{background:#0a0a0a;color:var(--white)}
+.cf-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.calc-btn{margin-top:4px;padding:14px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease}
+.calc-btn:hover{background:transparent;color:var(--gold)}
+.calc-result{display:none;margin-top:22px;padding-top:22px;border-top:1px solid rgba(201,169,98,.15)}
+.calc-result.active{display:block;animation:fadeUp .4s ease both}
+.res-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.res-item{text-align:center;padding:16px 8px;background:rgba(201,169,98,.04);border:1px solid rgba(201,169,98,.12)}
+.res-val{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:600;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;line-height:1.1}
+.res-lab{font-size:.66rem;color:var(--white-subtle);letter-spacing:.5px;text-transform:uppercase;margin-top:6px}
+.res-msg{font-size:.85rem;color:var(--white-muted);line-height:1.6;text-align:center}
+.tools-cta{max-width:760px;margin:90px auto 0;text-align:center;padding:60px 40px;border:1px solid rgba(201,169,98,.15);background:linear-gradient(180deg,transparent,rgba(201,169,98,.04));position:relative;z-index:10}
+.tools-cta h3{font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:400;margin-bottom:14px}
+.tools-cta p{color:var(--white-muted);margin-bottom:28px}
+.tools-cta-btn{display:inline-flex;align-items:center;gap:10px;padding:15px 36px;background:var(--gold);color:var(--black);font-size:.82rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border:1px solid var(--gold);transition:all .4s ease}
+.tools-cta-btn:hover{background:transparent;color:var(--gold)}
+.tools-cta-btn svg{width:16px;height:16px;transition:transform .35s ease}.tools-cta-btn:hover svg{transform:translateX(5px)}
+.footer{padding:90px 60px 40px;border-top:1px solid rgba(201,169,98,.1);position:relative;z-index:10;margin-top:90px}
+.footer-container{max-width:1400px;margin:0 auto}
+.footer-main{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr;gap:60px;margin-bottom:60px}
+.footer-brand{max-width:300px}
+.footer-logo{display:flex;align-items:center;gap:15px;margin-bottom:20px}
+.footer-logo-icon{width:40px;height:40px}.footer-logo-icon svg{width:100%;height:100%}
+.footer-logo-text{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:300;letter-spacing:6px;color:var(--white)}
+.footer-tagline{color:var(--white-muted);font-size:.9rem;line-height:1.7}
+.footer-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:25px;font-weight:500}
+.footer-links{list-style:none;display:flex;flex-direction:column;gap:14px}
+.footer-links a{color:var(--white-muted);text-decoration:none;font-size:.9rem;transition:all .3s ease;display:inline-block}
+.footer-links a:hover{color:var(--gold);transform:translateX(5px)}
+.newsletter-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:15px;font-weight:500}
+.newsletter-desc{color:var(--white-muted);font-size:.85rem;margin-bottom:20px}
+.newsletter-form{display:flex;flex-direction:column;gap:15px}
+.newsletter-input{background:rgba(201,169,98,.05);border:1px solid rgba(201,169,98,.2);padding:14px 18px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.9rem;transition:all .3s ease}
+.newsletter-input:focus{outline:none;border-color:var(--gold)}.newsletter-input::placeholder{color:var(--white-subtle)}
+.checkbox-wrapper{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+.checkbox-wrapper input{display:none}
+.custom-checkbox{width:18px;height:18px;border:1px solid rgba(201,169,98,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .3s ease}
+.checkbox-wrapper input:checked+.custom-checkbox{background:var(--gold);border-color:var(--gold)}
+.custom-checkbox svg{width:12px;height:12px;stroke:var(--black);opacity:0;transition:opacity .2s ease}
+.checkbox-wrapper input:checked+.custom-checkbox svg{opacity:1}
+.checkbox-label{font-size:.8rem;color:var(--white-muted);line-height:1.4}.checkbox-label a{color:var(--gold);text-decoration:none}
+.newsletter-btn{padding:14px 30px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease}
+.newsletter-btn:hover{background:transparent;color:var(--gold)}
+.form-message{padding:12px 15px;font-size:.85rem;margin-top:10px;display:none}
+.form-message.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22c55e}
+.footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:40px;border-top:1px solid rgba(201,169,98,.1)}
+.copyright{color:var(--white-subtle);font-size:.85rem}.copyright span{color:var(--gold)}
+.legal-links{display:flex;gap:30px}
+.legal-links a{color:var(--white-subtle);text-decoration:none;font-size:.8rem;transition:color .3s ease}
+.legal-links a:hover{color:var(--gold)}
+.cookie-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,10,.98);border-top:1px solid rgba(201,169,98,.2);padding:25px 40px;z-index:10000;transform:translateY(100%);transition:transform .5s cubic-bezier(.25,.46,.45,.94);backdrop-filter:blur(20px)}
+.cookie-banner.show{transform:translateY(0)}
+.cookie-content{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:30px;flex-wrap:wrap}
+.cookie-text{flex:1;min-width:300px}
+.cookie-text h4{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold);margin-bottom:8px}
+.cookie-text p{color:var(--white-muted);font-size:.9rem;margin:0}.cookie-text a{color:var(--gold);text-decoration:none}
+.cookie-buttons{display:flex;gap:15px;flex-wrap:wrap}
+.cookie-btn{padding:14px 28px;font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:none;cursor:pointer;transition:all .3s}
+.cookie-accept{background:var(--gold);color:var(--black)}.cookie-accept:hover{background:var(--gold-light)}
+.cookie-decline{background:transparent;border:1px solid rgba(201,169,98,.3);color:var(--white-muted)}
+.cookie-decline:hover{border-color:var(--gold);color:var(--gold)}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+@media(max-width:1366px){.nav-main{padding:18px 36px}.nav-links{gap:0}.nav-links>li>a{padding:11px 11px;font-size:.78rem;letter-spacing:.8px}.nav-links>li>a::after{left:11px;right:11px}.nav-links>li>a:hover{letter-spacing:1.1px}.nav-cta{padding:12px 20px;letter-spacing:1.5px}.logo-text{letter-spacing:5px}}
+@media(max-width:1024px){.nav-links,.nav-cta{display:none}.nav-mobile-toggle{display:flex}.nav-main{padding:15px 30px}.page-hero{padding:150px 40px 20px}.audit{padding:0 40px}.calc-section{padding:0 40px}.calc-grid{grid-template-columns:1fr}}
+@media(max-width:768px){.nav-main{padding:15px 20px}.logo-icon{width:35px;height:35px}.logo-text{font-size:1.1rem;letter-spacing:4px}.page-hero{padding:130px 22px 10px}.audit{padding:0 20px}.audit-card{padding:28px 20px}.audit-btn{width:100%;justify-content:center}.calc-section{padding:0 20px}.calc-card{padding:24px 20px}.cf-row{grid-template-columns:1fr}.letter{padding:12mm 7mm 10mm;font-size:10pt}.score-grid{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:1fr 1fr 1fr}.lt-footer{flex-direction:column;gap:4px}.lt-footer .f-c,.lt-footer .f-r{text-align:left}.footer{padding:60px 20px 30px}.footer-main{grid-template-columns:1fr;gap:30px}.footer-bottom{flex-direction:column;gap:20px;text-align:center}.legal-links{flex-wrap:wrap;justify-content:center;gap:15px}.cookie-banner{padding:20px}.cookie-content{flex-direction:column;text-align:center}.cookie-buttons{justify-content:center;width:100%}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}.reveal{opacity:1;transform:none}}
+@media print{body{background:#fff!important}body *{visibility:hidden!important}#reportWrap,#reportWrap *{visibility:visible!important}#reportWrap{position:absolute;left:0;top:0;width:100%;margin:0;padding:0}.report-actions{display:none!important}.letter{box-shadow:none!important;padding:14mm 16mm}@page{size:A4;margin:0}}
+</style>
+    <meta property="og:image" content="https://nobleframe.de/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:image" content="https://nobleframe.de/og-image.png">
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://nobleframe.de/"}, {"@type": "ListItem", "position": 2, "name": "Tools", "item": "https://nobleframe.de/tools.html"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+    <link rel="icon" href="/favicon/favicon.ico" sizes="32x32">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <script defer src="nf-interactions.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#hauptinhalt">Zum Inhalt springen</a>
+<div class="bg-effects"><div class="ambient-glow glow-1"></div><div class="ambient-glow glow-2"></div><div class="grid-overlay"></div></div>
+<div class="nav-wrapper" id="navWrapper"><nav class="nav-main">
+<a href="index.html" class="logo"><div class="logo-icon"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/><rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.6"/><line x1="50" y1="5" x2="50" y2="95" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/><line x1="5" y1="50" x2="95" y2="50" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/></svg></div><span class="logo-text">NobleFrame</span></a>
+<ul class="nav-links"><li><a href="index.html">Home</a></li><li><a href="leistungen.html">Leistungen</a></li><li><a href="referenzen.html">Referenzen</a></li><li><a href="showcase.html">Showcase</a></li><li><a href="tools.html" class="active" aria-current="page">Tools</a></li><li><a href="about.html">Über Uns</a></li><li><a href="kontakt.html">Kontakt</a></li></ul>
+<a href="kontakt.html" class="nav-cta">Projekt anfragen</a>
+<button class="nav-mobile-toggle" id="navMobileToggle" aria-label="Menü"><span></span><span></span><span></span></button>
+</nav></div>
+<div class="mobile-menu" id="mobileMenu">
+<div class="mobile-menu-section"><h5>Navigation</h5><div class="mobile-menu-nav"><a href="index.html">Home</a><a href="leistungen.html">Leistungen</a><a href="referenzen.html">Referenzen</a><a href="showcase.html">Showcase</a><a href="tools.html" class="active" aria-current="page">Tools</a><a href="about.html">Über Uns</a><a href="kontakt.html">Kontakt</a></div></div>
+<div class="mobile-menu-section"><h5>Direkt erreichen</h5><div class="mobile-menu-links"><a href="tel:+4915292612795">+49 152 92612795</a><a href="mailto:info@nobleframe.de">info@nobleframe.de</a></div></div>
+<a href="kontakt.html" class="mobile-menu-cta">Projekt anfragen</a>
+</div>
+<header class="page-hero" id="hauptinhalt" tabindex="-1">
+<div class="hero-badge"><span>NobleFrame Tools</span></div>
+<h1 class="hero-title">Werkzeuge mit <span>echtem Mehrwert</span></h1>
+<p class="hero-subtitle">Analysieren Sie Ihre Website mit echten Performance-Daten von Google – und erhalten Sie einen professionellen Report. Plus Rechner für ROI, Kosten und Conversion.</p>
+</header>
+<section class="audit"><div class="audit-card">
+<span class="audit-eyebrow">Website-Analyse</span>
+<h2>Wie gut ist Ihre Website wirklich?</h2>
+<p class="lead">Geben Sie Ihre URL ein – wir prüfen Performance, SEO, Barrierefreiheit und Best Practices mit echten Lighthouse-Daten von Google PageSpeed Insights und erstellen Ihren Report.</p>
+<form class="audit-form" id="auditForm" novalidate>
+<input type="text" class="audit-input" id="auditUrl" placeholder="z. B. nobleframe.de oder https://ihre-website.de" autocomplete="url">
+<button type="submit" class="audit-btn" id="auditBtn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Analysieren</button>
+</form>
+<div class="audit-note"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Echte Daten von Google · die Analyse kann 10–30 Sekunden dauern.</div>
+<div class="audit-error" id="auditError"></div>
+<div class="audit-loading" id="auditLoading"><div class="spinner"></div><p>Ihre Website wird analysiert …</p><p class="ld-url" id="loadingUrl"></p></div>
+</div></section>
+<div class="report-wrap" id="reportWrap">
+<div class="report-actions"><span class="ra-label">Ihr Analyse-Report</span><div class="ra-btns">
+<button class="ra-btn" id="newAnalysisBtn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>Neue Analyse</button>
+<button class="ra-btn primary" id="printBtn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>Als PDF speichern</button>
+</div></div>
+<div class="letter" id="letter">
+<div class="lt-header"><div class="lt-logo"><div class="lt-logo-mark"></div><span class="lt-logo-text">NobleFrame</span></div>
+<div class="lt-contact"><strong>NobleFrame</strong><br>Premium Digital Atelier<br><br>info@nobleframe.de<br>+49 152 92612795<br>nobleframe.de</div></div>
+<div class="lt-meta"><span>Automatisierte Website-Analyse</span><span id="ltDate"></span></div>
+<div class="lt-subject">Website-Analyse &amp; Potenzial-Report</div>
+<div class="lt-url" id="ltUrl"></div>
+<h3 class="lt-h">Gesamtbewertung</h3>
+<div class="overall-line"><span class="ov-num" id="ovNum">–</span><span class="ov-txt" id="ovTxt"></span></div>
+<div class="score-grid" id="scoreGrid"></div>
+<h3 class="lt-h">Kernmetriken (mobil)</h3>
+<div class="metrics" id="metrics"></div>
+<h3 class="lt-h">Empfehlungen &amp; Optimierungspotenzial</h3>
+<ul class="rec-list" id="recList"></ul>
+<div class="lt-closing" id="ltClosing"></div>
+<div class="lt-sign"><div class="s-name">Nico Zimmermann</div><div class="s-role">Gründer &amp; Geschäftsführung, NobleFrame</div></div>
+<div class="lt-footer"><div class="f-l">NobleFrame<br>Premium Digital Atelier</div><div class="f-c">info@nobleframe.de<br>nobleframe.de</div><div class="f-r">Analyse-Engine:<br>Google Lighthouse</div></div>
+</div></div>
+<section class="calc-section">
+<div class="calc-head reveal"><span class="section-eyebrow">Weitere Tools</span><h2>Rechner für Ihre <span>Entscheidung</span></h2></div>
+<div class="calc-grid">
+<div class="calc-card reveal"><h3><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>ROI-Rechner</h3>
+<p class="cd">Wann rentiert sich Ihre Investition in eine neue Website?</p>
+<form class="cf" id="roiForm">
+<div><label>Investition (€)</label><input type="number" id="roiInvestment" placeholder="z. B. 15000" required></div>
+<div class="cf-row"><div><label>Umsatz / Monat (€)</label><input type="number" id="roiCurrentRevenue" placeholder="z. B. 50000" required></div><div><label>Steigerung (%)</label><input type="number" id="roiIncrease" placeholder="z. B. 15" required></div></div>
+<div><label>Gewinnmarge (%)</label><input type="number" id="roiMargin" placeholder="z. B. 30" required></div>
+<button type="submit" class="calc-btn">ROI berechnen</button></form>
+<div class="calc-result" id="roiResult"><div class="res-grid">
+<div class="res-item"><span class="res-val" id="roiMonthlyProfit">0€</span><span class="res-lab">Mehr-Gewinn / Monat</span></div>
+<div class="res-item"><span class="res-val" id="roiPayback">0</span><span class="res-lab">Monate bis Amortisation</span></div>
+<div class="res-item"><span class="res-val" id="roiYearlyProfit">0€</span><span class="res-lab">Mehr-Gewinn / Jahr</span></div>
+<div class="res-item"><span class="res-val" id="roiPercent">0%</span><span class="res-lab">ROI nach 12 Monaten</span></div>
+</div><p class="res-msg" id="roiMessage"></p></div></div>
+<div class="calc-card reveal"><h3><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m-6 4h6m-6 4h4M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>Projektkosten-Schätzer</h3>
+<p class="cd">Eine erste, unverbindliche Orientierung für Ihr Vorhaben.</p>
+<form class="cf" id="costForm">
+<div><label>Projekttyp</label><select id="costType"><option value="landing">Landing Page</option><option value="corporate">Unternehmens-Website</option><option value="shop">Online-Shop</option><option value="webapp">Web-App</option><option value="relaunch">Relaunch</option></select></div>
+<div class="cf-row"><div><label>Umfang</label><select id="costPages"><option value="small">Klein</option><option value="medium" selected>Mittel</option><option value="large">Groß</option><option value="xlarge">Sehr groß</option></select></div><div><label>Design-Level</label><select id="costDesign"><option value="standard">Standard</option><option value="premium" selected>Premium</option><option value="luxury">Luxury</option></select></div></div>
+<div class="cf-row"><div><label>Integrationen</label><select id="costIntegrations"><option value="none">Keine</option><option value="basic">Basis</option><option value="advanced">Erweitert</option><option value="custom">Individuell</option></select></div><div><label>Zeitrahmen</label><select id="costTimeline"><option value="relaxed">Entspannt</option><option value="standard" selected>Standard</option><option value="fast">Schnell</option><option value="urgent">Express</option></select></div></div>
+<button type="submit" class="calc-btn">Kosten schätzen</button></form>
+<div class="calc-result" id="costResult"><div class="res-grid">
+<div class="res-item"><span class="res-val" id="costMin">0€</span><span class="res-lab">ab ca.</span></div>
+<div class="res-item"><span class="res-val" id="costMax">0€</span><span class="res-lab">bis ca.</span></div>
+<div class="res-item"><span class="res-val" id="costDuration">0</span><span class="res-lab">Wochen Dauer</span></div>
+<div class="res-item"><span class="res-val" id="costMonthly">0€</span><span class="res-lab">Betrieb / Monat</span></div>
+</div><p class="res-msg" id="costMessage"></p></div></div>
+<div class="calc-card reveal"><h3><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>Conversion-Rechner</h3>
+<p class="cd">Wie viel Umsatz steckt in einer besseren Conversion-Rate?</p>
+<form class="cf" id="conversionForm">
+<div class="cf-row"><div><label>Besucher / Monat</label><input type="number" id="convVisitors" placeholder="z. B. 10000" required></div><div><label>Ø Bestellwert (€)</label><input type="number" id="convAov" placeholder="z. B. 80" required></div></div>
+<div class="cf-row"><div><label>Aktuelle Rate (%)</label><input type="number" step="0.1" id="convCurrent" placeholder="z. B. 1.5" required></div><div><label>Ziel-Rate (%)</label><input type="number" step="0.1" id="convTarget" placeholder="z. B. 3.0" required></div></div>
+<button type="submit" class="calc-btn">Potenzial berechnen</button></form>
+<div class="calc-result" id="conversionResult"><div class="res-grid">
+<div class="res-item"><span class="res-val" id="convCurrentRev">0€</span><span class="res-lab">Umsatz aktuell / Monat</span></div>
+<div class="res-item"><span class="res-val" id="convTargetRev">0€</span><span class="res-lab">Umsatz Ziel / Monat</span></div>
+<div class="res-item"><span class="res-val" id="convDiffMonth">0€</span><span class="res-lab">Mehr-Umsatz / Monat</span></div>
+<div class="res-item"><span class="res-val" id="convDiffYear">0€</span><span class="res-lab">Mehr-Umsatz / Jahr</span></div>
+</div><p class="res-msg" id="conversionMessage"></p></div></div>
+<div class="calc-card reveal"><h3><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>PageSpeed-Impact</h3>
+<p class="cd">Was kostet Sie eine langsame Ladezeit an Conversions?</p>
+<form class="cf" id="speedForm">
+<div class="cf-row"><div><label>Aktuelle Ladezeit (s)</label><input type="number" step="0.1" id="spdCurrent" placeholder="z. B. 4.5" required></div><div><label>Ziel-Ladezeit (s)</label><input type="number" step="0.1" id="spdTarget" placeholder="z. B. 1.5" required></div></div>
+<div class="cf-row"><div><label>Besucher / Monat</label><input type="number" id="spdVisitors" placeholder="z. B. 10000" required></div><div><label>Ø Bestellwert (€)</label><input type="number" id="spdAov" placeholder="z. B. 80" required></div></div>
+<button type="submit" class="calc-btn">Impact berechnen</button></form>
+<div class="calc-result" id="speedResult"><div class="res-grid">
+<div class="res-item"><span class="res-val" id="spdConvUplift">0%</span><span class="res-lab">geschätztes Conv.-Plus</span></div>
+<div class="res-item"><span class="res-val" id="spdSeconds">0s</span><span class="res-lab">schneller</span></div>
+<div class="res-item"><span class="res-val" id="spdRevMonth">0€</span><span class="res-lab">Mehr-Umsatz / Monat</span></div>
+<div class="res-item"><span class="res-val" id="spdRevYear">0€</span><span class="res-lab">Mehr-Umsatz / Jahr</span></div>
+</div><p class="res-msg" id="speedMessage"></p></div></div>
+</div></section>
+<section class="tools-cta"><h3>Bereit, das Potenzial zu heben?</h3><p>Die Zahlen sprechen für sich – lassen Sie uns über die Umsetzung sprechen.</p><a href="kontakt.html" class="tools-cta-btn">Projekt anfragen <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg></a></section>
+<footer class="footer"><div class="footer-container"><div class="footer-main">
+<div class="footer-brand"><div class="footer-logo"><div class="footer-logo-icon"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/><rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.7"/></svg></div><span class="footer-logo-text">NOBLEFRAME</span></div><p class="footer-tagline">Premium Digital Atelier für Websites, Apps & Growth Solutions.</p></div>
+<div class="footer-section"><h4>Navigation</h4><ul class="footer-links"><li><a href="leistungen.html">Leistungen</a></li><li><a href="referenzen.html">Referenzen</a></li><li><a href="about.html">Über Uns</a></li><li><a href="kontakt.html">Kontakt</a></li></ul></div>
+<div class="footer-section"><h4>Mehr</h4><ul class="footer-links"><li><a href="showcase.html">Showcase</a></li><li><a href="tools.html">Tools</a></li><li><a href="faq.html">FAQ</a></li><li><a href="karriere.html">Karriere</a></li></ul></div>
+<div class="newsletter-section"><h4>Newsletter</h4><p class="newsletter-desc">Exklusive Insights und Updates zu unseren Projekten.</p>
+<form class="newsletter-form" id="newsletterForm"><input type="email" name="email" class="newsletter-input" placeholder="ihre@email.de" required>
+<label class="checkbox-wrapper"><input type="checkbox" name="privacy" required><span class="custom-checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="checkbox-label">Ich akzeptiere die <a href="datenschutz.html">Datenschutzerklärung</a></span></label>
+<button type="submit" class="newsletter-btn">Newsletter abonnieren</button><div class="form-message" id="newsletterMessage"></div></form></div>
+</div><div class="footer-bottom"><p class="copyright">© 2026 <span>NobleFrame</span>. Alle Rechte vorbehalten.</p><div class="legal-links"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a><a href="agb.html">AGB</a></div></div></div></footer>
+<div class="cookie-banner" id="cookieBanner"><div class="cookie-content"><div class="cookie-text"><h4>Cookie-Einstellungen</h4><p>Wir verwenden technisch notwendige Cookies für den Betrieb dieser Website. <a href="datenschutz.html">Mehr erfahren</a></p></div><div class="cookie-buttons"><button class="cookie-btn cookie-accept" id="cookieAccept">Alle akzeptieren</button><button class="cookie-btn cookie-decline" id="cookieDecline">Nur notwendige</button></div></div></div>
+<script>
+const PSI_API_KEY = ""; // optional: hier einen Google-PageSpeed-API-Key eintragen für höhere Kontingente
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const navWrapper = document.getElementById('navWrapper');
+window.addEventListener('scroll', () => navWrapper.classList.toggle('scrolled', window.scrollY > 50));
+const navMobileToggle = document.getElementById('navMobileToggle');
+const mobileMenu = document.getElementById('mobileMenu');
+navMobileToggle.addEventListener('click', () => { navMobileToggle.classList.toggle('active'); mobileMenu.classList.toggle('active'); document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : ''; });
+mobileMenu.querySelectorAll('a').forEach(l => l.addEventListener('click', () => { navMobileToggle.classList.remove('active'); mobileMenu.classList.remove('active'); document.body.style.overflow = ''; }));
+const io = new IntersectionObserver((es) => { es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+function eur(n){ if(!isFinite(n)) return '–'; return new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:0}).format(Math.round(n)); }
+
+/* ===== WEBSITE-ANALYSE via PageSpeed Insights ===== */
+const auditForm = document.getElementById('auditForm');
+const auditUrl = document.getElementById('auditUrl');
+const auditBtn = document.getElementById('auditBtn');
+const auditError = document.getElementById('auditError');
+const auditLoading = document.getElementById('auditLoading');
+const reportWrap = document.getElementById('reportWrap');
+function showAuditError(msg){ auditError.innerHTML = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:18px;height:18px;stroke:#ef4444;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/></svg><span>'+msg+'</span>'; auditError.classList.add('show'); }
+function normUrl(v){ v=(v||'').trim(); if(!v) return ''; if(!/^https?:\/\//i.test(v)) v='https://'+v; try{ new URL(v); return v; }catch(e){ return ''; } }
+function scoreColor(s){ return s>=90?'#22c55e':s>=50?'#f59e0b':'#ef4444'; }
+
+auditForm.addEventListener('submit', async function(e){
+    e.preventDefault();
+    auditError.classList.remove('show');
+    const url = normUrl(auditUrl.value);
+    if(!url){ showAuditError('Bitte geben Sie eine gültige URL ein (z. B. nobleframe.de).'); return; }
+    reportWrap.classList.remove('show');
+    auditLoading.classList.add('show');
+    document.getElementById('loadingUrl').textContent = url;
+    auditBtn.disabled = true;
+    try {
+        const params = new URLSearchParams({ url: url, strategy: 'mobile' });
+        ['performance','seo','accessibility','best-practices'].forEach(c => params.append('category', c));
+        if(PSI_API_KEY) params.append('key', PSI_API_KEY);
+        const res = await fetch('https://www.googleapis.com/pagespeedonline/v5/runPagespeed?' + params.toString());
+        if(!res.ok){
+            const err = await res.json().catch(()=>({}));
+            throw new Error((err.error && err.error.message) || ('HTTP ' + res.status));
+        }
+        const data = await res.json();
+        if(!data.lighthouseResult) throw new Error('Keine Analyse-Daten erhalten.');
+        renderReport(url, data);
+        auditLoading.classList.remove('show');
+        reportWrap.classList.add('show');
+        reportWrap.scrollIntoView({ behavior:'smooth', block:'start' });
+    } catch(err){
+        auditLoading.classList.remove('show');
+        let m = err.message || 'Unbekannter Fehler.';
+        if(/Lighthouse returned error|FAILED_DOCUMENT_REQUEST|DNS|ERRORED_DOCUMENT_REQUEST/i.test(m)) m = 'Die Website konnte nicht erreicht oder geladen werden. Bitte URL prüfen.';
+        if(/quota|rate|429/i.test(m)) m = 'Aktuell zu viele Anfragen an Google. Bitte in einer Minute erneut versuchen.';
+        showAuditError('Analyse fehlgeschlagen: ' + m);
+    } finally {
+        auditBtn.disabled = false;
+    }
+});
+
+function renderReport(url, data){
+    const lh = data.lighthouseResult;
+    const cat = lh.categories || {};
+    const pct = c => (cat[c] && cat[c].score!=null) ? Math.round(cat[c].score*100) : null;
+    const scores = [
+        { k:'performance', label:'Performance', v:pct('performance') },
+        { k:'seo', label:'SEO', v:pct('seo') },
+        { k:'accessibility', label:'Barriere&shy;freiheit', v:pct('accessibility') },
+        { k:'best-practices', label:'Best Practices', v:pct('best-practices') }
+    ];
+    const valid = scores.filter(s=>s.v!=null);
+    const overall = valid.length ? Math.round(valid.reduce((a,s)=>a+s.v,0)/valid.length) : 0;
+    document.getElementById('ltDate').textContent = new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'long',year:'numeric'});
+    let host = url; try{ host = new URL(url).host + new URL(url).pathname.replace(/\/$/,''); }catch(e){}
+    document.getElementById('ltUrl').textContent = host;
+    document.getElementById('ovNum').textContent = overall;
+    document.getElementById('ovNum').style.color = scoreColor(overall);
+    let verdict = overall>=90 ? 'Hervorragend – Ihre Website spielt auf hohem Niveau. Mit Feinschliff sichern Sie diesen Vorsprung.' : overall>=70 ? 'Solide Basis mit klarem Potenzial nach oben. Gezielte Optimierungen heben das Ergebnis spürbar.' : overall>=50 ? 'Deutliches Verbesserungspotenzial. Mehrere Hebel wirken sich direkt auf Sichtbarkeit und Conversions aus.' : 'Erheblicher Handlungsbedarf. Eine Überarbeitung bringt schnell messbare Fortschritte.';
+    document.getElementById('ovTxt').innerHTML = '<strong>Gesamt-Score '+overall+' / 100.</strong> '+verdict;
+    document.getElementById('scoreGrid').innerHTML = scores.map(s=>{
+        const v = s.v==null ? '–' : s.v; const c = s.v==null ? '#bbb' : scoreColor(s.v);
+        return '<div class="score-box"><div class="score-ring" style="--v:'+(s.v||0)+';--c:'+c+'"><span>'+v+'</span></div><div class="score-label">'+s.label+'</div></div>';
+    }).join('');
+    const A = lh.audits || {};
+    const mv = id => (A[id] && A[id].displayValue) ? A[id].displayValue : '–';
+    const metrics = [
+        { lab:'LCP', val:mv('largest-contentful-paint') },
+        { lab:'FCP', val:mv('first-contentful-paint') },
+        { lab:'Speed Index', val:mv('speed-index') },
+        { lab:'TBT', val:mv('total-blocking-time') },
+        { lab:'CLS', val:mv('cumulative-layout-shift') }
+    ];
+    document.getElementById('metrics').innerHTML = metrics.map(m=>'<div class="metric"><div class="m-val">'+m.val+'</div><div class="m-lab">'+m.lab+'</div></div>').join('');
+    // Empfehlungen: Opportunities + fehlgeschlagene Audits
+    let recs = [];
+    Object.keys(A).forEach(id=>{
+        const a = A[id];
+        if(!a || a.score==null) return;
+        const sav = a.details && a.details.overallSavingsMs ? a.details.overallSavingsMs : 0;
+        if((a.details && a.details.type==='opportunity' && sav>0) || (a.score<0.9 && a.scoreDisplayMode!=='informative')){
+            recs.push({ title:a.title, sav:sav, score:a.score, desc:(a.description||'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1') });
+        }
+    });
+    recs.sort((x,y)=> (y.sav-x.sav) || (x.score-y.score));
+    recs = recs.slice(0,7);
+    if(!recs.length){
+        document.getElementById('recList').innerHTML = '<li><span class="rc-dot"></span><div>Auf den ersten Blick keine kritischen Schwachstellen – ein gutes Zeichen. Für tiefere Optimierung sprechen Sie uns gern an.</div></li>';
+    } else {
+        document.getElementById('recList').innerHTML = recs.map(r=>{
+            const save = r.sav>0 ? ' <span style="color:#C9A962">(~'+(r.sav/1000).toFixed(1)+'s Einsparpotenzial)</span>' : '';
+            const d = r.desc ? r.desc.split('. ')[0]+'.' : '';
+            return '<li><span class="rc-dot"></span><div><strong>'+r.title+'</strong>'+save+(d?'<br>'+d:'')+'</div></li>';
+        }).join('');
+    }
+    document.getElementById('ltClosing').innerHTML = 'Diese Analyse wurde automatisiert auf Basis von Google Lighthouse erstellt und bietet eine erste Standortbestimmung. Für eine tiefere, manuelle Auswertung inklusive Conversion-, Design- und Inhaltsanalyse – sowie einen konkreten Maßnahmenplan – erstellen wir Ihnen gern ein unverbindliches Angebot.';
+}
+document.getElementById('printBtn').addEventListener('click', () => window.print());
+document.getElementById('newAnalysisBtn').addEventListener('click', () => { reportWrap.classList.remove('show'); auditUrl.value=''; document.querySelector('.audit').scrollIntoView({behavior:'smooth',block:'start'}); auditUrl.focus(); });
+
+/* ===== RECHNER ===== */
+document.getElementById('roiForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const inv=+document.getElementById('roiInvestment').value||0, rev=+document.getElementById('roiCurrentRevenue').value||0, inc=+document.getElementById('roiIncrease').value||0, mar=+document.getElementById('roiMargin').value||0;
+    const addProfit = rev*(inc/100)*(mar/100);
+    const payback = addProfit>0 ? Math.ceil(inv/addProfit) : Infinity;
+    const yearly = addProfit*12; const roi = inv>0 ? ((yearly-inv)/inv)*100 : 0;
+    document.getElementById('roiMonthlyProfit').textContent = eur(addProfit);
+    document.getElementById('roiPayback').textContent = isFinite(payback)?payback:'–';
+    document.getElementById('roiYearlyProfit').textContent = eur(yearly);
+    document.getElementById('roiPercent').textContent = isFinite(roi)?Math.round(roi)+'%':'–';
+    let m = addProfit<=0 ? 'Bitte plausible Werte eingeben, damit wir den ROI berechnen können.' : payback<=3 ? 'Exzellent! Ihre Investition amortisiert sich in unter einem Quartal.' : payback<=6 ? 'Sehr gut! Amortisation innerhalb von 6 Monaten ist ein starkes Ergebnis.' : payback<=12 ? 'Solide! Ein ROI binnen eines Jahres liegt im erwarteten Bereich.' : 'Bei längerer Amortisation lohnt ein Gespräch, wie wir die Steigerung optimieren.';
+    document.getElementById('roiMessage').textContent = m;
+    document.getElementById('roiResult').classList.add('active');
+});
+document.getElementById('costForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const base={landing:8000,corporate:25000,shop:45000,webapp:60000,relaunch:30000}, pm={small:0.7,medium:1,large:1.5,xlarge:2.2}, dm={standard:0.8,premium:1,luxury:1.5}, ia={none:0,basic:5000,advanced:15000,custom:30000}, tm={relaxed:0.9,standard:1,fast:1.2,urgent:1.5}, dur={landing:4,corporate:8,shop:12,webapp:16,relaunch:10}, mc={landing:50,corporate:150,shop:300,webapp:500,relaunch:200};
+    const t=document.getElementById('costType').value, p=document.getElementById('costPages').value, d=document.getElementById('costDesign').value, ig=document.getElementById('costIntegrations').value, tl=document.getElementById('costTimeline').value;
+    const cost=(base[t]*pm[p]*dm[d]+ia[ig])*tm[tl];
+    document.getElementById('costMin').textContent = eur(Math.round(cost*0.85/1000)*1000);
+    document.getElementById('costMax').textContent = eur(Math.round(cost*1.15/1000)*1000);
+    document.getElementById('costDuration').textContent = Math.round(dur[t]*pm[p]/tm[tl]);
+    document.getElementById('costMonthly').textContent = eur(mc[t]*dm[d]);
+    let m='Orientierungswert im '+(d==='luxury'?'Premium':d==='premium'?'gehobenen':'Standard')+'-Segment. '+(tl==='urgent'?'Der Express-Zuschlag erhöht die Kosten um ca. 50 %.':'Für ein verbindliches Angebot kontaktieren Sie uns gern.');
+    document.getElementById('costMessage').textContent = m;
+    document.getElementById('costResult').classList.add('active');
+});
+document.getElementById('conversionForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const vis=+document.getElementById('convVisitors').value||0, cur=+document.getElementById('convCurrent').value||0, tar=+document.getElementById('convTarget').value||0, aov=+document.getElementById('convAov').value||0;
+    const curRev=vis*(cur/100)*aov, tarRev=vis*(tar/100)*aov, dM=tarRev-curRev, dY=dM*12;
+    document.getElementById('convCurrentRev').textContent = eur(curRev);
+    document.getElementById('convTargetRev').textContent = eur(tarRev);
+    document.getElementById('convDiffMonth').textContent = (dM>=0?'+':'')+eur(dM);
+    document.getElementById('convDiffYear').textContent = (dY>=0?'+':'')+eur(dY);
+    const pct = cur>0 ? ((tar-cur)/cur*100).toFixed(0) : '–';
+    let m = cur<=0 ? 'Bitte eine aktuelle Conversion-Rate größer 0 eingeben.' : 'Eine Steigerung von '+cur+'% auf '+tar+'% entspricht +'+pct+'%. '+(dY>100000?'Bei diesem Potenzial lohnt ein professionelles Optimierungsprojekt klar.':'Schon kleine UX-Verbesserungen wirken hier spürbar.');
+    document.getElementById('conversionMessage').textContent = m;
+    document.getElementById('conversionResult').classList.add('active');
+});
+document.getElementById('speedForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    const cur=+document.getElementById('spdCurrent').value||0, tar=+document.getElementById('spdTarget').value||0, vis=+document.getElementById('spdVisitors').value||0, aov=+document.getElementById('spdAov').value||0;
+    const delta = Math.max(0, cur-tar);
+    const uplift = delta*0.07; // ~7% Conversion je Sekunde (Branchenrichtwert)
+    const baseRate = 0.02;
+    const extraRevMonth = vis*baseRate*uplift*aov;
+    document.getElementById('spdConvUplift').textContent = (uplift*100).toFixed(0)+'%';
+    document.getElementById('spdSeconds').textContent = delta.toFixed(1)+'s';
+    document.getElementById('spdRevMonth').textContent = eur(extraRevMonth);
+    document.getElementById('spdRevYear').textContent = eur(extraRevMonth*12);
+    let m = delta<=0 ? 'Die Ziel-Ladezeit sollte unter der aktuellen liegen.' : 'Pro Sekunde schnellere Ladezeit rechnen wir mit rund 7 % mehr Conversions – '+delta.toFixed(1)+'s schneller ist ein echter Hebel.';
+    document.getElementById('speedMessage').textContent = m;
+    document.getElementById('speedResult').classList.add('active');
+});
+
+/* Cookie + Newsletter */
+const cookieBanner = document.getElementById('cookieBanner');
+if(!localStorage.getItem('nobleframe_cookie_consent')) setTimeout(()=>cookieBanner.classList.add('show'),2500);
+document.getElementById('cookieAccept').addEventListener('click',()=>{localStorage.setItem('nobleframe_cookie_consent','all');cookieBanner.classList.remove('show');});
+document.getElementById('cookieDecline').addEventListener('click',()=>{localStorage.setItem('nobleframe_cookie_consent','necessary');cookieBanner.classList.remove('show');});
+document.getElementById('newsletterForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    const email=this.querySelector('input[name="email"]').value;
+    const messageEl=document.getElementById('newsletterMessage');
+    window.location.href='mailto:info@nobleframe.de?subject='+encodeURIComponent('Newsletter Anmeldung - NobleFrame')+'&body='+encodeURIComponent('Newsletter Anmeldung\nE-Mail: '+email);
+    messageEl.textContent='Vielen Dank! Bitte senden Sie die E-Mail ab, um die Anmeldung zu bestätigen.';
+    messageEl.className='form-message success'; this.reset();
+    setTimeout(()=>{messageEl.className='form-message';},5000);
+});
+</script>
+</body>
+</html>

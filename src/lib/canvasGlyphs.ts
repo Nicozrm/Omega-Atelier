@@ -355,6 +355,35 @@ function shadeHex(hex: string, amount: number): string {
   return `rgb(${r},${g},${b})`
 }
 
+/** Mix a hex colour toward white (amount 0..1). */
+function mixToWhite(hex: string, amount: number): string {
+  const h = hex.replace('#', '')
+  const mix = (c: number) => Math.round(c + (255 - c) * amount).toString(16).padStart(2, '0')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `#${mix(r)}${mix(g)}${mix(b)}`
+}
+
+/**
+ * Pull a material colour toward the cool plan paper (amount 0..1) so warm
+ * woods and terracottas read muted-technical on the blueprint instead of
+ * fighting the cool UI — material identity stays, saturation calms down.
+ */
+function coolHex(hex: string, amount: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  // Cool anchor — slate blue between paper and surface tokens.
+  const cr = 56, cg = 62, cb = 86
+  const mix = (a: number, c: number) => Math.round(a + (c - a) * amount)
+  const rr = mix(r, cr).toString(16).padStart(2, '0')
+  const gg = mix(g, cg).toString(16).padStart(2, '0')
+  const bb = mix(b, cb).toString(16).padStart(2, '0')
+  return `#${rr}${gg}${bb}`
+}
+
 /**
  * Render an indoor room's floor from its resolved catalog material, plus an
  * optional ambient-light glow derived from the room's luminaires. Kept subtle
@@ -383,14 +412,16 @@ export function drawRoomFloor(
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
   ctx.closePath()
 
-  // Subtle base tint in the material colour.
-  ctx.fillStyle = hexA(material.color, 0.16)
+  // Subtle base tint in the material colour, cooled toward the plan paper
+  // so the blueprint keeps its technical, premium-dark read.
+  const planColor = coolHex(material.color, 0.58)
+  ctx.fillStyle = hexA(planColor, 0.12)
   ctx.fill()
 
   ctx.save()
   ctx.clip()
   ctx.lineWidth = 1
-  ctx.strokeStyle = hexA(shadeHex(material.color, 0.35), 0.22)
+  ctx.strokeStyle = hexA(shadeHex(planColor, 0.35), 0.22)
 
   if (material.pattern === 'planks') {
     const plank = 24
@@ -410,11 +441,11 @@ export function drawRoomFloor(
     for (let x = minX; x <= maxX; x += tile) { ctx.beginPath(); ctx.moveTo(x, minY); ctx.lineTo(x, maxY); ctx.stroke() }
     for (let y = minY; y <= maxY; y += tile) { ctx.beginPath(); ctx.moveTo(minX, y); ctx.lineTo(maxX, y); ctx.stroke() }
   } else if (material.pattern === 'weave') {
-    ctx.strokeStyle = hexA(shadeHex(material.color, 0.25), 0.10)
+    ctx.strokeStyle = hexA(shadeHex(planColor, 0.25), 0.10)
     const gap = 6
     for (let x = minX; x <= maxX; x += gap) { ctx.beginPath(); ctx.moveTo(x, minY); ctx.lineTo(x, maxY); ctx.stroke() }
   } else if (material.pattern === 'speckle') {
-    ctx.fillStyle = hexA(shadeHex(material.color, 0.30), 0.16)
+    ctx.fillStyle = hexA(shadeHex(planColor, 0.30), 0.16)
     for (let x = minX; x <= maxX; x += 14) {
       for (let y = minY; y <= maxY; y += 14) {
         const hsh = ((x * 73856093) ^ (y * 19349663)) >>> 0
@@ -429,14 +460,17 @@ export function drawRoomFloor(
   // 'smooth' → no structure lines
 
   // Ambient glow from the room's lights (warm/cool per colour temperature).
+  // Softened toward white so lit rooms read as a gentle warm-white halo on
+  // the technical plan instead of a saturated orange wash.
   if (lighting?.on && lighting.intensity > 0) {
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
     const rad = Math.max(w, h) * 0.75 || 1
-    const a = 0.05 + Math.min(0.22, lighting.intensity * 0.20)
+    const a = 0.04 + Math.min(0.13, lighting.intensity * 0.11)
+    const glow = mixToWhite(lighting.color, 0.45)
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad)
-    grad.addColorStop(0, hexA(lighting.color, a))
-    grad.addColorStop(1, hexA(lighting.color, 0))
+    grad.addColorStop(0, hexA(glow, a))
+    grad.addColorStop(1, hexA(glow, 0))
     ctx.fillStyle = grad
     ctx.fillRect(minX, minY, w, h)
   }
@@ -452,47 +486,37 @@ export function centroid(pts: { x: number; y: number }[]): { x: number; y: numbe
   return { x: cx / pts.length, y: cy / pts.length }
 }
 
-/** Pretty room label with a subtle backdrop plate + ornate accent dots. */
+/** Room label — clean sans pill plate (reference language, no ornament). */
 export function drawRoomLabel(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, text: string, size: number,
   theme: Theme,
 ) {
   ctx.save()
-  ctx.font = `500 ${size}px "Playfair Display", "Cormorant Garamond", Georgia, serif`
+  ctx.font = `600 ${size}px "Inter", -apple-system, system-ui, sans-serif`
+  if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0.01em'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const metrics = ctx.measureText(text)
-  const padX = Math.max(10, size * 0.6)
-  const padY = Math.max(4, size * 0.25)
+  const padX = Math.max(10, size * 0.65)
+  const padY = Math.max(4, size * 0.3)
   const w = metrics.width + padX * 2
   const h = size + padY * 2
 
   // Plate
   ctx.shadowColor = theme.shadow
-  ctx.shadowBlur = 8
-  ctx.shadowOffsetY = 1
+  ctx.shadowBlur = 10
+  ctx.shadowOffsetY = 2
   ctx.fillStyle = theme.surface
   roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2)
   ctx.fill()
   ctx.shadowBlur = 0
 
   // Edge
-  ctx.strokeStyle = 'rgba(200, 182, 142,0.30)'
+  ctx.strokeStyle = 'rgba(200, 182, 142,0.28)'
   ctx.lineWidth = 1
   roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2)
   ctx.stroke()
-
-  // Ornate accent diamonds left/right
-  const diamondSize = Math.max(2, size * 0.18)
-  ctx.fillStyle = theme.selectSoft
-  for (const sign of [-1, 1]) {
-    ctx.save()
-    ctx.translate(x + sign * (w / 2 - padX * 0.4), y)
-    ctx.rotate(Math.PI / 4)
-    ctx.fillRect(-diamondSize / 2, -diamondSize / 2, diamondSize, diamondSize)
-    ctx.restore()
-  }
 
   // Text
   ctx.fillStyle = theme.fg

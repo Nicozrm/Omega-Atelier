@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="canonical" href="https://nobleframe.de/showcase.html">
+    <meta name="theme-color" content="#000000">
+    <title>Showcase – NobleFrame | Ausgewählte Projekte, live erlebbar</title>
+    <meta name="description" content="Showcase von NobleFrame – ausgewählte Projekte, jedes live und in voller Tiefe. Erster Showcase: OMEGA OS, ein vollständiges Desktop-Betriebssystem im Browser.">
+    <meta name="robots" content="index, follow">
+    <meta property="og:site_name" content="NobleFrame">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:description" content="Ausgewählte Projekte, live erlebbar – erster Showcase: OMEGA OS.">
+    <meta property="og:url" content="https://nobleframe.de/showcase.html">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="og:image" content="https://nobleframe.de/showcase/omega-os-preview.png">
+    <meta name="twitter:image" content="https://nobleframe.de/showcase/omega-os-preview.png">
+    <meta name="twitter:title" content="Showcase – NobleFrame">
+    <meta name="twitter:description" content="Ausgewählte Projekte, live erlebbar. Erster Showcase: OMEGA OS.">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"CollectionPage","name":"Showcase – NobleFrame","url":"https://nobleframe.de/showcase.html","description":"Ausgewählte Projekte von NobleFrame, jedes live erlebbar.","hasPart":{"@type":"CreativeWork","name":"OMEGA OS","description":"Vollständiges noir/goldenes Desktop-Betriebssystem im Browser mit App Store, eingebetteten Web-Apps und serverseitig gebundener KI.","url":"https://nobleframe.de/showcase/omega-os/","creator":{"@type":"Organization","name":"NobleFrame"}}}
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23000' width='32' height='32'/%3E%3Crect x='2' y='2' width='28' height='28' fill='none' stroke='%23C9A962' stroke-width='2'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23C9A962' stroke-width='1'/%3E%3C/svg%3E">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NobleFrame">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:title" content="Showcase – NobleFrame">
+    <meta property="og:description" content="Ausgewählte Projekte, live erlebbar – erster Showcase: OMEGA OS.">
+    <meta property="og:url" content="https://nobleframe.de/showcase.html">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--gold:#C9A962;--gold-light:#E8D5A3;--gold-dark:#8B7355;--black:#000;--white:#FAFAFA;--white-muted:rgba(250,250,250,.75);--white-subtle:rgba(250,250,250,.55);--gradient:linear-gradient(135deg,#C9A962 0%,#E8D5A3 50%,#C9A962 100%)}
+        html{scroll-behavior:smooth;background:#000;color-scheme:dark}
+        body{font-family:'Outfit',sans-serif;background:#000;color:var(--white);overflow-x:hidden;line-height:1.6;min-height:100vh}
+
+        /* BACKGROUND */
+        .bg-effects{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+        .ambient-glow{position:absolute;border-radius:50%;filter:blur(120px)}
+        .glow-1{width:500px;height:500px;background:rgba(201,169,98,.06);top:-200px;right:-100px}
+        .glow-2{width:400px;height:400px;background:rgba(201,169,98,.04);bottom:-150px;left:-100px}
+        .grid-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(201,169,98,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(201,169,98,.012) 1px,transparent 1px);background-size:80px 80px}
+
+        /* NAVIGATION */
+        .nav-wrapper{position:fixed;top:0;left:0;width:100%;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(201,169,98,.1);transition:all .4s ease}
+        .nav-wrapper.scrolled{background:rgba(0,0,0,.96)}
+        .nav-main{display:flex;justify-content:space-between;align-items:center;padding:20px 60px}
+        .logo{display:flex;align-items:center;gap:15px;text-decoration:none}
+        .logo-icon{width:45px;height:45px}
+        .logo-icon svg{width:100%;height:100%}
+        .logo-text{font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:300;letter-spacing:8px;color:var(--white);text-transform:uppercase}
+        .nav-links{display:flex;gap:4px;list-style:none}
+        .nav-links>li{position:relative}
+        .nav-links>li>a{position:relative;display:flex;align-items:center;padding:12px 16px;color:var(--white-muted);text-decoration:none;font-size:.82rem;font-weight:400;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap;transition:color .35s ease,letter-spacing .35s ease}
+        .nav-links>li>a::after{content:'';position:absolute;left:16px;right:16px;bottom:7px;height:1px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .4s cubic-bezier(.65,0,.35,1)}
+        .nav-links>li>a:hover{color:var(--gold-light);letter-spacing:2px}
+        .nav-links>li>a:hover::after{transform:scaleX(1)}
+        .nav-links>li>a.active{color:var(--gold-light)}
+        .nav-links>li>a.active::after{transform:scaleX(1)}
+        .nav-cta{display:flex;align-items:center;gap:8px;padding:13px 26px;background:var(--gold);color:var(--black);font-size:.78rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;text-decoration:none;transition:all .4s ease;border:1px solid var(--gold)}
+        .nav-cta:hover{background:transparent;color:var(--gold)}
+        .nav-mobile-toggle{display:none;flex-direction:column;gap:5px;padding:12px;background:transparent;border:1px solid rgba(201,169,98,.3);cursor:pointer;min-height:44px;min-width:44px;justify-content:center;align-items:center}
+        .nav-mobile-toggle span{width:24px;height:2px;background:var(--gold);transition:all .3s ease}
+        .nav-mobile-toggle.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+        .nav-mobile-toggle.active span:nth-child(2){opacity:0}
+        .nav-mobile-toggle.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+        .mobile-menu{position:fixed;top:0;left:0;width:100%;height:100vh;background:rgba(0,0,0,.98);z-index:999;display:flex;flex-direction:column;padding:100px 40px 40px;opacity:0;visibility:hidden;transition:all .4s ease;overflow-y:auto}
+        .mobile-menu.active{opacity:1;visibility:visible}
+        .mobile-menu-section{margin-bottom:30px}
+        .mobile-menu-section h5{font-size:.7rem;color:var(--gold);letter-spacing:3px;text-transform:uppercase;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid rgba(201,169,98,.15)}
+        .mobile-menu-nav{counter-reset:m;display:flex;flex-direction:column}
+        .mobile-menu-nav a{position:relative;font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--white);text-decoration:none;padding:14px 0 14px 44px;transition:all .3s ease;border-left:2px solid transparent;display:flex;align-items:center;min-height:44px}
+        .mobile-menu-nav a::before{counter-increment:m;content:counter(m,decimal-leading-zero);position:absolute;left:14px;font-family:'Outfit',sans-serif;font-size:.7rem;letter-spacing:1px;color:var(--gold);opacity:.6;top:50%;transform:translateY(-50%)}
+        .mobile-menu-nav a::after{content:'→';margin-left:auto;color:var(--gold);opacity:0;transform:translateX(-8px);transition:all .3s ease}
+        .mobile-menu-nav a:hover,.mobile-menu-nav a.active{color:var(--gold);border-left-color:var(--gold);padding-left:50px}
+        .mobile-menu-nav a:hover::after,.mobile-menu-nav a.active::after{opacity:1;transform:translateX(0)}
+        .mobile-menu-links{display:flex;flex-direction:column;gap:8px}
+        .mobile-menu-links a{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--white);text-decoration:none;padding:10px 0;transition:color .3s ease}
+        .mobile-menu-links a:hover{color:var(--gold)}
+        .mobile-menu-cta{margin-top:auto;padding:18px 35px;background:var(--gold);color:var(--black);font-size:.9rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;text-align:center;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+        /* PAGE HERO */
+        .page-hero{min-height:46vh;display:flex;align-items:center;justify-content:center;position:relative;z-index:10;padding:180px 60px 70px;text-align:center;overflow:hidden}
+        .hero-badge{display:inline-flex;align-items:center;gap:10px;padding:10px 20px;background:rgba(201,169,98,.08);border:1px solid rgba(201,169,98,.25);margin-bottom:28px;animation:fadeUp .8s ease .1s both}
+        .hero-badge .dot{width:8px;height:8px;background:var(--gold);border-radius:50%;animation:pulse 2s infinite}
+        .hero-badge span{font-size:.72rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        .page-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2.6rem,6vw,4.6rem);font-weight:300;line-height:1.1;margin-bottom:22px;animation:fadeUp .8s ease .25s both}
+        .page-title .accent{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .page-subtitle{font-size:1.1rem;color:var(--white-muted);max-width:640px;margin:0 auto;line-height:1.75;animation:fadeUp .8s ease .4s both}
+        @keyframes fadeUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+        /* SECTION HEADER */
+        .section-header{text-align:center;margin-bottom:60px}
+        .section-eyebrow{display:inline-block;font-size:.7rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase;padding:8px 16px;border:1px solid rgba(201,169,98,.2);background:rgba(201,169,98,.05);margin-bottom:20px}
+        .section-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:300;margin-bottom:15px}
+        .section-title span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .section-sub{color:var(--white-muted);font-size:1rem;max-width:620px;margin:0 auto}
+
+        /* MANIFESTO */
+        .manifesto{padding:95px 60px;position:relative;z-index:10;text-align:center}
+        .manifesto-inner{max-width:920px;margin:0 auto}
+        .manifesto-rule{width:52px;height:1px;background:var(--gradient);margin:0 auto 26px}
+        .manifesto-eyebrow{display:inline-block;font-size:.7rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase;margin-bottom:24px}
+        .manifesto-line{font-family:'Cormorant Garamond',serif;font-size:clamp(1.9rem,3.7vw,3rem);font-weight:300;line-height:1.3;margin-bottom:26px}
+        .manifesto-line span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .manifesto-sub{color:var(--white-muted);font-size:1.05rem;line-height:1.85;max-width:660px;margin:0 auto}
+
+        /* STORY */
+        .story-section{padding:100px 60px;position:relative;z-index:10}
+        .story-container{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+        .story-images{position:relative;height:500px}
+        .story-img{position:absolute;border:1px solid rgba(201,169,98,.2);overflow:hidden;transition:all .5s ease}
+        .story-img:hover{border-color:rgba(201,169,98,.45);z-index:10}
+        .story-img img{width:100%;height:100%;object-fit:cover;transition:transform .6s ease}
+        .story-img:hover img{transform:scale(1.06)}
+        .story-img-1{width:280px;height:350px;top:0;left:0}
+        .story-img-2{width:250px;height:300px;bottom:0;right:0}
+        .story-img-3{width:180px;height:220px;top:50%;left:50%;transform:translate(-50%,-50%);animation:floaty 6s ease-in-out infinite}
+        @keyframes floaty{0%,100%{transform:translate(-50%,-50%)}50%{transform:translate(-50%,-58%)}}
+        .story-content h2{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:300;margin-bottom:28px}
+        .story-content h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .story-content p{color:var(--white-muted);font-size:1.05rem;line-height:1.9;margin-bottom:20px}
+        .story-content .highlight{color:var(--gold);font-weight:500}
+
+        /* LEADERSHIP / GESCHÄFTSFÜHRUNG */
+        .leadership{padding:110px 60px;position:relative;z-index:10;background:rgba(201,169,98,.02);border-top:1px solid rgba(201,169,98,.1);border-bottom:1px solid rgba(201,169,98,.1)}
+        .leader-grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1.08fr .92fr;gap:64px;align-items:center}
+        .leader-photo{position:relative;padding:16px;max-width:600px;justify-self:center;width:100%}
+        .leader-frame{position:relative;overflow:hidden;border:1px solid rgba(201,169,98,.3);aspect-ratio:3/4}
+        .leader-frame img{width:100%;height:100%;object-fit:cover;object-position:center 18%;display:block;transform:scale(1.06);transition:transform 1s cubic-bezier(.2,.7,.3,1)}
+        .leader-photo.visible .leader-frame img{transform:scale(1)}
+        .leader-frame:hover img{transform:scale(1.04)}
+        .leader-frame::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 52%,rgba(0,0,0,.55) 100%);pointer-events:none}
+        .leader-photo::before,.leader-photo::after{content:'';position:absolute;width:48px;height:48px;border:1px solid var(--gold);opacity:.55;transition:all .55s ease;z-index:2}
+        .leader-photo::before{top:0;left:0;border-right:none;border-bottom:none}
+        .leader-photo::after{bottom:0;right:0;border-left:none;border-top:none}
+        .leader-photo.visible::before,.leader-photo.visible::after{opacity:.9;width:62px;height:62px}
+        .leader-role{display:inline-block;font-size:.72rem;color:var(--gold-light);letter-spacing:3px;text-transform:uppercase;padding:8px 16px;border:1px solid rgba(201,169,98,.2);background:rgba(201,169,98,.05);margin-bottom:24px}
+        .leader-name{font-family:'Cormorant Garamond',serif;font-size:clamp(2.3rem,4.2vw,3.4rem);font-weight:300;line-height:1.05}
+        .leader-sign{width:64px;height:2px;background:var(--gradient);margin:18px 0 26px}
+        .leader-quote{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:300;font-style:italic;color:var(--gold-light);line-height:1.5;margin-bottom:26px;position:relative;padding-left:22px;border-left:2px solid rgba(201,169,98,.4)}
+        .leader-info>p{color:var(--white-muted);font-size:1.02rem;line-height:1.85;margin-bottom:18px}
+        .leader-tags{display:flex;flex-wrap:wrap;gap:10px;margin:28px 0 30px}
+        .leader-tag{font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--white-subtle);padding:9px 15px;border:1px solid rgba(201,169,98,.16);transition:all .3s ease}
+        .leader-tag:hover{border-color:var(--gold);color:var(--gold-light)}
+        .leader-contact{display:flex;gap:26px;flex-wrap:wrap}
+        .leader-link{display:inline-flex;align-items:center;gap:9px;color:var(--gold);text-decoration:none;font-size:.86rem;letter-spacing:1px;border-bottom:1px solid transparent;padding-bottom:3px;transition:all .3s ease}
+        .leader-link svg{width:17px;height:17px;stroke:var(--gold)}
+        .leader-link:hover{border-bottom-color:var(--gold);color:var(--gold-light)}
+
+        /* VALUES */
+        .values-section{padding:100px 60px;position:relative;z-index:10}
+        .values-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:30px;max-width:1200px;margin:0 auto}
+        .value-card{text-align:center;padding:44px 26px;border:1px solid rgba(201,169,98,.1);background:rgba(201,169,98,.02);transition:transform .45s cubic-bezier(.2,.7,.3,1),border-color .45s ease,box-shadow .45s ease;position:relative;overflow:hidden}
+        .value-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gradient);transform:scaleX(0);transform-origin:left;transition:transform .45s ease}
+        .value-card:hover{border-color:rgba(201,169,98,.4);transform:translateY(-8px);box-shadow:0 22px 55px rgba(0,0,0,.5),0 0 36px rgba(201,169,98,.05)}
+        .value-card:hover::before{transform:scaleX(1)}
+        .value-icon{width:62px;height:62px;margin:0 auto 26px;border:1px solid rgba(201,169,98,.3);display:flex;align-items:center;justify-content:center;transition:all .4s ease}
+        .value-card:hover .value-icon{background:rgba(201,169,98,.08);border-color:var(--gold)}
+        .value-icon svg{width:28px;height:28px;stroke:var(--gold)}
+        .value-card h3{font-family:'Cormorant Garamond',serif;font-size:1.45rem;font-weight:400;color:var(--white);margin-bottom:15px}
+        .value-card p{color:var(--white-muted);font-size:.9rem;line-height:1.7}
+
+        /* PHILOSOPHY */
+        .philosophy-section{padding:100px 60px;position:relative;z-index:10;background:rgba(201,169,98,.02);border-top:1px solid rgba(201,169,98,.1);border-bottom:1px solid rgba(201,169,98,.1)}
+        .philosophy-container{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+        .philosophy-content h2{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3rem);font-weight:300;margin-bottom:28px}
+        .philosophy-content h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .philosophy-content p{color:var(--white-muted);font-size:1.05rem;line-height:1.9;margin-bottom:20px}
+        .philosophy-image{position:relative;aspect-ratio:4/3;border:1px solid rgba(201,169,98,.2);overflow:hidden}
+        .philosophy-image img{width:100%;height:100%;object-fit:cover;transition:transform .6s ease}
+        .philosophy-image:hover img{transform:scale(1.05)}
+        .philosophy-image::before{content:'';position:absolute;top:15px;left:15px;right:15px;bottom:15px;border:1px solid rgba(201,169,98,.15);z-index:1;pointer-events:none}
+
+        /* CTA */
+        .cta-section{text-align:center;padding:120px 60px;position:relative;z-index:10;background:linear-gradient(180deg,transparent,rgba(201,169,98,.03))}
+        .cta-container{max-width:720px;margin:0 auto}
+        .cta-title{font-family:'Cormorant Garamond',serif;font-size:clamp(2rem,4vw,3.2rem);font-weight:300;margin-bottom:22px}
+        .cta-title span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .cta-text{color:var(--white-muted);font-size:1.1rem;margin:0 auto 42px;line-height:1.8}
+        .cta-buttons{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}
+        .btn-primary{display:inline-flex;align-items:center;gap:10px;padding:16px 38px;background:var(--gold);color:var(--black);font-size:.85rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border:1px solid var(--gold);transition:all .4s ease}
+        .btn-primary:hover{background:transparent;color:var(--gold)}
+        .btn-ghost{display:inline-flex;align-items:center;gap:10px;padding:16px 38px;background:transparent;color:var(--white);font-size:.85rem;font-weight:500;letter-spacing:2px;text-transform:uppercase;text-decoration:none;border:1px solid rgba(201,169,98,.3);transition:all .4s ease}
+        .btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+
+        /* FOOTER (konsistent zur Index) */
+        .footer{padding:100px 60px 40px;border-top:1px solid rgba(201,169,98,.1);position:relative;z-index:10}
+        .footer-container{max-width:1400px;margin:0 auto}
+        .footer-main{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.5fr;gap:60px;margin-bottom:60px}
+        .footer-brand{max-width:300px}
+        .footer-logo{display:flex;align-items:center;gap:15px;margin-bottom:20px}
+        .footer-logo-icon{width:40px;height:40px}
+        .footer-logo-icon svg{width:100%;height:100%}
+        .footer-logo-text{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:300;letter-spacing:6px;color:var(--white)}
+        .footer-tagline{color:var(--white-muted);font-size:.9rem;line-height:1.7}
+        .footer-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:25px;font-weight:500}
+        .footer-links{list-style:none;display:flex;flex-direction:column;gap:14px}
+        .footer-links a{color:var(--white-muted);text-decoration:none;font-size:.9rem;transition:all .3s ease;display:inline-block}
+        .footer-links a:hover{color:var(--gold);transform:translateX(5px)}
+        .newsletter-section h4{font-size:.8rem;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:15px;font-weight:500}
+        .newsletter-desc{color:var(--white-muted);font-size:.85rem;margin-bottom:20px}
+        .newsletter-form{display:flex;flex-direction:column;gap:15px}
+        .newsletter-input{background:rgba(201,169,98,.05);border:1px solid rgba(201,169,98,.2);padding:14px 18px;color:var(--white);font-family:'Outfit',sans-serif;font-size:.9rem;transition:all .3s ease}
+        .newsletter-input:focus{outline:none;border-color:var(--gold)}
+        .newsletter-input::placeholder{color:var(--white-subtle)}
+        .checkbox-wrapper{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+        .checkbox-wrapper input{display:none}
+        .custom-checkbox{width:18px;height:18px;border:1px solid rgba(201,169,98,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .3s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox{background:var(--gold);border-color:var(--gold)}
+        .custom-checkbox svg{width:12px;height:12px;stroke:var(--black);opacity:0;transition:opacity .2s ease}
+        .checkbox-wrapper input:checked+.custom-checkbox svg{opacity:1}
+        .checkbox-label{font-size:.8rem;color:var(--white-muted);line-height:1.4}
+        .checkbox-label a{color:var(--gold);text-decoration:none}
+        .newsletter-btn{padding:14px 30px;background:var(--gold);color:var(--black);font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--gold);cursor:pointer;transition:all .4s ease}
+        .newsletter-btn:hover{background:transparent;color:var(--gold)}
+        .form-message{padding:12px 15px;font-size:.85rem;margin-top:10px;display:none}
+        .form-message.success{display:block;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22c55e}
+        .footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:40px;border-top:1px solid rgba(201,169,98,.1)}
+        .copyright{color:var(--white-subtle);font-size:.85rem}
+        .copyright span{color:var(--gold)}
+        .legal-links{display:flex;gap:30px}
+        .legal-links a{color:var(--white-subtle);text-decoration:none;font-size:.8rem;transition:color .3s ease}
+        .legal-links a:hover{color:var(--gold)}
+
+        /* COOKIE BANNER */
+        .cookie-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,10,.98);border-top:1px solid rgba(201,169,98,.2);padding:25px 40px;z-index:10000;transform:translateY(100%);transition:transform .5s cubic-bezier(.25,.46,.45,.94);backdrop-filter:blur(20px)}
+        .cookie-banner.show{transform:translateY(0)}
+        .cookie-content{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:30px;flex-wrap:wrap}
+        .cookie-text{flex:1;min-width:300px}
+        .cookie-text h4{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--gold);margin-bottom:8px}
+        .cookie-text p{color:var(--white-muted);font-size:.9rem;margin:0}
+        .cookie-text a{color:var(--gold);text-decoration:none}
+        .cookie-buttons{display:flex;gap:15px;flex-wrap:wrap}
+        .cookie-btn{padding:14px 28px;font-family:'Outfit',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1px;text-transform:uppercase;border:none;cursor:pointer;transition:all .3s}
+        .cookie-accept{background:var(--gold);color:var(--black)}
+        .cookie-accept:hover{background:var(--gold-light)}
+        .cookie-decline{background:transparent;border:1px solid rgba(201,169,98,.3);color:var(--white-muted)}
+        .cookie-decline:hover{border-color:var(--gold);color:var(--gold)}
+
+        /* SCROLL REVEAL */
+        .reveal{opacity:0;transform:translateY(34px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1)}
+        .reveal.visible{opacity:1;transform:translateY(0)}
+        .reveal-stagger>*{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.3,1)}
+        .reveal-stagger.visible>*{opacity:1;transform:translateY(0)}
+
+        @media(max-width:1366px){
+            .nav-main{padding:18px 36px}
+            .nav-links{gap:0}
+            .nav-links>li>a{padding:11px 11px;font-size:.78rem;letter-spacing:.8px}
+            .nav-links>li>a::after{left:11px;right:11px}
+            .nav-links>li>a:hover{letter-spacing:1.1px}
+            .nav-cta{padding:12px 20px;letter-spacing:1.5px}
+            .logo-text{letter-spacing:5px}
+        }
+        @media(max-width:1100px){
+            .leader-grid{grid-template-columns:1fr;gap:50px}
+            .leader-photo{max-width:520px}
+            .leader-info{text-align:center}
+            .leader-sign{margin-left:auto;margin-right:auto}
+            .leader-quote{text-align:left}
+            .leader-tags,.leader-contact{justify-content:center}
+        }
+        @media(max-width:1024px){
+            .nav-links,.nav-cta{display:none}
+            .nav-mobile-toggle{display:flex}
+            .nav-main{padding:15px 30px}
+            .page-hero{padding:150px 40px 60px}
+            .manifesto{padding:75px 40px}
+            .story-section,.values-section,.philosophy-section,.leadership{padding:80px 40px}
+            .story-container,.philosophy-container{grid-template-columns:1fr;gap:50px}
+            .story-images{height:420px}
+            .values-grid{grid-template-columns:repeat(2,1fr)}
+            .cta-section{padding:90px 40px}
+        }
+        @media(max-width:768px){
+            .nav-main{padding:15px 20px}
+            .logo-icon{width:35px;height:35px}
+            .logo-text{font-size:1.1rem;letter-spacing:4px}
+            .page-hero{padding:130px 22px 50px}
+            .manifesto{padding:60px 20px}
+            .manifesto-line{font-size:1.7rem}
+            .story-section,.values-section,.philosophy-section,.leadership{padding:60px 20px}
+            .story-images{height:360px}
+            .story-img-1{width:200px;height:260px}
+            .story-img-2{width:175px;height:215px}
+            .story-img-3{width:140px;height:170px}
+            .values-grid{grid-template-columns:1fr;gap:20px}
+            .leader-quote{font-size:1.2rem}
+            .cta-section{padding:70px 20px}
+            .cta-buttons{flex-direction:column}
+            .btn-primary,.btn-ghost{justify-content:center}
+            .footer{padding:60px 20px 30px}
+            .footer-main{grid-template-columns:1fr;gap:30px}
+            .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+            .legal-links{flex-wrap:wrap;justify-content:center;gap:15px}
+            .cookie-banner{padding:20px}
+            .cookie-content{flex-direction:column;text-align:center}
+            .cookie-buttons{justify-content:center;width:100%}
+        }
+        @media(prefers-reduced-motion:reduce){
+            *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+            .reveal,.reveal-stagger>*{opacity:1;transform:none}
+            .story-img-3{animation:none}
+            .leader-frame img{transform:none}
+        }
+        /* ===== ELEVATION: Konsistenz-Schicht ===== */
+        .scroll-progress{position:fixed;top:0;left:0;height:2px;width:0;background:linear-gradient(135deg,#C9A962,#E8D5A3 50%,#C9A962);z-index:1001;transition:width .1s linear}
+        .magnetic{will-change:transform}
+        /* Duotone Noir/Gold – ausschliesslich Stock-Bilder, NICHT das Gruenderportraet */
+        .story-img img,.philosophy-image img{filter:grayscale(.45) contrast(1.06) brightness(.82) sepia(.22) saturate(.9);transition:filter .6s ease,transform .6s ease}
+        .story-img:hover img,.philosophy-image:hover img{filter:grayscale(.12) contrast(1.05) brightness(.96) sepia(.08)}
+        .leader-photo:hover .leader-frame{box-shadow:0 40px 80px rgba(0,0,0,.5),0 0 50px rgba(201,169,98,.12)}
+        a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #C9A962;outline-offset:3px}
+        /* ===== INSIGHTS ===== */
+        .insights-wrap{max-width:1200px;margin:0 auto;padding:30px 60px 100px;position:relative;z-index:10}
+        .ins-featured{position:relative;overflow:hidden;border:1px solid rgba(201,169,98,.22);padding:60px 56px;margin-bottom:30px;background:linear-gradient(135deg,rgba(201,169,98,.05),transparent 60%)}
+        .ins-featured::before{content:'';position:absolute;width:340px;height:340px;background:radial-gradient(circle,rgba(201,169,98,.14),transparent 65%);top:-60px;right:-60px;pointer-events:none}
+        .ins-featured>*{position:relative;z-index:1}
+        .ins-tag{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,169,98,.3);padding:5px 12px;margin-bottom:22px}
+        .ins-featured h2{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(2rem,4vw,3.1rem);line-height:1.12;margin-bottom:20px;max-width:760px}
+        .ins-featured h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .ins-featured p{color:var(--white-muted);font-size:1.06rem;line-height:1.85;max-width:720px;margin-bottom:16px}
+        .ins-meta{font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:2px;color:var(--white-subtle);text-transform:uppercase;margin-top:24px}
+        .ins-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:26px}
+        .ins-card{position:relative;overflow:hidden;border:1px solid rgba(201,169,98,.16);padding:38px 34px;background:rgba(255,255,255,.012);transition:transform .4s ease,border-color .4s ease}
+        .ins-card::before{content:'';position:absolute;width:260px;height:260px;background:radial-gradient(circle,rgba(201,169,98,.12),transparent 65%);top:var(--my,50%);left:var(--mx,50%);transform:translate(-50%,-50%);opacity:0;transition:opacity .4s ease;pointer-events:none}
+        .ins-card:hover::before{opacity:1}
+        .ins-card:hover{transform:translateY(-5px);border-color:rgba(201,169,98,.4)}
+        .ins-card>*{position:relative;z-index:1}
+        .ins-card .ins-tag{margin-bottom:18px;font-size:.64rem;padding:4px 10px}
+        .ins-card h3{font-family:'Cormorant Garamond',serif;font-weight:400;font-size:1.7rem;line-height:1.2;margin-bottom:14px}
+        .ins-card p{color:var(--white-muted);font-size:.96rem;line-height:1.75}
+        .ins-card .ins-rt{display:block;margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:2px;color:var(--white-subtle);text-transform:uppercase}
+        .ins-news{max-width:1200px;margin:0 auto 0;padding:0 60px 110px;position:relative;z-index:10}
+        .ins-news-inner{border:1px solid rgba(201,169,98,.22);padding:60px 50px;text-align:center;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(201,169,98,.04),transparent 70%)}
+        .ins-news-inner h2{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1.9rem,3.5vw,2.7rem);margin-bottom:16px}
+        .ins-news-inner h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .ins-news-inner p{color:var(--white-muted);max-width:520px;margin:0 auto 30px;line-height:1.8}
+        @media(max-width:768px){.insights-wrap{padding:20px 22px 70px}.ins-featured{padding:42px 26px}.ins-news{padding:0 22px 80px}.ins-news-inner{padding:44px 24px}}
+        /* ===== SHOWCASE (OMEGA OS) ===== */
+        .showcase-wrap{max-width:1200px;margin:0 auto;padding:30px 60px 90px;position:relative;z-index:10}
+        .sc-featured{display:grid;grid-template-columns:1.05fr .95fr;gap:50px;align-items:center;border:1px solid rgba(201,169,98,.2);padding:40px;background:linear-gradient(135deg,rgba(201,169,98,.05),transparent 60%);position:relative;overflow:hidden}
+        .sc-featured::before{content:'';position:absolute;width:380px;height:380px;background:radial-gradient(circle,rgba(201,169,98,.12),transparent 65%);top:-80px;right:-80px;pointer-events:none}
+        .sc-featured>*{position:relative;z-index:1}
+        .sc-media{position:relative;border:1px solid rgba(201,169,98,.18);overflow:hidden;border-radius:4px;box-shadow:0 30px 70px rgba(0,0,0,.5)}
+        .sc-media img{display:block;width:100%;height:auto}
+        .sc-pill{position:absolute;top:14px;left:14px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:2px;text-transform:uppercase;color:#000;background:var(--gold);padding:5px 11px;border-radius:3px}
+        .sc-eyebrow{font-family:'JetBrains Mono',monospace;font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--gold);display:block;margin-bottom:16px}
+        .sc-body h2{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(2.2rem,4vw,3.2rem);line-height:1.05;margin-bottom:18px}
+        .sc-body h2 span{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:400}
+        .sc-lead{color:var(--white-muted);font-size:1.04rem;line-height:1.8;margin-bottom:22px}
+        .sc-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+        .sc-tags span{font-family:'JetBrains Mono',monospace;font-size:.64rem;letter-spacing:1px;text-transform:uppercase;color:var(--gold-light);border:1px solid rgba(201,169,98,.28);padding:5px 10px}
+        .sc-points{list-style:none;margin:0 0 30px;padding:0;display:grid;gap:11px}
+        .sc-points li{position:relative;padding-left:22px;color:var(--white-muted);font-size:.95rem;line-height:1.6}
+        .sc-points li::before{content:'';position:absolute;left:0;top:7px;width:7px;height:7px;background:var(--gold);transform:rotate(45deg)}
+        .sc-actions{display:flex;gap:14px;flex-wrap:wrap}
+        .sc-more{display:flex;align-items:center;gap:14px;justify-content:center;margin-top:42px;color:var(--white-subtle);font-size:.92rem;text-align:center}
+        .sc-more-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);opacity:.6;animation:pulse 2s infinite;flex-shrink:0}
+        @media(max-width:768px){.showcase-wrap{padding:20px 22px 70px}.sc-featured{grid-template-columns:1fr;gap:26px;padding:22px}}
+        .skip-link{position:fixed;left:8px;top:-60px;z-index:3000;background:#C9A962;color:#000;padding:10px 18px;font-family:'Outfit',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.04em;text-decoration:none;transition:top .2s ease}
+        .skip-link:focus{top:8px;outline:2px solid #000;outline-offset:2px}
+    </style>
+    <script type="application/ld+json">
+    {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://nobleframe.de/"}, {"@type": "ListItem", "position": 2, "name": "Showcase", "item": "https://nobleframe.de/showcase.html"}]}
+    </script>
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+    <link rel="icon" href="/favicon/favicon.ico" sizes="32x32">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.json">
+    <script defer src="nf-interactions.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#hauptinhalt">Zum Inhalt springen</a>
+
+<div class="bg-effects">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="grid-overlay"></div>
+</div>
+
+<div class="nav-wrapper" id="navWrapper">
+    <nav class="nav-main">
+        <a href="index.html" class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/>
+                    <rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.6"/>
+                    <line x1="50" y1="5" x2="50" y2="95" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/>
+                    <line x1="5" y1="50" x2="95" y2="50" stroke="#C9A962" stroke-width="0.5" opacity="0.4"/>
+                </svg>
+            </div>
+            <span class="logo-text">NobleFrame</span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="leistungen.html">Leistungen</a></li>
+            <li><a href="referenzen.html">Referenzen</a></li>
+            <li><a href="showcase.html" class="active" aria-current="page">Showcase</a></li>
+            <li><a href="tools.html">Tools</a></li>
+            <li><a href="about.html">Über Uns</a></li>
+            <li><a href="kontakt.html">Kontakt</a></li>
+        </ul>
+        <a href="kontakt.html" class="nav-cta">Projekt anfragen</a>
+        <button class="nav-mobile-toggle" id="navMobileToggle" aria-label="Menü">
+            <span></span><span></span><span></span>
+        </button>
+    </nav>
+</div>
+
+<div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-menu-section">
+        <h5>Navigation</h5>
+        <div class="mobile-menu-nav">
+            <a href="index.html">Home</a>
+            <a href="leistungen.html">Leistungen</a>
+            <a href="referenzen.html">Referenzen</a>
+            <a href="showcase.html" class="active" aria-current="page">Showcase</a>
+            <a href="tools.html">Tools</a>
+            <a href="about.html">Über Uns</a>
+            <a href="kontakt.html">Kontakt</a>
+        </div>
+    </div>
+    <div class="mobile-menu-section">
+        <h5>Direkt erreichen</h5>
+        <div class="mobile-menu-links">
+            <a href="tel:+4915292612795">+49 152 92612795</a>
+            <a href="mailto:info@nobleframe.de">info@nobleframe.de</a>
+        </div>
+    </div>
+    <a href="kontakt.html" class="mobile-menu-cta">Projekt anfragen</a>
+</div>
+
+<header class="page-hero" id="hauptinhalt" tabindex="-1">
+    <div>
+        <div class="hero-badge"><span class="dot"></span><span>Showcase</span></div>
+        <h1 class="page-title">Ausgewählte <span class="accent">Projekte</span>, live erlebbar</h1>
+        <p class="page-subtitle">Kein Portfolio-Karussell. Ausgewählte Projekte – jedes live, begehbar und kompromisslos gebaut. Den Anfang macht ein vollständiges Betriebssystem im Browser.</p>
+    </div>
+</header>
+
+<section class="showcase-wrap">
+    <article class="sc-featured reveal">
+        <div class="sc-media">
+            <span class="sc-pill">Live-Projekt</span>
+            <img src="showcase/omega-os-preview.png" alt="OMEGA OS – noir/goldenes Desktop-Betriebssystem im Browser mit App Store, Dock und System-Widgets" loading="lazy">
+        </div>
+        <div class="sc-body">
+            <span class="sc-eyebrow">Erster Showcase · Eigenentwicklung</span>
+            <h2>OMEGA <span>OS</span></h2>
+            <p class="sc-lead">Ein vollständiges Desktop-Betriebssystem im Browser – noir/gold, fenstergesteuert, mit echtem App Store, eingebetteten Web-Apps und einer serverseitig gebundenen KI. Kein Mockup: läuft live, ist offline-fähig und installierbar.</p>
+            <div class="sc-tags">
+                <span>React</span><span>TypeScript</span><span>Electron</span><span>Web Audio</span><span>PWA / Offline</span><span>Cloudflare Functions</span>
+            </div>
+            <ul class="sc-points">
+                <li>Fenster-Manager mit Fokus, Stacking und Dock</li>
+                <li>App Store mit live installierbaren Apps – Paint, Synth Pad, 2048 und mehr</li>
+                <li>Eingebetteter Browser, Terminal und Datei-Ablage</li>
+                <li>„Egregore" – serverseitig gebundene KI, der Schlüssel verlässt nie den Server</li>
+            </ul>
+            <div class="sc-actions">
+                <a href="showcase/omega-os/index.html" class="btn-primary magnetic" target="_blank" rel="noopener">OMEGA OS live öffnen ↗</a>
+            </div>
+        </div>
+    </article>
+
+    <div class="sc-more reveal">
+        <span class="sc-more-dot"></span>
+        <p>Weitere Showcases folgen – ausgewählte Projekte, jeweils live und in voller Tiefe.</p>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-main">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <div class="footer-logo-icon">
+                        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="5" y="5" width="90" height="90" fill="none" stroke="#C9A962" stroke-width="2"/>
+                            <rect x="25" y="25" width="50" height="50" fill="none" stroke="#C9A962" stroke-width="1.5" opacity="0.7"/>
+                        </svg>
+                    </div>
+                    <span class="footer-logo-text">NOBLEFRAME</span>
+                </div>
+                <p class="footer-tagline">Premium Digital Atelier für Websites, Apps & Growth Solutions.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Navigation</h4>
+                <ul class="footer-links">
+                    <li><a href="leistungen.html">Leistungen</a></li>
+                    <li><a href="referenzen.html">Referenzen</a></li>
+                    <li><a href="about.html">Über Uns</a></li>
+                    <li><a href="kontakt.html">Kontakt</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Mehr</h4>
+                <ul class="footer-links">
+                    <li><a href="showcase.html">Showcase</a></li>
+                    <li><a href="tools.html">Tools</a></li>
+                    <li><a href="faq.html">FAQ</a></li>
+                    <li><a href="karriere.html">Karriere</a></li>
+                </ul>
+            </div>
+            <div class="newsletter-section">
+                <h4>Newsletter</h4>
+                <p class="newsletter-desc">Exklusive Insights und Updates zu unseren Projekten.</p>
+                <form class="newsletter-form" id="newsletterForm">
+                    <input type="email" name="email" class="newsletter-input" placeholder="ihre@email.de" required>
+                    <label class="checkbox-wrapper">
+                        <input type="checkbox" name="privacy" required>
+                        <span class="custom-checkbox">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                        <span class="checkbox-label">Ich akzeptiere die <a href="datenschutz.html">Datenschutzerklärung</a></span>
+                    </label>
+                    <button type="submit" class="newsletter-btn">Newsletter abonnieren</button>
+                    <div class="form-message" id="newsletterMessage"></div>
+                </form>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p class="copyright">© 2026 <span>NobleFrame</span>. Alle Rechte vorbehalten.</p>
+            <div class="legal-links">
+                <a href="impressum.html">Impressum</a>
+                <a href="datenschutz.html">Datenschutz</a>
+                <a href="agb.html">AGB</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<div class="cookie-banner" id="cookieBanner">
+    <div class="cookie-content">
+        <div class="cookie-text">
+            <h4>Cookie-Einstellungen</h4>
+            <p>Wir verwenden technisch notwendige Cookies für den Betrieb dieser Website. <a href="datenschutz.html">Mehr erfahren</a></p>
+        </div>
+        <div class="cookie-buttons">
+            <button class="cookie-btn cookie-accept" id="cookieAccept">Alle akzeptieren</button>
+            <button class="cookie-btn cookie-decline" id="cookieDecline">Nur notwendige</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const navWrapper = document.getElementById('navWrapper');
+window.addEventListener('scroll', () => {
+    navWrapper.classList.toggle('scrolled', window.scrollY > 50);
+});
+
+const navMobileToggle = document.getElementById('navMobileToggle');
+const mobileMenu = document.getElementById('mobileMenu');
+navMobileToggle.addEventListener('click', () => {
+    navMobileToggle.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
+    document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+});
+mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+        navMobileToggle.classList.remove('active');
+        mobileMenu.classList.remove('active');
+        document.body.style.overflow = '';
+    });
+});
+
+const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        el.classList.add('visible');
+        if (el.classList.contains('reveal-stagger')) {
+            [...el.children].forEach((child, i) => {
+                child.style.transitionDelay = (reduceMotion ? 0 : i * 0.08) + 's';
+            });
+        }
+        io.unobserve(el);
+    });
+}, { threshold: 0.15 });
+document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+
+const cookieBanner = document.getElementById('cookieBanner');
+function checkCookieConsent() {
+    if (!localStorage.getItem('nobleframe_cookie_consent')) {
+        setTimeout(() => cookieBanner.classList.add('show'), 2500);
+    }
+}
+document.getElementById('cookieAccept').addEventListener('click', () => {
+    localStorage.setItem('nobleframe_cookie_consent', 'all');
+    localStorage.setItem('nobleframe_cookie_date', new Date().toISOString());
+    cookieBanner.classList.remove('show');
+});
+document.getElementById('cookieDecline').addEventListener('click', () => {
+    localStorage.setItem('nobleframe_cookie_consent', 'necessary');
+    localStorage.setItem('nobleframe_cookie_date', new Date().toISOString());
+    cookieBanner.classList.remove('show');
+});
+checkCookieConsent();
+
+document.getElementById('newsletterForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const email = this.querySelector('input[name="email"]').value;
+    const messageEl = document.getElementById('newsletterMessage');
+    const subject = encodeURIComponent('Newsletter Anmeldung - NobleFrame');
+    const body = encodeURIComponent(`Newsletter Anmeldung\n==================\n\nE-Mail: ${email}\nDatum: ${new Date().toLocaleString('de-DE')}\nQuelle: Über-Uns-Seite\n\n---\nDiese Anmeldung wurde über die NobleFrame Website gesendet.`);
+    window.location.href = `mailto:info@nobleframe.de?subject=${subject}&body=${body}`;
+    messageEl.textContent = 'Vielen Dank! Bitte senden Sie die E-Mail ab, um die Anmeldung zu bestätigen.';
+    messageEl.className = 'form-message success';
+    this.reset();
+    setTimeout(() => { messageEl.className = 'form-message'; }, 5000);
+});
+
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+});
+
+/* ===== ELEVATION JS (Konsistenz) ===== */
+(function(){
+  const rm=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sp=document.createElement('div');sp.className='scroll-progress';document.body.appendChild(sp);
+  const os=()=>{const h=document.documentElement;const m=h.scrollHeight-h.clientHeight;sp.style.width=(m>0?h.scrollTop/m*100:0)+'%';};
+  window.addEventListener('scroll',os,{passive:true});os();
+  if(rm)return;
+  document.querySelectorAll('.magnetic').forEach(b=>{b.addEventListener('mousemove',e=>{const r=b.getBoundingClientRect();b.style.transform='translate('+((e.clientX-r.left-r.width/2)*0.16)+'px,'+((e.clientY-r.top-r.height/2)*0.26)+'px)';});b.addEventListener('mouseleave',()=>{b.style.transform='';});});
+})();
+
+</script>
+
+</body>
+</html>

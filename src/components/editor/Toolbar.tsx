@@ -1,10 +1,16 @@
 import {
-  MousePointer2, Ruler, Scan, Wand2, Sofa, Type,
+  MousePointer2, Ruler, Scan, Wand2, Sofa, Type, Sparkles, Lock,
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Grid3x3, Magnet,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useTier } from '@/hooks/useTier'
 import { usePlanStore } from '@/store/usePlanStore'
 import type { Tool } from '@/types'
 import { Toolbar, ToolbarGroup, IconButton, Tooltip } from '@/ui'
+import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
+import { cn } from '@/lib/utils'
+import { play as playSound } from '@/lib/sound'
+import { cinematicReact } from '@/lib/cinematic'
 
 // ── Architectural inline SVG icons (18×18) ────────────────────────────
 function IconDoor() {
@@ -40,6 +46,61 @@ function IconTerrace() {
 
 interface ToolDef { key: Tool; icon: React.ReactNode; label: string; hotkey: string }
 
+/**
+ * ToolSegments — one cluster of mutually-exclusive tools sharing a single
+ * accent pill that glides between them (magic move). When the active tool lives
+ * in a sibling cluster the pill hides here and appears there, so the highlight
+ * hands off cleanly across the structure / placement groups rather than every
+ * button lighting its own box.
+ */
+function ToolSegments({ tools, active, onSelect }: {
+  tools: ToolDef[]
+  active: Tool
+  onSelect: (t: Tool) => void
+}) {
+  const { containerRef, indicatorStyle, ready } = useSlidingIndicator(active)
+  return (
+    <div
+      ref={containerRef}
+      role="group"
+      className={cn(
+        'relative flex items-center gap-0.5',
+        '[&:not(:first-child)]:before:mx-1 [&:not(:first-child)]:before:h-5 [&:not(:first-child)]:before:w-px [&:not(:first-child)]:before:bg-[color:var(--border)] [&:not(:first-child)]:before:content-[""]',
+      )}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 rounded-[var(--radius-xs)] will-change-transform"
+        style={{
+          ...indicatorStyle,
+          opacity: ready ? 1 : 0,
+          background: 'rgba(199,162,78,0.14)',
+          boxShadow: 'inset 0 0 0 1px var(--border-accent), var(--glow-accent-soft)',
+        }}
+      />
+      {tools.map((t) => {
+        const isActive = active === t.key
+        return (
+          <Tooltip key={t.key} label={t.label} hint={t.hotkey} side="bottom">
+            <button
+              data-seg={t.key}
+              aria-label={t.label}
+              aria-pressed={isActive}
+              onClick={() => onSelect(t.key)}
+              className={cn(
+                'btn btn-icon btn-ghost relative z-10',
+                isActive ? 'text-[color:var(--accent-bright)]' : 'text-[color:var(--fg)]',
+              )}
+            >
+              {t.icon}
+            </button>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}
+
 export function EditorToolbar() {
   const tool = usePlanStore((s) => s.tool)
   const setTool = usePlanStore((s) => s.setTool)
@@ -50,8 +111,12 @@ export function EditorToolbar() {
   const undo = usePlanStore((s) => s.undo)
   const redo = usePlanStore((s) => s.redo)
   const updateDoc = usePlanStore((s) => s.updateDoc)
+  const autoFurnish = usePlanStore((s) => s.autoFurnishActiveFloor)
   const past = usePlanStore((s) => s.past)
   const future = usePlanStore((s) => s.future)
+  const { can } = useTier()
+  const navigate = useNavigate()
+  const canAutoFurnish = can('auto-furnish')
 
   const structureTools: ToolDef[] = [
     { key: 'select',  icon: <MousePointer2 size={17} />, label: 'Auswahl',  hotkey: 'V' },
@@ -68,26 +133,12 @@ export function EditorToolbar() {
   ]
 
   return (
-    <Toolbar className="flex-wrap">
-      <ToolbarGroup>
-        {structureTools.map((t) => (
-          <Tooltip key={t.key} label={t.label} hint={t.hotkey} side="bottom">
-            <IconButton label={t.label} active={tool === t.key} onClick={() => setTool(t.key)}>
-              {t.icon}
-            </IconButton>
-          </Tooltip>
-        ))}
-      </ToolbarGroup>
-
-      <ToolbarGroup>
-        {placeTools.map((t) => (
-          <Tooltip key={t.key} label={t.label} hint={t.hotkey} side="bottom">
-            <IconButton label={t.label} active={tool === t.key} onClick={() => setTool(t.key)}>
-              {t.icon}
-            </IconButton>
-          </Tooltip>
-        ))}
-      </ToolbarGroup>
+    // Single row that scrolls horizontally inside the toolbar's overflow-x
+    // container — on mobile the old flex-wrap stacked into ~5 rows and ate half
+    // the screen height, squashing the canvas.
+    <Toolbar className="flex-nowrap">
+      <ToolSegments tools={structureTools} active={tool} onSelect={setTool} />
+      <ToolSegments tools={placeTools} active={tool} onSelect={setTool} />
 
       <ToolbarGroup>
         <Tooltip label="Rückgängig" hint="⌘Z" side="bottom">
@@ -95,6 +146,23 @@ export function EditorToolbar() {
         </Tooltip>
         <Tooltip label="Wiederherstellen" hint="⌘⇧Z" side="bottom">
           <IconButton label="Wiederherstellen" disabled={future.length === 0} onClick={redo}><Redo2 size={17} /></IconButton>
+        </Tooltip>
+      </ToolbarGroup>
+
+      <ToolbarGroup>
+        <Tooltip label={canAutoFurnish ? 'Auto-Möblieren' : 'Auto-Möblieren — ab Pro'} hint={canAutoFurnish ? 'Leere Räume logisch füllen' : 'Plan upgraden'} side="bottom">
+          <IconButton
+            label="Auto-Möblieren"
+            disabled={!doc}
+            onClick={(e) => {
+              if (!canAutoFurnish) { playSound('click'); navigate('/#preise'); return }
+              const n = autoFurnish()
+              if (n > 0) { playSound('swell'); cinematicReact(e.clientX, e.clientY, 'place') }
+              else playSound('click')
+            }}
+          >
+            {canAutoFurnish ? <Sparkles size={17} /> : <Lock size={17} />}
+          </IconButton>
         </Tooltip>
       </ToolbarGroup>
 

@@ -1,0 +1,30 @@
+# ── Service Worker niemals cachen (sonst kein Shell-Update) ──
+/service-worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
+/showcase/omega-os/service-worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# ── OMEGA-OS-Shell revalidieren (kein Content-Hash; SW übernimmt Offline-Cache) ──
+/showcase/omega-os/index.html
+  Cache-Control: no-cache
+/showcase/omega-os/bundle.js
+  Cache-Control: no-cache
+
+# ── Statische Bilder & Icons lange cachen (Dateien ändern sich per Umbenennung) ──
+/assets/*
+  Cache-Control: public, max-age=2592000
+/favicon/*
+  Cache-Control: public, max-age=2592000
+
+# ── E-Mail-Artefakte (Brevo-Vorlagen, Newsletter-Archiv) nicht indexieren ──
+/brevo-templates.html
+  X-Robots-Tag: noindex
+/newsletter-juli-2026.html
+  X-Robots-Tag: noindex
+
+# ── Basis-Sicherheitsheader (gesamte Seite) ──
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()

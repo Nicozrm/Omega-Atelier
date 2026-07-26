@@ -1,0 +1,8 @@
+# NobleFrame — robots.txt
+User-agent: *
+Allow: /
+
+# Server-Endpunkt der OMEGA-OS-KI nicht crawlen (ist kein Inhalt)
+Disallow: /api/
+
+Sitemap: https://nobleframe.de/sitemap.xml
