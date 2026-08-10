@@ -8,18 +8,26 @@
  * bright white softbox. Reflections carried no information about the world,
  * which is the most legible "this is a render" tell a scene can have.
  *
- * Now the source scene is:
+ * The source scene is now an **open-topped room under a real sky** — which is
+ * exactly what the dollhouse is:
  *
  *  - **The sky**, via three's Preetham atmospheric scattering model, driven by
  *    the real solar direction and by turbidity/Rayleigh/Mie terms derived from
  *    the weather. Reflections pick up the horizon glow at golden hour and the
  *    deep blue overhead at noon, from the same solar position that casts the
  *    shadows — so highlight and shadow agree about where the sun is.
- *  - **A ground plane**, so surfaces receive bounce from below rather than
- *    sitting in a half-lit void.
- *  - **Interior bounce panels**, keeping the warm wall/ceiling light that an
- *    interior actually sees. These carry the night: as the sky stops
- *    delivering, they take over (see `lib/render/skyModel`).
+ *  - **Four walls and a floor**, carrying the warm bounce an interior actually
+ *    sees. These carry the night: as the sky stops delivering, they take over
+ *    (see `lib/render/skyModel`).
+ *  - **An opening around the overhead wash**, which is how daylight gets in.
+ *
+ * The enclosure is not decoration — it is what makes the exposure correct. A
+ * bare sky irradiates every surface as though it stood in an open field, and
+ * measuring that against the environment it replaced showed noon coming out
+ * twice as bright while night came out half as bright. Interior surfaces see
+ * the sky through an opening and are lit mostly by the walls around them;
+ * modelling that puts full daylight within ~10 % and night within ~3 % of the
+ * previous exposure, by construction rather than by a fudge factor.
  *
  * ## Cost control
  *
@@ -85,36 +93,60 @@ function createEnvSource(preset: EnvPreset): EnvSource {
   sky.scale.setScalar(90)
   scene.add(sky)
 
-  // Ground: a large disc below the origin. Colour is set per rebuild.
-  const groundGeo = new THREE.CircleGeometry(70, 24).rotateX(-Math.PI / 2)
-  const groundMat = new THREE.MeshBasicMaterial({ color: '#2a2724', side: THREE.DoubleSide })
-  const ground = new THREE.Mesh(groundGeo, groundMat)
-  ground.position.y = -6
-  scene.add(ground)
-  geometries.push(groundGeo)
-  materials.push(groundMat)
-
-  // Interior bounce panels — the room around the surface.
+  // ── An open-topped room, which is what the dollhouse actually is.
+  //
+  // This enclosure is the reason the balance works. Without it every surface
+  // in the scene is irradiated by the *whole* sky, as though it were standing
+  // in an open field — measured, that made noon twice as bright as the studio
+  // box it replaced while night came out half as bright. Real interior
+  // surfaces see the sky only through an opening, and the walls around them
+  // do most of the lighting. Enclosing the source scene restores that, and
+  // it does so by construction rather than by an arbitrary sky multiplier
+  // (which the Preetham shader could not honour anyway — it writes alpha 1).
   const p = INTERIOR_PRESETS[preset]
   const panels: EnvSource['panels'] = []
+
   const addPanel = (
-    size: [number, number, number],
+    geo: THREE.BufferGeometry,
     position: [number, number, number],
+    rotation: [number, number, number],
     [hex, weight]: [string, number],
   ) => {
-    const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
-    const mat = new THREE.MeshBasicMaterial({ color: 0x000000 })
+    const mat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })
     const mesh = new THREE.Mesh(geo, mat)
     mesh.position.set(position[0], position[1], position[2])
+    mesh.rotation.set(rotation[0], rotation[1], rotation[2])
     scene.add(mesh)
     geometries.push(geo)
     materials.push(mat)
     panels.push({ mesh, base: new THREE.Color(hex), weight })
   }
-  addPanel([7, 0.2, 7], [0, 3.7, 0], p.ceiling)     // overhead wash
-  addPanel([6, 3, 0.2], [0, 1.6, -6.6], p.key)      // key wall
-  addPanel([0.2, 4, 7], [-6.8, 0.8, 0], p.fill)     // window-side fill
-  addPanel([0.2, 4, 7], [6.8, 0.6, 0], p.bounce)    // neutral bounce opposite
+
+  const WALL = 6.8      // half-width of the room
+  const WALL_H = 9      // wall height
+  const wallGeo = () => new THREE.PlaneGeometry(WALL * 2, WALL_H)
+
+  // Four walls. The key wall is the bright one; the other three are fill and
+  // bounce, so the room has direction instead of being a uniform grey box.
+  addPanel(wallGeo(), [0, 0.5, -WALL], [0, 0, 0], p.key)
+  addPanel(wallGeo(), [0, 0.5, WALL], [0, Math.PI, 0], p.bounce)
+  addPanel(wallGeo(), [-WALL, 0.5, 0], [0, Math.PI / 2, 0], p.fill)
+  addPanel(wallGeo(), [WALL, 0.5, 0], [0, -Math.PI / 2, 0], p.bounce)
+
+  // Overhead wash, covering the middle of the ceiling. The ring of open sky
+  // left around it is how daylight gets in — the dollhouse's missing roof.
+  addPanel(new THREE.PlaneGeometry(9, 9), [0, 5, 0], [Math.PI / 2, 0, 0], p.ceiling)
+
+  // Floor. Driven by the ground colour rather than the interior palette, so
+  // bounce from below tracks the daylight outside.
+  const groundGeo = new THREE.PlaneGeometry(WALL * 2, WALL * 2)
+  const groundMat = new THREE.MeshBasicMaterial({ color: '#2a2724', side: THREE.DoubleSide })
+  const ground = new THREE.Mesh(groundGeo, groundMat)
+  ground.position.y = -4
+  ground.rotation.x = -Math.PI / 2
+  scene.add(ground)
+  geometries.push(groundGeo)
+  materials.push(groundMat)
 
   return {
     scene,
