@@ -31,6 +31,8 @@ class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: bool
 import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
 import { LightRig } from './LightRig'
+import { SunLight } from './SunLight'
+import { ShadowController } from './ShadowController'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
@@ -68,8 +70,6 @@ const deviceCategoryOf: CategoryLookup = (id) => DEVICE_MAP[id]?.category
 
 // World units: 1 unit = 1 meter. Plan coords are in cm → divide by 100.
 const M = (cm: number) => cm / 100
-/** Distance (m) at which the directional sun is placed along its direction vector. */
-const SUN_DISTANCE = 18
 /** Semantic time-of-day phase → image-based-lighting reflection strength.
  *  Keeps a day/night cue in metal/glass/gloss reflections (sky, sun and shadows
  *  already vary by phase via the lighting rig). Applied to `scene.environmentIntensity`
@@ -6141,6 +6141,22 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 }) {
   const doc = usePlanStore((s) => s.doc)
   const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
+
+  // Identity token for the on-demand shadow map: a fresh reference whenever
+  // anything it depicts changes. `floor` covers every plan edit — the store
+  // deep-clones the document, so its identity changes on any mutation — and the
+  // rest cover the toggles and the sun. Deliberately conservative: an extra
+  // shadow re-render costs a frame, a missed one leaves furniture floating.
+  const worldKey = useMemo(
+    () => ({}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      floor, showHouse, stackView, walkMode, floorVariant, wallMaterialId, houseStyle,
+      env.sun.direction.x, env.sun.direction.y, env.sun.direction.z,
+      env.lighting.sun.intensity, env.sun.aboveHorizon,
+    ],
+  )
+
   if (!floor) return null
   const { width, height } = floor.extent
   const wM = M(width), hM = M(height)
@@ -6163,25 +6179,11 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           corner AO shape the walls — the reference's moody falloff instead of a
           washed-out even glow (near-white walls otherwise blow out at eye level). */}
       <ambientLight color={new THREE.Color(env.lighting.ambient.color).lerp(new THREE.Color('#ffecd0'), 0.18)} intensity={env.lighting.ambient.intensity * 0.56} />
-      {env.sun.aboveHorizon && (
-        <directionalLight
-          position={[env.sun.direction.x * SUN_DISTANCE, env.sun.direction.y * SUN_DISTANCE, env.sun.direction.z * SUN_DISTANCE]}
-          intensity={env.lighting.sun.intensity}
-          color={env.lighting.sun.color}
-          castShadow={env.lighting.sun.castShadow}
-          shadow-mapSize-width={readTier() === 'high' ? 4096 : 2048}
-          shadow-mapSize-height={readTier() === 'high' ? 4096 : 2048}
-          shadow-camera-near={0.1}
-          shadow-camera-far={50}
-          shadow-camera-left={-(Math.max(wM, hM) + 4)}
-          shadow-camera-right={Math.max(wM, hM) + 4}
-          shadow-camera-top={Math.max(wM, hM) + 4}
-          shadow-camera-bottom={-(Math.max(wM, hM) + 4)}
-          shadow-bias={-0.0005}
-          shadow-normalBias={0.02}
-          shadow-radius={5}
-        />
-      )}
+      {env.sun.aboveHorizon && <SunLight env={env} wM={wM} hM={hM} cx={cx} cz={cz} />}
+
+      {/* The sun's shadow map is view-independent — orbiting cannot change a
+          texel of it — so it is re-rendered on change instead of every frame. */}
+      <ShadowController worldKey={worldKey} dynamic={residents > 0} />
       {/* Every interior point light — placed luminaires, recessed downlights and
           cove washes — on one fixed-size pool. Forward rendering shades each
           surface against every enabled light, so the count is the frame budget;
@@ -6287,12 +6289,19 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           </mesh>
         )
       })}
+      {/* Soft ground contact under everything standing on the floor.
+          This is a second shadow render (scene → depth FBO → two blur passes),
+          so like the sun's map it runs on change rather than continuously:
+          drei re-arms its `frames` countdown on every re-render of this
+          component, and `Scene` re-renders on any plan or toggle change.
+          Residents walking are the one case that needs it live. */}
       <ContactShadows
         position={[cx, 0.012, cz]}
         opacity={env.lighting.sun.shadowIntensity}
         scale={Math.max(wM, hM) * 1.4}
         blur={2.4}
         far={2.5}
+        frames={residents > 0 ? Infinity : 12}
         resolution={readTier() === 'high' ? 1024 : 512}
       />
 

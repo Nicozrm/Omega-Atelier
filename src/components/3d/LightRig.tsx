@@ -30,13 +30,16 @@
  * should never disappear just because their wash light lost its slot.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlacedDevice, Room, ModeKey } from '@/types'
 import { deriveLightSources, type CategoryLookup } from '@/lib/lighting'
 import { selectLights, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
 import { readTier } from '@/lib/render/tier'
+import { twinManager, type TwinView } from '@/twin/twinManager'
+import { resolveRoomBinding, deriveRoomLiveState } from '@/twin/binding'
+import { lightIntensity } from '@/twin/reflection'
 
 const M = (cm: number) => cm / 100
 
@@ -56,7 +59,13 @@ const RESELECT_INTERVAL = 0.12
 /** …but re-rank immediately once the camera has travelled this far (metres). */
 const RESELECT_MOVE = 0.75
 
-/** Semantic weights — a placed luminaire outranks ambient architectural light. */
+/**
+ * Semantic weights — a placed luminaire outranks ambient architectural light.
+ * A *live* lamp (a real fixture that is actually on in the user's home right
+ * now, via a connector) outranks everything: it is the whole point of the
+ * digital twin, so it must never lose its slot to decorative cove light.
+ */
+const PRIORITY_LIVE = 1.4
 const PRIORITY_LAMP = 1.0
 const PRIORITY_DOWNLIGHT = 0.75
 const PRIORITY_COVE = 0.45
@@ -159,6 +168,44 @@ export function collectInteriorSources(
   return sources
 }
 
+/**
+ * Point lights for rooms whose bound devices report lights on *right now*.
+ *
+ * Uses the same twin runtime and the same `resolveRoomBinding` /
+ * `deriveRoomLiveState` as `LiveTwinReflection` and the 2D floorplan, so live
+ * state is derived in exactly one place. That component keeps the visual glow;
+ * only the light itself moves here, so live rooms compete for the same pool as
+ * everything else rather than adding to it.
+ */
+function useTwinLightSources(rooms: readonly Room[]): PointLightSpec[] {
+  const manager = twinManager()
+  const [view, setView] = useState<TwinView>(() => manager.view())
+  useEffect(() => manager.subscribe(setView), [manager])
+
+  return useMemo(() => {
+    const binding = resolveRoomBinding(view.devices, rooms as Room[], view.bindings)
+    const sources: PointLightSpec[] = []
+    for (const room of rooms) {
+      if (room.polygon.length < 3) continue
+      const devices = binding.byRoom.get(room.id)
+      if (!devices || devices.length === 0) continue
+      const live = deriveRoomLiveState(devices)
+      if (live.lightsOn <= 0 || !live.glow) continue
+      const c = centroid(room.polygon)
+      sources.push({
+        key: `live:${room.id}`,
+        position: [M(c.x), M(LAMP_MOUNT_CM), M(c.y)],
+        color: live.glow,
+        intensity: lightIntensity(live.brightness, live.lightsOn),
+        distance: 7,
+        decay: 1.8,
+        priority: PRIORITY_LIVE,
+      })
+    }
+    return sources
+  }, [view.devices, view.bindings, rooms])
+}
+
 /** Mutable per-slot state — lives outside React so `useFrame` can write it freely. */
 interface Slot {
   key: string | null
@@ -174,9 +221,14 @@ export function LightRig({ rooms, devices, mode, categoryOf }: {
 }) {
   const camera = useThree((s) => s.camera)
 
-  const sources = useMemo(
+  const planSources = useMemo(
     () => collectInteriorSources(rooms, devices, mode, categoryOf),
     [rooms, devices, mode, categoryOf],
+  )
+  const liveSources = useTwinLightSources(rooms)
+  const sources = useMemo(
+    () => (liveSources.length > 0 ? [...planSources, ...liveSources] : planSources),
+    [planSources, liveSources],
   )
 
   // Pool size changes only when the plan or mode changes — never while orbiting —
@@ -192,13 +244,16 @@ export function LightRig({ rooms, devices, mode, categoryOf }: {
   const lastCamera = useRef(new THREE.Vector3(Infinity, Infinity, Infinity))
   const camPos = useRef<[number, number, number]>([0, 0, 0])
 
-  // Reset the pool whenever its size or the available sources change, so a slot
-  // never keeps driving a light that no longer exists.
+  // Rebuild the pool only when its *size* changes — that is the moment the
+  // mounted lights are replaced. Sources coming and going need no reset: the
+  // next re-selection simply hands the affected slot a different spec, and a
+  // stale key in `selection` just fails to match an incumbent. Resetting on
+  // every source change would restart crossfades on each live-twin tick.
   useEffect(() => {
     slots.current = Array.from({ length: budget }, () => ({ key: null, target: 0, current: 0 }))
     selection.current = []
     lastCamera.current.set(Infinity, Infinity, Infinity)
-  }, [budget, sources])
+  }, [budget])
 
   useFrame((_, delta) => {
     if (budget === 0) return
