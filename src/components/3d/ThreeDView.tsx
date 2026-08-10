@@ -6071,6 +6071,78 @@ function GhostFloors({ floors, activeId }: { floors: Floor[]; activeId: string }
   return <Static>{built.nodes}</Static>
 }
 
+/**
+ * Per-room floor overrides — a Shape-based slab per room that carries its own
+ * material, and a raised wood deck with a low curb for outdoor zones.
+ *
+ * Memoised on the rooms, because R3F reconstructs an object whenever its `args`
+ * change and compares that array element-wise by reference. Building the
+ * `THREE.Shape` (and the extrude options object) inline meant every render of
+ * the scene re-triangulated every room's floor and re-extruded every terrace —
+ * some of the most expensive geometry in the scene — for outlines that only
+ * change when the plan does.
+ */
+function RoomFloors({ rooms }: { rooms: Room[] }) {
+  const slabs = useMemo(() => {
+    const extrudeOptions = { depth: M(6), bevelEnabled: false }
+    return rooms
+      .filter((r) => (r.floorMaterialId || r.floorVariant || r.zoneType === 'outdoor') && r.polygon.length >= 3)
+      .map((r) => {
+        const shape = new THREE.Shape()
+        shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
+        for (let i = 1; i < r.polygon.length; i++) {
+          shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
+        }
+        shape.closePath()
+        return {
+          id: r.id,
+          shape,
+          extrudeOptions,
+          outdoor: r.zoneType === 'outdoor',
+          material: matFromCatalog(resolveFloorMaterial(r)),
+        }
+      })
+  }, [rooms])
+
+  return (
+    <>
+      {slabs.map((slab) => (slab.outdoor ? (
+        <group key={`room-${slab.id}`}>
+          {/* Deck slab — extruded wood */}
+          <mesh
+            position={[0, 0.0, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            receiveShadow
+            castShadow
+            material={MAT.woodWalnut() as THREE.Material}
+          >
+            <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
+          </mesh>
+          {/* Top surface board (oak) sitting flush on the deck for plank detail */}
+          <mesh
+            position={[0, M(6) + 0.001, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            receiveShadow
+            material={MAT.woodOak() as THREE.Material}
+          >
+            <shapeGeometry args={[slab.shape]} />
+          </mesh>
+        </group>
+      ) : (
+        <mesh
+          key={`room-${slab.id}`}
+          position={[0, 0.001, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          receiveShadow
+          material={slab.material}
+        >
+          <shapeGeometry args={[slab.shape]} />
+        </mesh>
+      )))}
+    </>
+  )
+}
+
 function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus }: {
   env: EnvironmentState; floorVariant: FloorVariant; wallMaterialId: string; walkMode: boolean; envPreset: EnvPreset; showHouse: boolean;
   stackView: boolean; houseStyle: HouseStyle; residents: number; onResidentStatus?: (s: ResidentStatus) => void;
@@ -6177,54 +6249,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
       <CeilingFade rooms={floor.rooms} walkMode={walkMode} />
       {/* v18/v26 — per-room floor overrides via Shape geometry.
           Outdoor zones (terraces) render as a raised wood deck with a low curb. */}
-      {floor.rooms.filter((r: Room) => (r.floorMaterialId || r.floorVariant || r.zoneType === 'outdoor') && r.polygon.length >= 3).map((r: Room) => {
-        const isOutdoor = r.zoneType === 'outdoor'
-        const shape = new THREE.Shape()
-        shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
-        for (let i = 1; i < r.polygon.length; i++) {
-          shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
-        }
-        shape.closePath()
-
-        if (isOutdoor) {
-          // Raised deck: extrude the shape a few cm to give it physical presence
-          return (
-            <group key={`room-${r.id}`}>
-              {/* Deck slab — extruded wood */}
-              <mesh
-                position={[0, 0.0, 0]}
-                rotation={[Math.PI / 2, 0, 0]}
-                receiveShadow
-                castShadow
-                material={MAT.woodWalnut() as THREE.Material}
-              >
-                <extrudeGeometry args={[shape, { depth: M(6), bevelEnabled: false }]} />
-              </mesh>
-              {/* Top surface board (oak) sitting flush on the deck for plank detail */}
-              <mesh
-                position={[0, M(6) + 0.001, 0]}
-                rotation={[Math.PI / 2, 0, 0]}
-                receiveShadow
-                material={MAT.woodOak() as THREE.Material}
-              >
-                <shapeGeometry args={[shape]} />
-              </mesh>
-            </group>
-          )
-        }
-
-        return (
-          <mesh
-            key={`room-${r.id}`}
-            position={[0, 0.001, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            material={matFromCatalog(resolveFloorMaterial(r))}
-          >
-            <shapeGeometry args={[shape]} />
-          </mesh>
-        )
-      })}
+      <RoomFloors rooms={floor.rooms} />
       {/* Soft ground contact under everything standing on the floor.
           This is a second shadow render (scene → depth FBO → two blur passes),
           so like the sun's map it runs on change rather than continuously:

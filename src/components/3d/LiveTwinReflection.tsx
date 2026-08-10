@@ -55,6 +55,22 @@ export function LiveTwinReflection({ rooms }: { rooms: Room[] }) {
     [view.devices, view.bindings, rooms],
   )
 
+  // Room outlines, memoised on the rooms rather than rebuilt inline.
+  //
+  // R3F reconstructs an object whenever its `args` change, comparing the array
+  // element-wise by reference — so a freshly built `THREE.Shape` on each render
+  // means a fresh `ShapeGeometry`, i.e. a full earcut triangulation. This
+  // component re-renders on every live-twin tick, so that was a re-triangulation
+  // of every lit room's floor several times a second, for outlines that only
+  // change when the plan does.
+  const shapes = useMemo(() => {
+    const byRoom = new Map<string, THREE.Shape>()
+    for (const room of rooms) {
+      if (room.polygon.length >= 3) byRoom.set(room.id, shapeOf(room.polygon))
+    }
+    return byRoom
+  }, [rooms])
+
   return (
     <>
       {rooms.map((room) => {
@@ -74,7 +90,7 @@ export function LiveTwinReflection({ rooms }: { rooms: Room[] }) {
                 frame budget in a forward renderer. */}
             {lit && (
               <mesh position={[0, M(3), 0]} rotation={[Math.PI / 2, 0, 0]}>
-                <shapeGeometry args={[shapeOf(room.polygon)]} />
+                <shapeGeometry args={[shapes.get(room.id)]} />
                 <meshBasicMaterial color={live.glow} transparent opacity={glowOpacity(live.brightness)} depthWrite={false} side={THREE.DoubleSide} />
               </mesh>
             )}
