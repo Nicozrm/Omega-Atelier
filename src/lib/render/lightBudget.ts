@@ -129,6 +129,42 @@ export function selectLights(input: SelectLightsInput): PointLightSpec[] {
 }
 
 /**
+ * Map the selected sources onto the fixed pool of light slots, **stickily**.
+ *
+ * `selectLights` returns sources ranked by relevance, and that ranking
+ * reshuffles constantly as the camera moves even when the chosen *set* is
+ * unchanged. Driving slot `i` from rank `i` would therefore hand slots to
+ * different sources several times a second, restarting crossfades and moving
+ * lights that never actually went anywhere.
+ *
+ * So a source that keeps its place in the budget keeps its slot, and only the
+ * genuinely free slots are handed to newcomers.
+ *
+ * @param current  the key each slot drives today, `null` for an idle slot
+ * @param picked   keys selected for this evaluation, in any order
+ * @returns the key each slot should drive, `null` where it should fade out.
+ *   Same length as `current`.
+ */
+export function assignSlots(
+  current: ReadonlyArray<string | null>,
+  picked: ReadonlyArray<string>,
+): Array<string | null> {
+  const wanted = new Set(picked)
+  // Incumbents that are still wanted keep their slot; everything else frees up.
+  const next: Array<string | null> = current.map((key) => (key !== null && wanted.has(key) ? key : null))
+
+  const retained = new Set<string>()
+  for (const key of next) if (key !== null) retained.add(key)
+
+  const newcomers = picked.filter((key) => !retained.has(key))
+  let n = 0
+  for (let i = 0; i < next.length && n < newcomers.length; i++) {
+    if (next[i] === null) next[i] = newcomers[n++]
+  }
+  return next
+}
+
+/**
  * Pool size for a quality tier.
  *
  * The pool is a *fixed* shader cost, so it is sized to what the tier can carry

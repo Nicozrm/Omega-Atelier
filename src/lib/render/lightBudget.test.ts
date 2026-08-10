@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { lightScore, selectLights, lightBudgetForTier, type PointLightSpec } from './lightBudget'
+import { lightScore, selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from './lightBudget'
 
 const spec = (over: Partial<PointLightSpec> & { key: string }): PointLightSpec => ({
   position: [0, 0, 0],
@@ -121,5 +121,50 @@ describe('lightBudgetForTier', () => {
     expect(lightBudgetForTier('high')).toBe(8)
     expect(lightBudgetForTier('low')).toBe(4)
     expect(lightBudgetForTier('off')).toBe(2)
+  })
+})
+
+describe('assignSlots', () => {
+  it('fills empty slots with the selection', () => {
+    expect(assignSlots([null, null, null], ['a', 'b'])).toEqual(['a', 'b', null])
+  })
+
+  it('keeps a retained source in the slot it already holds', () => {
+    // 'b' stays selected but is now ranked first; it must not move slots.
+    expect(assignSlots(['a', 'b', 'c'], ['b', 'c', 'a'])).toEqual(['a', 'b', 'c'])
+  })
+
+  it('is stable under arbitrary reordering of the same set', () => {
+    const current = ['a', 'b', 'c', 'd']
+    for (const order of [['d', 'c', 'b', 'a'], ['b', 'd', 'a', 'c'], ['c', 'a', 'd', 'b']]) {
+      expect(assignSlots(current, order)).toEqual(current)
+    }
+  })
+
+  it('drops a source that left the selection and frees its slot', () => {
+    expect(assignSlots(['a', 'b', 'c'], ['a', 'c'])).toEqual(['a', null, 'c'])
+  })
+
+  it('hands a freed slot to the newcomer that replaced it', () => {
+    expect(assignSlots(['a', 'b', 'c'], ['a', 'c', 'd'])).toEqual(['a', 'd', 'c'])
+  })
+
+  it('never returns more slots than it was given', () => {
+    expect(assignSlots([null, null], ['a', 'b', 'c', 'd'])).toHaveLength(2)
+  })
+
+  it('never assigns the same source to two slots', () => {
+    const next = assignSlots(['a', null, 'b'], ['a', 'b', 'c'])
+    const used = next.filter((k): k is string => k !== null)
+    expect(new Set(used).size).toBe(used.length)
+  })
+
+  it('idles every slot when nothing is selected', () => {
+    expect(assignSlots(['a', 'b'], [])).toEqual([null, null])
+  })
+
+  it('reaches a fixed point — reapplying the same selection changes nothing', () => {
+    const first = assignSlots([null, null, null], ['x', 'y'])
+    expect(assignSlots(first, ['y', 'x'])).toEqual(first)
   })
 })

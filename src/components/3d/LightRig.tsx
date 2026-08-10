@@ -35,7 +35,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlacedDevice, Room, ModeKey } from '@/types'
 import { deriveLightSources, type CategoryLookup } from '@/lib/lighting'
-import { selectLights, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
+import { selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
 import { readTier } from '@/lib/render/tier'
 import { twinManager, type TwinView } from '@/twin/twinManager'
 import { resolveRoomBinding, deriveRoomLiveState } from '@/twin/binding'
@@ -277,27 +277,36 @@ export function LightRig({ rooms, devices, mode, categoryOf }: {
         previous: selection.current,
       })
       selection.current = picked.map((p) => p.key)
+      const specByKey = new Map(picked.map((spec) => [spec.key, spec]))
+      const nextKeys = assignSlots(slots.current.map((slot) => slot.key), selection.current)
 
       for (let i = 0; i < slots.current.length; i++) {
         const slot = slots.current[i]
         const light = lightRefs.current[i]
-        const spec = picked[i]
         if (!light) continue
 
+        const key = nextKeys[i]
+        const spec = key === null ? undefined : specByKey.get(key)
         if (!spec) {
-          // Nothing to drive this slot — fade it out but keep it mounted.
+          // Nothing to drive this slot — fade it out, but keep it mounted so
+          // the light count (and every compiled shader) stays put.
           slot.key = null
           slot.target = 0
           continue
         }
+
+        // Written every time, not only on handover: a source's colour and
+        // brightness can change while it holds its slot — a live twin lamp
+        // dimming or shifting to warm white is exactly that — and the pool
+        // would otherwise keep showing the values it was first handed.
+        light.position.set(spec.position[0], spec.position[1], spec.position[2])
+        light.color.set(spec.color)
+        light.distance = spec.distance
+        light.decay = spec.decay
+
         if (slot.key !== spec.key) {
-          // New source: snap the fixture's fixed properties, then ramp in from
-          // wherever this slot currently sits so the swap dissolves.
+          // Handover: ramp in from zero so the swap dissolves instead of popping.
           slot.key = spec.key
-          light.position.set(spec.position[0], spec.position[1], spec.position[2])
-          light.color.set(spec.color)
-          light.distance = spec.distance
-          light.decay = spec.decay
           slot.current = 0
         }
         slot.target = spec.intensity
