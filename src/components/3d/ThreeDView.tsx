@@ -33,6 +33,7 @@ import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial,
 import { LightRig } from './LightRig'
 import { SunLight } from './SunLight'
 import { ShadowController } from './ShadowController'
+import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
@@ -70,13 +71,6 @@ const deviceCategoryOf: CategoryLookup = (id) => DEVICE_MAP[id]?.category
 
 // World units: 1 unit = 1 meter. Plan coords are in cm → divide by 100.
 const M = (cm: number) => cm / 100
-/** Semantic time-of-day phase → image-based-lighting reflection strength.
- *  Keeps a day/night cue in metal/glass/gloss reflections (sky, sun and shadows
- *  already vary by phase via the lighting rig). Applied to `scene.environmentIntensity`
- *  so it costs nothing per frame and never rebuilds the env map. */
-const PHASE_TO_ENV_INTENSITY: Record<DayPhase, number> = {
-  night: 0.35, dawn: 0.7, goldenHour: 0.9, day: 1.0, dusk: 0.7,
-}
 const PHASE_LABEL: Record<DayPhase, string> = {
   night: 'Nacht', dawn: 'Dämmerung', goldenHour: 'Golden Hour', day: 'Tag', dusk: 'Abendrot',
 }
@@ -4650,73 +4644,14 @@ function CityBackdrop({ span, cx, cz, daylightScale }: { span: number; cx: numbe
 }
 
 /**
- * Procedural interior studio environment for the IBL — a small room of unlit
- * panels whose colours are captured as radiance by the PMREM. Compared to the
- * neutral RoomEnvironment it adds archviz character: a bright overhead softbox,
- * a warm key and a cool fill, over a dark floor. This gives metals, glass and
- * the clearcoat surfaces directional, contrasty reflections (= depth) instead
- * of a flat grey sheen — offline, no asset, built once. Average brightness is
- * kept close to neutral so it doesn't shift overall exposure.
+ * Interior-lighting character, chosen by the user. The palettes themselves and
+ * the environment map they feed live in `SkyEnvironment`; re-exported here
+ * because the toolbar below is what drives them.
  */
-export type EnvPreset = 'studio' | 'warm' | 'cool' | 'dramatic'
+export type { EnvPreset } from './SkyEnvironment'
 export const ENV_PRESET_LABEL: Record<EnvPreset, string> = {
   studio: 'Studio', warm: 'Warm', cool: 'Kühl', dramatic: 'Dramatisch',
 }
-/** Panel palette per HDR preset: [shell, floor, softbox, softboxMul, key, keyMul, coolFill, neutralBounce]. */
-const ENV_PRESETS: Record<EnvPreset, { shell: string; floor: string; box: [string, number]; key: [string, number]; fill: string; bounce: string }> = {
-  studio:    { shell: '#b9bcc2', floor: '#26262a', box: ['#eef1f6', 2.4], key: ['#ffe9cf', 1.5], fill: '#dbe6ff', bounce: '#cfd2d8' },
-  warm:      { shell: '#c3b6a6', floor: '#2a231d', box: ['#fff3e0', 2.2], key: ['#ffdcae', 2.2], fill: '#e8dcc8', bounce: '#d8c8b4' },
-  cool:      { shell: '#c2c8d0', floor: '#242830', box: ['#f4f8ff', 2.8], key: ['#eaf1ff', 1.3], fill: '#cfe0ff', bounce: '#d4dbe4' },
-  dramatic:  { shell: '#8f9298', floor: '#161619', box: ['#ffffff', 3.0], key: ['#ffdcb0', 1.9], fill: '#aebdd6', bounce: '#a9adb4' },
-}
-function buildInteriorEnv(preset: EnvPreset = 'studio'): THREE.Scene {
-  const p = ENV_PRESETS[preset]
-  const env = new THREE.Scene()
-  const c = (hex: string, mul = 1) => new THREE.Color(hex).multiplyScalar(mul)
-  const add = (w: number, h: number, d: number, color: THREE.Color, pos: [number, number, number], side: THREE.Side = THREE.FrontSide) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color, side }))
-    mesh.position.set(pos[0], pos[1], pos[2])
-    env.add(mesh)
-  }
-  add(14, 8, 14, c(p.shell), [0, 0, 0], THREE.BackSide)         // room shell
-  add(13, 0.2, 13, c(p.floor), [0, -3.9, 0])                    // dark floor (grounded reflections)
-  add(7, 0.2, 7, c(p.box[0], p.box[1]), [0, 3.7, 0])            // overhead softbox
-  add(6, 3, 0.2, c(p.key[0], p.key[1]), [0, 1.6, -6.6])         // key light
-  add(0.2, 4, 7, c(p.fill, 1.1), [-6.8, 0.8, 0])               // cool fill
-  add(0.2, 4, 7, c(p.bounce, 0.9), [6.8, 0.6, 0])              // soft bounce
-  return env
-}
-
-function LocalEnvironment({ phase, preset }: { phase: DayPhase; preset: EnvPreset }) {
-  const gl = useThree((s) => s.gl)
-  const scene = useThree((s) => s.scene)
-
-  useEffect(() => {
-    const pmrem = new THREE.PMREMGenerator(gl)
-    const room = buildInteriorEnv(preset)
-    const rt = pmrem.fromScene(room, 0.04)
-    scene.environment = rt.texture
-    return () => {
-      scene.environment = null
-      rt.dispose()
-      pmrem.dispose()
-      room.traverse((o: THREE.Object3D) => {
-        const mesh = o as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        const m = mesh.material as THREE.Material | THREE.Material[] | undefined
-        if (Array.isArray(m)) m.forEach((mm) => mm.dispose())
-        else if (m) m.dispose()
-      })
-    }
-  }, [gl, scene, preset])
-
-  useEffect(() => {
-    scene.environmentIntensity = PHASE_TO_ENV_INTENSITY[phase]
-  }, [scene, phase])
-
-  return null
-}
-
 /**
  * Frames the whole dollhouse on mount, relative to the plan's size, from a
  * pleasant elevated 3/4 angle (the reference archviz view) — instead of a fixed
@@ -6409,7 +6344,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 
       {/* Local procedural studio IBL — reflections on metals/glass/gloss,
           offline-first (no CDN HDRI, no Suspense/network dependency). */}
-      <LocalEnvironment phase={env.phase} preset={envPreset} />
+      <SkyEnvironment env={env} preset={envPreset} />
     </>
   )
 }
