@@ -33,7 +33,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { PlacedDevice, Room, ModeKey } from '@/types'
+import type { PlacedDevice, PlacedFurniture, Room, ModeKey } from '@/types'
 import { deriveLightSources, type CategoryLookup } from '@/lib/lighting'
 import { selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
 import { readTier } from '@/lib/render/tier'
@@ -67,8 +67,35 @@ const RESELECT_MOVE = 0.75
  */
 const PRIORITY_LIVE = 1.4
 const PRIORITY_LAMP = 1.0
+/** Fixtures built into furniture: dining pendant, under-cabinet strip, TV cove. */
+const PRIORITY_FIXTURE = 0.9
 const PRIORITY_DOWNLIGHT = 0.75
 const PRIORITY_COVE = 0.45
+
+/**
+ * Luminaires that are part of a furniture model rather than placed as devices —
+ * the pendant over a dining table, the strip under the kitchen wall units, the
+ * cove above the TV wall. `FurnitureMesh` draws their emissive parts; the actual
+ * light belongs here so it is budgeted like every other one.
+ *
+ * `local` is in the furniture's own frame, in metres, and gets rotated into the
+ * world by the piece's own transform.
+ */
+const FURNITURE_FIXTURES: ReadonlyArray<{
+  test: RegExp
+  local: (wM: number, hM: number) => [number, number, number]
+  color: string
+  intensity: number
+  distance: number
+  decay: number
+}> = [
+  // Pendant above any table (the dining variant shares the same fixture).
+  { test: /^table/i, local: () => [0, 1.55, 0], color: '#ffd9ae', intensity: 2.1, distance: 2.8, decay: 2.2 },
+  // Under-cabinet strip washing the kitchen worktop.
+  { test: /^kitchen/i, local: (_w, hM) => [0, 1.3, -hM / 2 + 0.42], color: '#ffdcb0', intensity: 2.2, distance: 2.2, decay: 2.4 },
+  // Warm cove above the TV wall.
+  { test: /^tv-sideboard|^sideboard/i, local: (_w, hM) => [0, 1.4, -hM / 2 + 0.35], color: '#ffd9ae', intensity: 1.8, distance: 2.4, decay: 2.4 },
+]
 
 /** Polygon centroid in plan centimetres. */
 function centroid(polygon: ReadonlyArray<{ x: number; y: number }>): { x: number; y: number } {
@@ -91,10 +118,38 @@ function centroid(polygon: ReadonlyArray<{ x: number; y: number }>): { x: number
 export function collectInteriorSources(
   rooms: readonly Room[],
   devices: readonly PlacedDevice[],
+  furniture: readonly PlacedFurniture[],
   mode: ModeKey | undefined,
   categoryOf: CategoryLookup,
+  sizeOf: (furnitureId: string) => readonly [number, number] | undefined,
 ): PointLightSpec[] {
   const sources: PointLightSpec[] = []
+
+  // ── Fixtures built into furniture, lifted into world space by the piece's
+  //    own position and rotation.
+  for (const item of furniture) {
+    if (item.hidden) continue
+    const fixture = FURNITURE_FIXTURES.find((f) => f.test.test(item.furnitureId))
+    if (!fixture) continue
+    const [w, h] = item.size ?? sizeOf(item.furnitureId) ?? [60, 60]
+    const [lx, ly, lz] = fixture.local(M(w), M(h))
+    const angle = ((item.rotation ?? 0) * Math.PI) / 180
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    sources.push({
+      key: `fixture:${item.id}`,
+      position: [
+        M(item.position.x) + lx * cos + lz * sin,
+        ly,
+        M(item.position.y) - lx * sin + lz * cos,
+      ],
+      color: fixture.color,
+      intensity: fixture.intensity,
+      distance: fixture.distance,
+      decay: fixture.decay,
+      priority: PRIORITY_FIXTURE,
+    })
+  }
 
   // ── Placed luminaires — colour, brightness and on/off come from the domain.
   if (mode) {
@@ -213,17 +268,20 @@ interface Slot {
   current: number
 }
 
-export function LightRig({ rooms, devices, mode, categoryOf }: {
+export function LightRig({ rooms, devices, furniture, mode, categoryOf, sizeOf }: {
   rooms: readonly Room[]
   devices: readonly PlacedDevice[]
+  furniture: readonly PlacedFurniture[]
   mode: ModeKey | undefined
   categoryOf: CategoryLookup
+  /** Catalogue default size for a furniture id, used to place built-in fixtures. */
+  sizeOf: (furnitureId: string) => readonly [number, number] | undefined
 }) {
   const camera = useThree((s) => s.camera)
 
   const planSources = useMemo(
-    () => collectInteriorSources(rooms, devices, mode, categoryOf),
-    [rooms, devices, mode, categoryOf],
+    () => collectInteriorSources(rooms, devices, furniture, mode, categoryOf, sizeOf),
+    [rooms, devices, furniture, mode, categoryOf, sizeOf],
   )
   const liveSources = useTwinLightSources(rooms)
   const sources = useMemo(

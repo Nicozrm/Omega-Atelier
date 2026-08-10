@@ -81,6 +81,8 @@ const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
 /** Catalogue lookup for the lighting domain. Module-level so the reference is
  *  stable — `LightRig` memoises its source list on it. */
 const deviceCategoryOf: CategoryLookup = (id) => DEVICE_MAP[id]?.category
+/** Catalogue default size for a furniture id. Module-level for a stable reference. */
+const furnitureSizeOf = (id: string): readonly [number, number] | undefined => FURN_MAP[id]?.size
 
 // World units: 1 unit = 1 meter. Plan coords are in cm → divide by 100.
 const M = (cm: number) => cm / 100
@@ -1807,7 +1809,7 @@ function DeviceMesh({ deviceId, category, on, hint }: { deviceId?: string; categ
             <circleGeometry args={[0.16, 24]} />
             <meshStandardMaterial color="#fff2da" emissive="#ffcf96" emissiveIntensity={glow + 0.4} side={THREE.DoubleSide} />
           </mesh>
-          {/* NOTE: no extra pointLight here — RoomLights already places one real
+          {/* NOTE: no extra pointLight here — LightRig already places one real
               light per "on" lamp from the lighting model; the mesh only glows. */}
         </group>
       )
@@ -2372,9 +2374,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <circleGeometry args={[0.15, 24]} />
           <meshStandardMaterial color="#f4e2c2" emissive="#ffc383" emissiveIntensity={1.6} side={THREE.DoubleSide} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.55, 0]} color="#ffd9ae" intensity={2.1} distance={2.8} decay={2.2} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -2399,9 +2398,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <circleGeometry args={[0.15, 24]} />
           <meshStandardMaterial color="#f4e2c2" emissive="#ffc383" emissiveIntensity={1.6} side={THREE.DoubleSide} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.55, 0]} color="#ffd9ae" intensity={2.1} distance={2.8} decay={2.2} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -2472,9 +2468,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <boxGeometry args={[wM * 0.94, 0.015, 0.03]} />
           <meshStandardMaterial color="#fff2dc" emissive="#ffcaa0" emissiveIntensity={1.8} toneMapped={false} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.3, -hM / 2 + 0.42]} color="#ffdcb0" intensity={2.2} distance={2.2} decay={2.4} castShadow={false} />
-        )}
         {/* Tiled backsplash — real ceramic tiles with grout (Fugen) between the
             counter and the upper cabinets, on the back wall */}
         <mesh position={[0, 1.16, -hM / 2 + 0.012]} receiveShadow material={kitchenTileMat()}>
@@ -2569,9 +2562,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <boxGeometry args={[wM * 0.9, 0.018, 0.02]} />
           <meshStandardMaterial color="#f2debe" emissive="#ffb877" emissiveIntensity={1.5} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.4, -hM / 2 + 0.35]} color="#ffd9ae" intensity={1.8} distance={2.4} decay={2.4} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -6221,8 +6211,10 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
       <LightRig
         rooms={floor.rooms}
         devices={floor.devices}
+        furniture={floor.furniture}
         mode={doc?.activeModeKey}
         categoryOf={deviceCategoryOf}
+        sizeOf={furnitureSizeOf}
       />
 
       {/* Downlight fixtures — the emissive disc only (walk mode) */}
