@@ -10,8 +10,20 @@
  *  - Smooth damped orbit controls. Hover-lift animation. Selection highlight ring.
  *  - Multi-floor stacking when more than one floor exists.
  *
- * The whole file is wrapped in `@ts-nocheck` because R3F's intrinsic JSX types
- * are notoriously fiddly and not worth the friction; runtime is solid.
+ * This file owns the *scene*: geometry, materials, camera and the surrounding
+ * UI. The lighting rig lives in sibling modules, because each of them enforces
+ * an invariant that is easy to break by accident from here:
+ *
+ *  - `LightRig` — every interior point light, on a pool of fixed size. Three
+ *    renders forward, so the light count is the frame budget and is baked into
+ *    every compiled shader. Do not mount a `<pointLight>` in this file.
+ *  - `SunLight` + `ShadowController` — the shadow-casting key light and its
+ *    on-demand shadow map. Anything that *moves* a caster has to say so (see
+ *    `requestShadowRefresh`).
+ *  - `SkyEnvironment` — the environment map, built from the real sky.
+ *
+ * The renderer-neutral half of all of that is in `lib/render/`, where it is
+ * unit-tested without WebGL.
  */
 
 
