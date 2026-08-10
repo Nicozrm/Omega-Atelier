@@ -32,7 +32,7 @@ import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
 import { LightRig } from './LightRig'
 import { SunLight } from './SunLight'
-import { ShadowController } from './ShadowController'
+import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
@@ -2006,11 +2006,16 @@ function Device3D({ d }: { d: PlacedDevice }) {
   const ms = doc?.activeModeKey ? d.modeState?.[doc.activeModeKey] : undefined
   const on = ms === undefined ? null : ms.on === true ? true : ms.on === false ? false : null
 
-  // Hover lift animation
+  // Hover lift animation. The lift moves a shadow caster, so it has to tell the
+  // on-demand shadow map to keep up — otherwise the device rises off a shadow
+  // that stays stuck to the floor.
   useFrame((_, dt) => {
     if (!meshRef.current) return
     const target = (hovered || isSelected) ? 0.04 : 0
-    meshRef.current.position.y += (target - meshRef.current.position.y) * Math.min(1, dt * 8)
+    const y = meshRef.current.position.y
+    if (Math.abs(target - y) < 0.0005) return
+    meshRef.current.position.y = y + (target - y) * Math.min(1, dt * 8)
+    requestShadowRefresh()
   })
 
   return (
@@ -3758,11 +3763,15 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
   const selection = usePlanStore((s) => s.selection)
   const isSelected = selection.type === 'furniture' && selection.ids.includes(f.id)
 
-  // Subtle lift on hover
+  // Subtle lift on hover — same deal as devices: it moves a shadow caster, so
+  // the on-demand shadow map needs telling while the lift is in flight.
   useFrame((_, dt) => {
     if (!groupRef.current) return
     const target = hovered ? 0.015 : 0
-    groupRef.current.position.y += (target - groupRef.current.position.y) * Math.min(1, dt * 8)
+    const y = groupRef.current.position.y
+    if (Math.abs(target - y) < 0.0005) return
+    groupRef.current.position.y = y + (target - y) * Math.min(1, dt * 8)
+    requestShadowRefresh()
   })
 
   return (

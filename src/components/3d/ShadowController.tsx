@@ -39,6 +39,29 @@ const WARMUP_FRAMES = 150
 /** Frames of refresh after a discrete world change. */
 const BURST_FRAMES = 8
 
+/**
+ * Wall-clock deadline (ms, `performance.now()` domain) until which the shadow
+ * map keeps refreshing. Module-level rather than React state on purpose: the
+ * callers are `useFrame` animations running dozens of times a second, and
+ * routing that through a re-render would cost far more than the shadow pass.
+ */
+let refreshUntil = 0
+
+/**
+ * Ask for the shadow map to keep updating for a moment.
+ *
+ * For animations that move a shadow *caster* without changing any of the state
+ * in `worldKey` — the hover lift under a device or a piece of furniture is the
+ * case that matters. Those run for a few hundred milliseconds and would
+ * otherwise leave the object's shadow behind at its old position.
+ *
+ * Cheap to over-call: it only ever pushes a deadline forward.
+ */
+export function requestShadowRefresh(seconds = 0.3): void {
+  const until = performance.now() + seconds * 1000
+  if (until > refreshUntil) refreshUntil = until
+}
+
 export function ShadowController({ worldKey, dynamic }: {
   /**
    * An identity token: pass a value whose **reference** changes whenever
@@ -79,7 +102,9 @@ export function ShadowController({ worldKey, dynamic }: {
   }, [worldKey])
 
   useFrame(() => {
-    if (dynamic) {
+    if (dynamic || performance.now() < refreshUntil) {
+      // Something is genuinely moving. Refresh at half rate — a shadow updating
+      // at 30 Hz is indistinguishable from 60 Hz and costs half as much.
       tick.current++
       if (tick.current % 2 === 0) gl.shadowMap.needsUpdate = true
       return
