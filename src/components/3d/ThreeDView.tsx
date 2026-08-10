@@ -36,6 +36,7 @@ import { ShadowController } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
+import { enablePcssShadows } from '@/lib/render/pcssShadows'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, PointerLockControls, PerformanceMonitor, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
@@ -6485,6 +6486,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
     if (document.fullscreenElement) void document.exitFullscreen()
     else void el.requestFullscreen?.()
   }
+  // Contact-hardening shadows. This rewrites a global three shader chunk, so it
+  // has to run before the canvas below compiles its first material — hence the
+  // render phase rather than an effect. The call is idempotent and guarded, and
+  // returns false rather than breaking if three's shader ever changes shape.
+  // Only on 'high': PCSS costs roughly twice the shadow taps of plain PCF.
+  useMemo(() => (readTier() === 'high' ? enablePcssShadows() : false), [])
+
   // Adaptive resolution: render at up to the device's real pixel ratio (capped
   // at 2 so 3× phones don't melt), which keeps edges crisp on hi-dpi screens
   // instead of the old flat 1.5. PerformanceMonitor then steps it DOWN under
