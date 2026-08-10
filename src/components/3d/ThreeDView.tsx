@@ -19,17 +19,10 @@ import { useEffect, useMemo, useRef, useState, Suspense, Component } from 'react
 import type { ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation, DepthOfField } from '@react-three/postprocessing'
 import type { DepthOfFieldEffect } from 'postprocessing'
-import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point, ModeKey } from '@/types'
+import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point } from '@/types'
 
 // ── v51 Rendering-Layer: Post-Processing (isoliert, tier-gegated, fallback-sicher)
 const CA_OFFSET = new THREE.Vector2(0.0005, 0.0005)
-function readTier(): 'high' | 'low' | 'off' {
-  if (typeof document === 'undefined') return 'high'
-  const c = document.documentElement.classList
-  if (c.contains('q-off')) return 'off'
-  if (c.contains('q-low')) return 'low'
-  return 'high'
-}
 class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
@@ -37,7 +30,9 @@ class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
-import { deriveLightSources } from '@/lib/lighting'
+import { LightRig } from './LightRig'
+import type { CategoryLookup } from '@/lib/lighting'
+import { readTier } from '@/lib/render/tier'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, PointerLockControls, PerformanceMonitor, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
@@ -66,6 +61,10 @@ import * as THREE from 'three'
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
 const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
+
+/** Catalogue lookup for the lighting domain. Module-level so the reference is
+ *  stable — `LightRig` memoises its source list on it. */
+const deviceCategoryOf: CategoryLookup = (id) => DEVICE_MAP[id]?.category
 
 // World units: 1 unit = 1 meter. Plan coords are in cm → divide by 100.
 const M = (cm: number) => cm / 100
@@ -4148,39 +4147,14 @@ function FloorPlane({ width, height, variant }: {
   )
 }
 
-function RoomLights({ devices, mode }: { devices: PlacedDevice[]; mode: ModeKey | undefined }) {
-  // Functional luminaires straight from the lighting model — one real point
-  // light per "on" lamp. Colour (from Kelvin) and brightness are decided by the
-  // model; the renderer only places the light and maps brightness to a sane
-  // THREE intensity. No light state, colour, or Kelvin maths happens here.
-  const sources = useMemo(
-    () => (mode ? deriveLightSources({ devices, lookup: (id) => DEVICE_MAP[id]?.category, mode }) : []),
-    [devices, mode],
-  )
-  const MOUNT = M(235) // mount just below a 250 cm ceiling
-  return (
-    <>
-      {sources.filter((s) => s.on).map((s) => (
-        <pointLight
-          key={s.deviceId}
-          position={[M(s.position.x), MOUNT, M(s.position.y)]}
-          color={s.color}
-          intensity={0.35 + s.intensity * 1.85}
-          distance={5.5}
-          decay={2.0}
-          castShadow={false}
-        />
-      ))}
-    </>
-  )
-}
-
 /**
  * Cove lighting — the reference's signature warm glow line: an emissive LED
  * strip tucked along the top interior edge of every room's walls, tracing the
- * room polygon just below the (missing) ceiling. Emissive strips are free
- * (no lights); on 'high' we add a couple of budgeted warm point lights per
- * room mounted at the perimeter so the glow actually spills onto the walls.
+ * room polygon just below the (missing) ceiling.
+ *
+ * Strips only. The warm wash that spills onto the walls is a real point light,
+ * and every interior point light now comes from `LightRig`'s fixed pool — see
+ * that module for why an unbounded per-room light count was the frame budget.
  */
 const COVE_H = 232          // cm — just below the 250 cm wall top
 const COVE_INSET = 9        // cm — tuck it inside the wall face
@@ -4198,7 +4172,6 @@ function CoveLighting({ rooms }: { rooms: Room[] }) {
         cx /= r.polygon.length; cy /= r.polygon.length
 
         const strips: React.ReactNode[] = []
-        const lightPts: Array<[number, number]> = []
         for (let i = 0; i < r.polygon.length; i++) {
           const p = r.polygon[i]
           const q = r.polygon[(i + 1) % r.polygon.length]
@@ -4222,50 +4195,26 @@ function CoveLighting({ rooms }: { rooms: Room[] }) {
               <meshStandardMaterial color="#ffd9a4" emissive="#ffab5e" emissiveIntensity={1.35} />
             </mesh>,
           )
-          // A warm wash light a touch inside the strip (budgeted below).
-          lightPts.push([sx + nx * 14, sy + ny * 14])
         }
 
-        // Point lights only on 'high', capped at 2 per room, spaced apart.
-        const lights = tier === 'high' && lightPts.length > 0
-          ? [lightPts[0], lightPts[Math.floor(lightPts.length / 2)]]
-          : []
-
-        return (
-          <group key={`cove-${r.id}`}>
-            {strips}
-            {lights.map(([lx, ly], k) => (
-              <pointLight
-                key={`cl-${r.id}-${k}`}
-                position={[M(lx), M(COVE_H - 6), M(ly)]}
-                color="#ffcf9a"
-                intensity={2.0}
-                distance={4.0}
-                decay={2.2}
-                castShadow={false}
-              />
-            ))}
-          </group>
-        )
+        return <group key={`cove-${r.id}`}>{strips}</group>
       })}
     </>
   )
 }
 
 /**
- * Warm recessed ceiling downlights — the defining "premium interior" cue: a soft
- * warm pool of light per room. Strictly budgeted for performance (this is the
- * exact per-light cost that must stay bounded): one shadowless light at the room
- * centroid, capped at 10 rooms, and only on the 'high' tier. A small emissive
- * disc marks the fixture when the ceiling is visible (walk mode).
+ * Recessed ceiling downlight *fixtures* — the small emissive disc that marks the
+ * luminaire where the ceiling is visible (walk mode only; in the dollhouse view
+ * there is no ceiling to recess them into).
+ *
+ * The warm pool of light itself is a point light and comes from `LightRig`'s
+ * fixed pool, which is what keeps the per-fragment light count bounded.
  */
 function RoomDownlights({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean }) {
   const tier = readTier()
-  if (tier === 'off') return null
-  // 'high' gets a warm pool in every room; 'low' is capped tighter for budget.
-  const indoor = rooms
-    .filter((r: Room) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
-    .slice(0, tier === 'high' ? 10 : 6)
+  if (tier === 'off' || !walkMode) return null
+  const indoor = rooms.filter((r: Room) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
   return (
     <>
       {indoor.map((r: Room) => {
@@ -4273,22 +4222,10 @@ function RoomDownlights({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean 
         for (const p of r.polygon) { cx += p.x; cy += p.y }
         cx /= r.polygon.length; cy /= r.polygon.length
         return (
-          <group key={`dl-${r.id}`}>
-            <pointLight
-              position={[M(cx), M(245), M(cy)]}
-              color="#ffdcb0"
-              intensity={4.2}
-              distance={5.5}
-              decay={2.2}
-              castShadow={false}
-            />
-            {walkMode && (
-              <mesh position={[M(cx), M(248), M(cy)]} rotation={[Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[0.05, 20]} />
-                <meshStandardMaterial color="#fff2dc" emissive="#ffdcb0" emissiveIntensity={2.2} />
-              </mesh>
-            )}
-          </group>
+          <mesh key={`dl-${r.id}`} position={[M(cx), M(248), M(cy)]} rotation={[Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.05, 20]} />
+            <meshStandardMaterial color="#fff2dc" emissive="#ffdcb0" emissiveIntensity={2.2} />
+          </mesh>
         )
       })}
     </>
@@ -6245,13 +6182,22 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           shadow-radius={5}
         />
       )}
-      {/* Functional room lighting — real point lights from the lighting model. */}
-      <RoomLights devices={floor.devices} mode={doc?.activeModeKey} />
+      {/* Every interior point light — placed luminaires, recessed downlights and
+          cove washes — on one fixed-size pool. Forward rendering shades each
+          surface against every enabled light, so the count is the frame budget;
+          the rig re-points a constant number of lights at whatever currently
+          matters instead of mounting one per fixture. */}
+      <LightRig
+        rooms={floor.rooms}
+        devices={floor.devices}
+        mode={doc?.activeModeKey}
+        categoryOf={deviceCategoryOf}
+      />
 
-      {/* Warm recessed downlights — premium interior atmosphere (budgeted) */}
+      {/* Downlight fixtures — the emissive disc only (walk mode) */}
       <RoomDownlights rooms={floor.rooms} walkMode={walkMode} />
 
-      {/* Cove lighting — the reference's warm perimeter glow line */}
+      {/* Cove lighting — the reference's warm perimeter glow strips */}
       <CoveLighting rooms={floor.rooms} />
 
       {/* Night-city backdrop — visible through windows in evening/night */}
