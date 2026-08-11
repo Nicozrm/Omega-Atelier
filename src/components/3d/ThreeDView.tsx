@@ -37,6 +37,7 @@ import { SunLight } from './SunLight'
 import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import { SkyDome } from './SkyDome'
+import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
 import { QualityMenu } from './QualityMenu'
@@ -6193,8 +6194,23 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         />
       )}
 
-      {/* Surrounding new-build neighbourhood — environmental context around the plan. */}
-      <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />
+      {/* What surrounds the plan. With a real-world anchor this is the actual
+          place — official aerial imagery on the ground, buildings from the
+          cadastre and OpenStreetMap; without one it is the generated
+          new-build neighbourhood this view always had. `WorldAround` owns that
+          choice, and switches ground and buildings together so a photograph is
+          never laid under invented streets. */}
+      {doc?.geo
+        ? (
+          <WorldAround
+            planId={doc.id}
+            geo={doc.geo}
+            cx={cx} cz={cz} wM={wM} hM={hM}
+            phase={env.phase}
+            daylightScale={env.lighting.exteriorAlbedoScale}
+          />
+        )
+        : <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />}
 
       {/* Own-house exterior envelope (Klinker + Ziegel roof) — toggleable so the
           plan can be seen as the real building instead of an open dollhouse. */}
