@@ -210,3 +210,118 @@ export function geocodeOffline(query: string): GeoResult[] {
     confidence: 0.45,
   }]
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Polygon geometry for the real-world layer
+//
+// These four helpers exist because the world layer works with *measured*
+// outlines — cadastral parcels and OSM building footprints — rather than the
+// axis-aligned rectangles the offline detectors synthesise. A real parcel is a
+// rotated, irregular polygon, and placing a house on it needs its own axes, not
+// the compass ones.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Axis-aligned extent of a polygon in local metres. */
+export interface LocalBBox {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+/** The minimum-area rectangle enclosing a polygon, in its own axes. */
+export interface OrientedBounds {
+  /** Rotation of the rectangle against the local axes, radians. */
+  angle: number
+  /** Extent along the rectangle's own axes, metres. */
+  widthM: number
+  depthM: number
+  areaSqm: number
+}
+
+/** Axis-aligned bounding box. Degenerate input yields a zero box, never NaN. */
+export function polygonBBox(poly: LocalPolygon): LocalBBox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of poly) {
+    if (p.x < minX) minX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.x > maxX) maxX = p.x
+    if (p.y > maxY) maxY = p.y
+  }
+  if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+  return { minX, minY, maxX, maxY }
+}
+
+/** Rotate a polygon about the origin by `rad` (positive = x toward y). */
+export function rotatePolygon(poly: LocalPolygon, rad: number): LocalPolygon {
+  const c = Math.cos(rad)
+  const s = Math.sin(rad)
+  return poly.map((p) => ({ x: p.x * c - p.y * s, y: p.x * s + p.y * c }))
+}
+
+/** Shift a polygon so its bounding box starts at the origin. */
+export function normalizePolygon(poly: LocalPolygon): LocalPolygon {
+  const b = polygonBBox(poly)
+  return poly.map((p) => ({ x: p.x - b.minX, y: p.y - b.minY }))
+}
+
+/**
+ * Convex hull, monotone chain (Andrew). Sorted by x then y, so the result is
+ * counter-clockwise starting at the leftmost point. Fewer than three distinct
+ * points are returned unchanged.
+ */
+export function convexHull(poly: LocalPolygon): LocalPolygon {
+  const pts = [...poly].sort((a, b) => (a.x - b.x) || (a.y - b.y))
+  if (pts.length < 3) return pts
+  const cross = (o: LocalPoint, a: LocalPoint, b: LocalPoint) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+
+  const lower: LocalPoint[] = []
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop()
+    lower.push(p)
+  }
+  const upper: LocalPoint[] = []
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i]
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop()
+    upper.push(p)
+  }
+  lower.pop()
+  upper.pop()
+  return lower.concat(upper)
+}
+
+/**
+ * Minimum-area enclosing rectangle, by rotating calipers over the hull.
+ *
+ * The minimum-area rectangle always shares an edge with the convex hull, so
+ * testing one rotation per hull edge is exact rather than a search. This is
+ * what gives a parcel its *own* width, depth and orientation — a plot rotated
+ * 30° against north is 18 m × 40 m, not the 34 m × 47 m its axis-aligned
+ * bounding box would claim.
+ */
+export function orientedBounds(poly: LocalPolygon): OrientedBounds {
+  const hull = convexHull(poly)
+  if (hull.length < 3) {
+    const b = polygonBBox(poly)
+    const w = b.maxX - b.minX
+    const d = b.maxY - b.minY
+    return { angle: 0, widthM: w, depthM: d, areaSqm: w * d }
+  }
+
+  let best: OrientedBounds | null = null
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i]
+    const b = hull[(i + 1) % hull.length]
+    const edge = Math.atan2(b.y - a.y, b.x - a.x)
+    // Rotate the hull so this edge lies on the x axis, then measure.
+    const rotated = rotatePolygon(hull, -edge)
+    const bb = polygonBBox(rotated)
+    const w = bb.maxX - bb.minX
+    const d = bb.maxY - bb.minY
+    const area = w * d
+    if (!best || area < best.areaSqm) best = { angle: edge, widthM: w, depthM: d, areaSqm: area }
+  }
+  return best!
+}
