@@ -480,7 +480,10 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
      · a faint warm inner glow picking up the interface accent, as if the panel
        edge were catching the scene's own key light. */
 .glass-hud {
-  position: relative;
+  /* Deliberately sets no `position`: an unlayered declaration here would beat
+     Tailwind's layered `absolute`/`fixed` utilities, silently dropping every
+     panel that uses this class back into normal flow. Callers position the
+     element themselves, which also gives `::before` its containing block. */
   border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--surface) 62%, transparent);
   -webkit-backdrop-filter: blur(22px) saturate(1.7) brightness(0.86);

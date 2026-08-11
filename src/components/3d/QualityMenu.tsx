@@ -69,13 +69,19 @@ export function QualityMenu() {
       </button>
 
       {open && (
-        <div className="glass-hud absolute right-full top-0 z-30 mr-2 w-64 origin-top-right animate-scale-in space-y-2.5 p-3">
+        // Anchored to the *bottom* of the trigger: this button sits in the
+        // lower half of the viewport rail, so a top-anchored panel would run
+        // off the bottom of the screen. The height cap keeps it on screen on
+        // short viewports too.
+        <div className="glass-hud absolute bottom-0 right-full z-30 mr-2 flex max-h-[min(70vh,26rem)] w-64 origin-bottom-right animate-scale-in flex-col gap-2.5 overflow-y-auto p-3">
           <div className="flex items-baseline justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--muted)]">
               Render-Qualität
             </span>
             <span className="font-mono text-[10px] tabular-nums text-[color:var(--accent)]">
-              {stats.fps} fps
+              {/* Below 10 fps a whole number rounds to "0 fps", which reads as
+                  "nothing is rendering" rather than "this is slow". */}
+              {stats.fps >= 10 ? stats.fps : stats.fps.toFixed(1)} fps
             </span>
           </div>
 

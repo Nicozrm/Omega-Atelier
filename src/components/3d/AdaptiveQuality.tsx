@@ -113,7 +113,9 @@ export function AdaptiveQuality() {
     s.fpsFrames++
     s.statsTick += dt
     if (s.statsTick >= 0.25) {
-      renderStats.fps = Math.round(s.fpsFrames / Math.max(s.fpsAccum, 1e-4))
+      // Kept to one decimal: a machine rendering at 3 fps must not report "3",
+      // and one rendering at 0.4 fps must not report "0".
+      renderStats.fps = Math.round((s.fpsFrames / Math.max(s.fpsAccum, 1e-4)) * 10) / 10
       s.fpsAccum = 0
       s.fpsFrames = 0
       s.statsTick = 0

@@ -7019,9 +7019,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         )}
 
         {/* Compass + scale — the reference's right-edge viewport widgets.
-            The needle div is rotated imperatively by CompassTracker. */}
+            The needle div is rotated imperatively by CompassTracker.
+            Anchored to the bottom-right and click-through: vertically centred it
+            shared the right-hand column with the camera/quality toolbar above,
+            and on a tall viewport it covered the toolbar's lowest buttons — a
+            read-only widget was eating clicks meant for controls. */}
         {!preview && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
+        <div className="pointer-events-none absolute bottom-6 right-4 z-10 hidden sm:flex flex-col items-center gap-2">
           <div className="relative flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
             <div ref={compassNeedleRef} className="flex flex-col items-center will-change-transform">
               <span className="text-[9px] font-semibold leading-none text-[color:var(--accent)]">N</span>
