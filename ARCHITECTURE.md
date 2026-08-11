@@ -49,7 +49,7 @@ schwere Editor + Canvas + 3D landet damit nicht im Initial-Bundle.
 | **Dashboard** | `pages/Dashboard.tsx` | Geräte-/Modus-Übersicht, bettet die 3D-View (lazy) ein. |
 | **Editor** | `pages/Editor.tsx` | Editor-Shell: Topbar, Toolbar, FloorTabs, Panels, Workspace-Rails; verbindet Store, Hotkeys und Realtime. |
 | **Canvas** | `components/editor/Canvas.tsx` | 2D-Grundriss-Editor. **Reines HTML5-Canvas mit eigener `requestAnimationFrame`-Renderschleife**, entkoppelt vom React-Render. Weltkoordinaten in **cm**; Viewport hält `zoom` (px/cm) + Offset. Maus in `ref`, nicht `state`. |
-| **ThreeDView** | `components/3d/ThreeDView.tsx` | 3D-Visualisierung (R3F). ACES-Tonemap, PBR-Materialien, Post-Processing (tier-gegated). Datei ist bewusst `@ts-nocheck` wegen R3F-JSX-Typen. |
+| **ThreeDView** | `components/3d/ThreeDView.tsx` | 3D-Visualisierung (R3F). AgX-Tonemap, PBR-Materialien, Post-Processing (tier-gegated). Voll typisiert — R3F-JSX-Intrinsics kommen aus `types/three-jsx.d.ts`, kein `@ts-nocheck`. Die renderer-neutrale Hälfte liegt in `lib/render/` (§7). |
 | **usePlanStore** | `store/usePlanStore.ts` | **Single Source of Truth** des Editors (siehe §4). |
 
 ---
@@ -77,6 +77,9 @@ src/
 ├── lib/              Reine Utilities & Engines: materials · lighting · solar ·
 │                     environment · modeState · planSchema (coerce/parse) ·
 │                     supabase · chunkRecovery · utils …
+│                     Darunter `lib/render/` — die renderer-neutrale Hälfte der
+│                     3D-Darstellung (siehe §7). Reine Mathematik & Zuordnungen,
+│                     kein THREE, dadurch unter Vitest testbar.
 ├── data/             Statische Kataloge: devices · furniture · materials ·
 │                     templates · demoPlan.
 ├── pages/            Route-Level-Komponenten (Dashboard/Editor/Plans/Login/Settings).
@@ -153,7 +156,55 @@ werden bei lokal-inaktivem Nutzer still übernommen, sonst per Toast angeboten.
 
 ---
 
-## 7. Omega AI Home Composer
+## 7. Rendering-Schicht (3D)
+
+Die 3D-Darstellung ist in zwei Hälften geteilt, nach demselben Prinzip wie der
+Rest des Projekts: **reine Logik in `lib/render/`, THREE-Anbindung in
+`components/3d/`.** Alles, was sich als Zahl oder Zuordnung ausdrücken lässt,
+liegt in `lib/render/` und ist damit unter Vitest testbar, ohne WebGL.
+
+### `lib/render/` — renderer-neutral
+
+| Modul | Verantwortung |
+| --- | --- |
+| `tier.ts` | Render-Tier (`high`/`low`/`off`), von `AmbientScene` an `<html>` gestempelt. Einzige Quelle für Qualitätsentscheidungen. |
+| `lightBudget.ts` | Auswahl der sichtbar relevantesten Punktlichter (Abstand zur Einfluss-Sphäre × Helligkeit × Priorität, mit Hysterese). |
+| `shadowFrustum.ts` | Größe und Platzierung des Sonnen-Shadow-Frustums (Bounding-Sphere des Grundstücks). |
+| `skyModel.ts` | Weltzustand → Atmosphären- und Innen-Bounce-Parameter der Umgebungskarte; stetige Belichtungsrampe. |
+| `pcssShadows.ts` | Der PCSS-Shader-Patch (kontaktharte weiche Schatten) inklusive Guards. |
+
+### `components/3d/` — THREE-Anbindung
+
+| Komponente | Verantwortung |
+| --- | --- |
+| `ThreeDView.tsx` | Die Szene selbst: Canvas, Post-Processing, Geometrie, Kamera, Bedien-UI. |
+| `LightRig.tsx` | Alle Innenraum-Punktlichter auf einem Pool fester Größe. |
+| `SunLight.tsx` | Das schattenwerfende Sonnenlicht und sein Frustum. |
+| `ShadowController.tsx` | Rendert die Shadow-Map bedarfsgesteuert statt pro Frame. |
+| `SkyEnvironment.tsx` | Baut die Umgebungskarte (PMREM) aus dem echten Himmel. |
+
+### Drei Regeln, die beim Ändern zu beachten sind
+
+1. **Die Lichtanzahl ist das Frame-Budget.** Three rendert forward: jedes aktive
+   Licht wird im Fragment-Shader jeder beleuchteten Fläche ausgewertet, und die
+   Anzahl ist in jedes kompilierte Shader-Programm eingebacken. Deshalb gibt es
+   **kein** `<pointLight>` direkt in der Szene — neue Lichtquellen werden als
+   `PointLightSpec` an `LightRig` gemeldet, nie selbst gemountet.
+
+2. **Die Shadow-Map läuft bedarfsgesteuert.** `ShadowController` schaltet
+   `autoUpdate` ab. Wer Geometrie *bewegt*, muss das melden: zustandsgetriebene
+   Änderungen über `worldKey` in `Scene`, laufende Animationen über
+   `requestShadowRefresh()`. Sonst bleibt der Schatten stehen, während sich das
+   Objekt bewegt.
+
+3. **Belichtung wird gemessen, nicht geschätzt.** Die Balance zwischen Himmel,
+   Innen-Bounce und Sonne in `skyModel.ts` stammt aus Messungen (weiße matte
+   Kugel unter jedem Anteil einzeln, echtes WebGL). Wer daran dreht, misst nach
+   — per Augenmaß fällt eine Verschiebung um Faktor 2 nicht auf.
+
+---
+
+## 8. Omega AI Home Composer
 
 Ein zweiter Einstiegspunkt zum Erstellen eines Projekts: aus einem Tap auf eine
 Satellitenkarte entsteht in Sekunden ein realistischer, vollständig editierbarer
@@ -189,7 +240,7 @@ Pin), `AnalysisStage` (Cinematic: goldener Scan, Partikel, Checkliste). Einstieg
 
 ---
 
-## 8. Build & Qualität
+## 9. Build & Qualität
 
 | Befehl | Zweck |
 | --- | --- |

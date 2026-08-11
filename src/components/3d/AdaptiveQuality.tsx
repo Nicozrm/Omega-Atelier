@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
 import { activeProfile } from '@/lib/render/quality'
+import { requestShadowRefresh } from './ShadowController'
 
 /**
  * AdaptiveQuality — how the view affords "maximum quality" *and* "maximum
@@ -21,18 +22,13 @@ import { activeProfile } from '@/lib/render/quality'
  * the user actually looks at is dramatically sharper than a fixed-DPR render at
  * the same average cost.
  *
- * Two more governors ride along:
+ * A frame-time governor rides along: each resolution step is measured, and a
+ * step that pushes the median frame time past budget makes the previous step
+ * this session's ceiling — the ramp learns the machine's real limit instead of
+ * trusting the profile blindly.
  *
- *  - **Frame-time back-off.** Each resolution step is measured. If a step
- *    pushes the median frame time past budget, the previous step becomes the
- *    session's ceiling — the ramp learns this machine's real limit instead of
- *    trusting the profile blindly.
- *  - **Shadow-map scheduling.** A 4096² directional shadow map costs a full
- *    scene re-render per frame, and in a still architectural scene it produces
- *    the *identical* result every time. With static content the map is rendered
- *    on demand — when the sun moves, when the profile changes, when the view
- *    mounts — instead of 60×/s. That single change is typically the largest
- *    frame-time saving in the whole view.
+ * Shadow-map scheduling is deliberately *not* here: `ShadowController` owns it,
+ * and this component only tells it when a resolution change invalidated the map.
  */
 
 export interface RenderStats {
@@ -67,19 +63,6 @@ function notifyStats(): void {
   for (const l of [...listeners]) l()
 }
 
-export interface AdaptiveQualityProps {
-  /**
-   * Something in the scene animates every frame (walking residents, walk mode),
-   * so the shadow map cannot be frozen. Costs the per-frame shadow render.
-   */
-  dynamicShadows?: boolean
-  /**
-   * Changes whenever the lighting rig moves (sun position, mode switch). Forces
-   * exactly one shadow re-render.
-   */
-  shadowKey?: string | number
-}
-
 /** How long the camera must be still before the ramp starts, in seconds. */
 const SETTLE_DELAY = 0.22
 /** Seconds between resolution steps while refining. */
@@ -87,8 +70,7 @@ const STEP_INTERVAL = 0.2
 /** Frame-time budget in ms; a step that busts it is rolled back permanently. */
 const FRAME_BUDGET_MS = 26
 
-export function AdaptiveQuality({ dynamicShadows = false, shadowKey }: AdaptiveQualityProps) {
-  const gl = useThree((s) => s.gl)
+export function AdaptiveQuality() {
   const camera = useThree((s) => s.camera)
   const setDpr = useThree((s) => s.setDpr)
   const controls = useThree((s) => s.controls) as { target?: THREE.Vector3 } | null
@@ -121,18 +103,6 @@ export function AdaptiveQuality({ dynamicShadows = false, shadowKey }: AdaptiveQ
     renderStats.dpr = profile.dprMotion
     notifyStats()
   }, [profile, setDpr])
-
-  // ── Shadow scheduling ───────────────────────────────────────────────
-  useEffect(() => {
-    gl.shadowMap.autoUpdate = dynamicShadows
-    gl.shadowMap.needsUpdate = true
-    return () => { gl.shadowMap.autoUpdate = true }
-  }, [gl, dynamicShadows])
-
-  // One explicit refresh per lighting change while the map is frozen.
-  useEffect(() => {
-    if (!dynamicShadows) gl.shadowMap.needsUpdate = true
-  }, [gl, dynamicShadows, shadowKey])
 
   useFrame((_, dt) => {
     const s = state.current
@@ -213,10 +183,10 @@ export function AdaptiveQuality({ dynamicShadows = false, shadowKey }: AdaptiveQ
     setDpr(s.dpr)
     renderStats.dpr = s.dpr
     renderStats.refining = s.dpr < s.ceiling - 1e-3
-    // A frozen shadow map survives a resolution change untouched — but the
-    // contact-shadow and AO buffers were sized to the old resolution, so a
-    // single refresh keeps them from lagging a step behind.
-    if (!dynamicShadows) gl.shadowMap.needsUpdate = true
+    // Changing the drawing-buffer size re-allocates every render target the
+    // frame depends on, the frozen shadow map included — so tell the shadow
+    // controller to re-render it once rather than leave a stale map on screen.
+    requestShadowRefresh(0.1)
     notifyStats()
   })
 
