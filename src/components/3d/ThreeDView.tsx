@@ -10,8 +10,20 @@
  *  - Smooth damped orbit controls. Hover-lift animation. Selection highlight ring.
  *  - Multi-floor stacking when more than one floor exists.
  *
- * The whole file is wrapped in `@ts-nocheck` because R3F's intrinsic JSX types
- * are notoriously fiddly and not worth the friction; runtime is solid.
+ * This file owns the *scene*: geometry, materials, camera and the surrounding
+ * UI. The lighting rig lives in sibling modules, because each of them enforces
+ * an invariant that is easy to break by accident from here:
+ *
+ *  - `LightRig` — every interior point light, on a pool of fixed size. Three
+ *    renders forward, so the light count is the frame budget and is baked into
+ *    every compiled shader. Do not mount a `<pointLight>` in this file.
+ *  - `SunLight` + `ShadowController` — the shadow-casting key light and its
+ *    on-demand shadow map. Anything that *moves* a caster has to say so (see
+ *    `requestShadowRefresh`).
+ *  - `SkyEnvironment` — the environment map, built from the real sky.
+ *
+ * The renderer-neutral half of all of that is in `lib/render/`, where it is
+ * unit-tested without WebGL.
  */
 
 
@@ -19,17 +31,10 @@ import { useEffect, useMemo, useRef, useState, Suspense, Component } from 'react
 import type { ReactNode, TouchEvent as ReactTouchEvent } from 'react'
 import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation, DepthOfField } from '@react-three/postprocessing'
 import type { DepthOfFieldEffect } from 'postprocessing'
-import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point, ModeKey } from '@/types'
+import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point } from '@/types'
 
 // ── v51 Rendering-Layer: Post-Processing (isoliert, tier-gegated, fallback-sicher)
 const CA_OFFSET = new THREE.Vector2(0.0005, 0.0005)
-function readTier(): 'high' | 'low' | 'off' {
-  if (typeof document === 'undefined') return 'high'
-  const c = document.documentElement.classList
-  if (c.contains('q-off')) return 'off'
-  if (c.contains('q-low')) return 'low'
-  return 'high'
-}
 class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
@@ -37,7 +42,13 @@ class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
-import { deriveLightSources } from '@/lib/lighting'
+import { LightRig } from './LightRig'
+import { SunLight } from './SunLight'
+import { ShadowController, requestShadowRefresh } from './ShadowController'
+import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
+import type { CategoryLookup } from '@/lib/lighting'
+import { readTier } from '@/lib/render/tier'
+import { enablePcssShadows } from '@/lib/render/pcssShadows'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, PointerLockControls, PerformanceMonitor, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
@@ -67,17 +78,14 @@ import * as THREE from 'three'
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
 const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
 
+/** Catalogue lookup for the lighting domain. Module-level so the reference is
+ *  stable — `LightRig` memoises its source list on it. */
+const deviceCategoryOf: CategoryLookup = (id) => DEVICE_MAP[id]?.category
+/** Catalogue default size for a furniture id. Module-level for a stable reference. */
+const furnitureSizeOf = (id: string): readonly [number, number] | undefined => FURN_MAP[id]?.size
+
 // World units: 1 unit = 1 meter. Plan coords are in cm → divide by 100.
 const M = (cm: number) => cm / 100
-/** Distance (m) at which the directional sun is placed along its direction vector. */
-const SUN_DISTANCE = 18
-/** Semantic time-of-day phase → image-based-lighting reflection strength.
- *  Keeps a day/night cue in metal/glass/gloss reflections (sky, sun and shadows
- *  already vary by phase via the lighting rig). Applied to `scene.environmentIntensity`
- *  so it costs nothing per frame and never rebuilds the env map. */
-const PHASE_TO_ENV_INTENSITY: Record<DayPhase, number> = {
-  night: 0.35, dawn: 0.7, goldenHour: 0.9, day: 1.0, dusk: 0.7,
-}
 const PHASE_LABEL: Record<DayPhase, string> = {
   night: 'Nacht', dawn: 'Dämmerung', goldenHour: 'Golden Hour', day: 'Tag', dusk: 'Abendrot',
 }
@@ -1801,7 +1809,7 @@ function DeviceMesh({ deviceId, category, on, hint }: { deviceId?: string; categ
             <circleGeometry args={[0.16, 24]} />
             <meshStandardMaterial color="#fff2da" emissive="#ffcf96" emissiveIntensity={glow + 0.4} side={THREE.DoubleSide} />
           </mesh>
-          {/* NOTE: no extra pointLight here — RoomLights already places one real
+          {/* NOTE: no extra pointLight here — LightRig already places one real
               light per "on" lamp from the lighting model; the mesh only glows. */}
         </group>
       )
@@ -2012,11 +2020,16 @@ function Device3D({ d }: { d: PlacedDevice }) {
   const ms = doc?.activeModeKey ? d.modeState?.[doc.activeModeKey] : undefined
   const on = ms === undefined ? null : ms.on === true ? true : ms.on === false ? false : null
 
-  // Hover lift animation
+  // Hover lift animation. The lift moves a shadow caster, so it has to tell the
+  // on-demand shadow map to keep up — otherwise the device rises off a shadow
+  // that stays stuck to the floor.
   useFrame((_, dt) => {
     if (!meshRef.current) return
     const target = (hovered || isSelected) ? 0.04 : 0
-    meshRef.current.position.y += (target - meshRef.current.position.y) * Math.min(1, dt * 8)
+    const y = meshRef.current.position.y
+    if (Math.abs(target - y) < 0.0005) return
+    meshRef.current.position.y = y + (target - y) * Math.min(1, dt * 8)
+    requestShadowRefresh()
   })
 
   return (
@@ -2361,9 +2374,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <circleGeometry args={[0.15, 24]} />
           <meshStandardMaterial color="#f4e2c2" emissive="#ffc383" emissiveIntensity={1.6} side={THREE.DoubleSide} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.55, 0]} color="#ffd9ae" intensity={2.1} distance={2.8} decay={2.2} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -2388,9 +2398,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <circleGeometry args={[0.15, 24]} />
           <meshStandardMaterial color="#f4e2c2" emissive="#ffc383" emissiveIntensity={1.6} side={THREE.DoubleSide} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.55, 0]} color="#ffd9ae" intensity={2.1} distance={2.8} decay={2.2} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -2461,9 +2468,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <boxGeometry args={[wM * 0.94, 0.015, 0.03]} />
           <meshStandardMaterial color="#fff2dc" emissive="#ffcaa0" emissiveIntensity={1.8} toneMapped={false} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.3, -hM / 2 + 0.42]} color="#ffdcb0" intensity={2.2} distance={2.2} decay={2.4} castShadow={false} />
-        )}
         {/* Tiled backsplash — real ceramic tiles with grout (Fugen) between the
             counter and the upper cabinets, on the back wall */}
         <mesh position={[0, 1.16, -hM / 2 + 0.012]} receiveShadow material={kitchenTileMat()}>
@@ -2558,9 +2562,6 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
           <boxGeometry args={[wM * 0.9, 0.018, 0.02]} />
           <meshStandardMaterial color="#f2debe" emissive="#ffb877" emissiveIntensity={1.5} />
         </mesh>
-        {readTier() !== 'off' && (
-          <pointLight position={[0, 1.4, -hM / 2 + 0.35]} color="#ffd9ae" intensity={1.8} distance={2.4} decay={2.4} castShadow={false} />
-        )}
       </group>
     )
   }
@@ -3764,11 +3765,15 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
   const selection = usePlanStore((s) => s.selection)
   const isSelected = selection.type === 'furniture' && selection.ids.includes(f.id)
 
-  // Subtle lift on hover
+  // Subtle lift on hover — same deal as devices: it moves a shadow caster, so
+  // the on-demand shadow map needs telling while the lift is in flight.
   useFrame((_, dt) => {
     if (!groupRef.current) return
     const target = hovered ? 0.015 : 0
-    groupRef.current.position.y += (target - groupRef.current.position.y) * Math.min(1, dt * 8)
+    const y = groupRef.current.position.y
+    if (Math.abs(target - y) < 0.0005) return
+    groupRef.current.position.y = y + (target - y) * Math.min(1, dt * 8)
+    requestShadowRefresh()
   })
 
   return (
@@ -4148,39 +4153,14 @@ function FloorPlane({ width, height, variant }: {
   )
 }
 
-function RoomLights({ devices, mode }: { devices: PlacedDevice[]; mode: ModeKey | undefined }) {
-  // Functional luminaires straight from the lighting model — one real point
-  // light per "on" lamp. Colour (from Kelvin) and brightness are decided by the
-  // model; the renderer only places the light and maps brightness to a sane
-  // THREE intensity. No light state, colour, or Kelvin maths happens here.
-  const sources = useMemo(
-    () => (mode ? deriveLightSources({ devices, lookup: (id) => DEVICE_MAP[id]?.category, mode }) : []),
-    [devices, mode],
-  )
-  const MOUNT = M(235) // mount just below a 250 cm ceiling
-  return (
-    <>
-      {sources.filter((s) => s.on).map((s) => (
-        <pointLight
-          key={s.deviceId}
-          position={[M(s.position.x), MOUNT, M(s.position.y)]}
-          color={s.color}
-          intensity={0.35 + s.intensity * 1.85}
-          distance={5.5}
-          decay={2.0}
-          castShadow={false}
-        />
-      ))}
-    </>
-  )
-}
-
 /**
  * Cove lighting — the reference's signature warm glow line: an emissive LED
  * strip tucked along the top interior edge of every room's walls, tracing the
- * room polygon just below the (missing) ceiling. Emissive strips are free
- * (no lights); on 'high' we add a couple of budgeted warm point lights per
- * room mounted at the perimeter so the glow actually spills onto the walls.
+ * room polygon just below the (missing) ceiling.
+ *
+ * Strips only. The warm wash that spills onto the walls is a real point light,
+ * and every interior point light now comes from `LightRig`'s fixed pool — see
+ * that module for why an unbounded per-room light count was the frame budget.
  */
 const COVE_H = 232          // cm — just below the 250 cm wall top
 const COVE_INSET = 9        // cm — tuck it inside the wall face
@@ -4198,7 +4178,6 @@ function CoveLighting({ rooms }: { rooms: Room[] }) {
         cx /= r.polygon.length; cy /= r.polygon.length
 
         const strips: React.ReactNode[] = []
-        const lightPts: Array<[number, number]> = []
         for (let i = 0; i < r.polygon.length; i++) {
           const p = r.polygon[i]
           const q = r.polygon[(i + 1) % r.polygon.length]
@@ -4222,50 +4201,26 @@ function CoveLighting({ rooms }: { rooms: Room[] }) {
               <meshStandardMaterial color="#ffd9a4" emissive="#ffab5e" emissiveIntensity={1.35} />
             </mesh>,
           )
-          // A warm wash light a touch inside the strip (budgeted below).
-          lightPts.push([sx + nx * 14, sy + ny * 14])
         }
 
-        // Point lights only on 'high', capped at 2 per room, spaced apart.
-        const lights = tier === 'high' && lightPts.length > 0
-          ? [lightPts[0], lightPts[Math.floor(lightPts.length / 2)]]
-          : []
-
-        return (
-          <group key={`cove-${r.id}`}>
-            {strips}
-            {lights.map(([lx, ly], k) => (
-              <pointLight
-                key={`cl-${r.id}-${k}`}
-                position={[M(lx), M(COVE_H - 6), M(ly)]}
-                color="#ffcf9a"
-                intensity={2.0}
-                distance={4.0}
-                decay={2.2}
-                castShadow={false}
-              />
-            ))}
-          </group>
-        )
+        return <group key={`cove-${r.id}`}>{strips}</group>
       })}
     </>
   )
 }
 
 /**
- * Warm recessed ceiling downlights — the defining "premium interior" cue: a soft
- * warm pool of light per room. Strictly budgeted for performance (this is the
- * exact per-light cost that must stay bounded): one shadowless light at the room
- * centroid, capped at 10 rooms, and only on the 'high' tier. A small emissive
- * disc marks the fixture when the ceiling is visible (walk mode).
+ * Recessed ceiling downlight *fixtures* — the small emissive disc that marks the
+ * luminaire where the ceiling is visible (walk mode only; in the dollhouse view
+ * there is no ceiling to recess them into).
+ *
+ * The warm pool of light itself is a point light and comes from `LightRig`'s
+ * fixed pool, which is what keeps the per-fragment light count bounded.
  */
 function RoomDownlights({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean }) {
   const tier = readTier()
-  if (tier === 'off') return null
-  // 'high' gets a warm pool in every room; 'low' is capped tighter for budget.
-  const indoor = rooms
-    .filter((r: Room) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
-    .slice(0, tier === 'high' ? 10 : 6)
+  if (tier === 'off' || !walkMode) return null
+  const indoor = rooms.filter((r: Room) => (r.zoneType ?? 'indoor') !== 'outdoor' && r.polygon.length >= 3)
   return (
     <>
       {indoor.map((r: Room) => {
@@ -4273,22 +4228,10 @@ function RoomDownlights({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean 
         for (const p of r.polygon) { cx += p.x; cy += p.y }
         cx /= r.polygon.length; cy /= r.polygon.length
         return (
-          <group key={`dl-${r.id}`}>
-            <pointLight
-              position={[M(cx), M(245), M(cy)]}
-              color="#ffdcb0"
-              intensity={4.2}
-              distance={5.5}
-              decay={2.2}
-              castShadow={false}
-            />
-            {walkMode && (
-              <mesh position={[M(cx), M(248), M(cy)]} rotation={[Math.PI / 2, 0, 0]}>
-                <circleGeometry args={[0.05, 20]} />
-                <meshStandardMaterial color="#fff2dc" emissive="#ffdcb0" emissiveIntensity={2.2} />
-              </mesh>
-            )}
-          </group>
+          <mesh key={`dl-${r.id}`} position={[M(cx), M(248), M(cy)]} rotation={[Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.05, 20]} />
+            <meshStandardMaterial color="#fff2dc" emissive="#ffdcb0" emissiveIntensity={2.2} />
+          </mesh>
         )
       })}
     </>
@@ -4713,73 +4656,14 @@ function CityBackdrop({ span, cx, cz, daylightScale }: { span: number; cx: numbe
 }
 
 /**
- * Procedural interior studio environment for the IBL — a small room of unlit
- * panels whose colours are captured as radiance by the PMREM. Compared to the
- * neutral RoomEnvironment it adds archviz character: a bright overhead softbox,
- * a warm key and a cool fill, over a dark floor. This gives metals, glass and
- * the clearcoat surfaces directional, contrasty reflections (= depth) instead
- * of a flat grey sheen — offline, no asset, built once. Average brightness is
- * kept close to neutral so it doesn't shift overall exposure.
+ * Interior-lighting character, chosen by the user. The palettes themselves and
+ * the environment map they feed live in `SkyEnvironment`; re-exported here
+ * because the toolbar below is what drives them.
  */
-export type EnvPreset = 'studio' | 'warm' | 'cool' | 'dramatic'
+export type { EnvPreset } from './SkyEnvironment'
 export const ENV_PRESET_LABEL: Record<EnvPreset, string> = {
   studio: 'Studio', warm: 'Warm', cool: 'Kühl', dramatic: 'Dramatisch',
 }
-/** Panel palette per HDR preset: [shell, floor, softbox, softboxMul, key, keyMul, coolFill, neutralBounce]. */
-const ENV_PRESETS: Record<EnvPreset, { shell: string; floor: string; box: [string, number]; key: [string, number]; fill: string; bounce: string }> = {
-  studio:    { shell: '#b9bcc2', floor: '#26262a', box: ['#eef1f6', 2.4], key: ['#ffe9cf', 1.5], fill: '#dbe6ff', bounce: '#cfd2d8' },
-  warm:      { shell: '#c3b6a6', floor: '#2a231d', box: ['#fff3e0', 2.2], key: ['#ffdcae', 2.2], fill: '#e8dcc8', bounce: '#d8c8b4' },
-  cool:      { shell: '#c2c8d0', floor: '#242830', box: ['#f4f8ff', 2.8], key: ['#eaf1ff', 1.3], fill: '#cfe0ff', bounce: '#d4dbe4' },
-  dramatic:  { shell: '#8f9298', floor: '#161619', box: ['#ffffff', 3.0], key: ['#ffdcb0', 1.9], fill: '#aebdd6', bounce: '#a9adb4' },
-}
-function buildInteriorEnv(preset: EnvPreset = 'studio'): THREE.Scene {
-  const p = ENV_PRESETS[preset]
-  const env = new THREE.Scene()
-  const c = (hex: string, mul = 1) => new THREE.Color(hex).multiplyScalar(mul)
-  const add = (w: number, h: number, d: number, color: THREE.Color, pos: [number, number, number], side: THREE.Side = THREE.FrontSide) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color, side }))
-    mesh.position.set(pos[0], pos[1], pos[2])
-    env.add(mesh)
-  }
-  add(14, 8, 14, c(p.shell), [0, 0, 0], THREE.BackSide)         // room shell
-  add(13, 0.2, 13, c(p.floor), [0, -3.9, 0])                    // dark floor (grounded reflections)
-  add(7, 0.2, 7, c(p.box[0], p.box[1]), [0, 3.7, 0])            // overhead softbox
-  add(6, 3, 0.2, c(p.key[0], p.key[1]), [0, 1.6, -6.6])         // key light
-  add(0.2, 4, 7, c(p.fill, 1.1), [-6.8, 0.8, 0])               // cool fill
-  add(0.2, 4, 7, c(p.bounce, 0.9), [6.8, 0.6, 0])              // soft bounce
-  return env
-}
-
-function LocalEnvironment({ phase, preset }: { phase: DayPhase; preset: EnvPreset }) {
-  const gl = useThree((s) => s.gl)
-  const scene = useThree((s) => s.scene)
-
-  useEffect(() => {
-    const pmrem = new THREE.PMREMGenerator(gl)
-    const room = buildInteriorEnv(preset)
-    const rt = pmrem.fromScene(room, 0.04)
-    scene.environment = rt.texture
-    return () => {
-      scene.environment = null
-      rt.dispose()
-      pmrem.dispose()
-      room.traverse((o: THREE.Object3D) => {
-        const mesh = o as THREE.Mesh
-        if (mesh.geometry) mesh.geometry.dispose()
-        const m = mesh.material as THREE.Material | THREE.Material[] | undefined
-        if (Array.isArray(m)) m.forEach((mm) => mm.dispose())
-        else if (m) m.dispose()
-      })
-    }
-  }, [gl, scene, preset])
-
-  useEffect(() => {
-    scene.environmentIntensity = PHASE_TO_ENV_INTENSITY[phase]
-  }, [scene, phase])
-
-  return null
-}
-
 /**
  * Frames the whole dollhouse on mount, relative to the plan's size, from a
  * pleasant elevated 3/4 angle (the reference archviz view) — instead of a fixed
@@ -6198,12 +6082,100 @@ function GhostFloors({ floors, activeId }: { floors: Floor[]; activeId: string }
   return <Static>{built.nodes}</Static>
 }
 
+/**
+ * Per-room floor overrides — a Shape-based slab per room that carries its own
+ * material, and a raised wood deck with a low curb for outdoor zones.
+ *
+ * Memoised on the rooms, because R3F reconstructs an object whenever its `args`
+ * change and compares that array element-wise by reference. Building the
+ * `THREE.Shape` (and the extrude options object) inline meant every render of
+ * the scene re-triangulated every room's floor and re-extruded every terrace —
+ * some of the most expensive geometry in the scene — for outlines that only
+ * change when the plan does.
+ */
+function RoomFloors({ rooms }: { rooms: Room[] }) {
+  const slabs = useMemo(() => {
+    const extrudeOptions = { depth: M(6), bevelEnabled: false }
+    return rooms
+      .filter((r) => (r.floorMaterialId || r.floorVariant || r.zoneType === 'outdoor') && r.polygon.length >= 3)
+      .map((r) => {
+        const shape = new THREE.Shape()
+        shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
+        for (let i = 1; i < r.polygon.length; i++) {
+          shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
+        }
+        shape.closePath()
+        return {
+          id: r.id,
+          shape,
+          extrudeOptions,
+          outdoor: r.zoneType === 'outdoor',
+          material: matFromCatalog(resolveFloorMaterial(r)),
+        }
+      })
+  }, [rooms])
+
+  return (
+    <>
+      {slabs.map((slab) => (slab.outdoor ? (
+        <group key={`room-${slab.id}`}>
+          {/* Deck slab — extruded wood */}
+          <mesh
+            position={[0, 0.0, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            receiveShadow
+            castShadow
+            material={MAT.woodWalnut() as THREE.Material}
+          >
+            <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
+          </mesh>
+          {/* Top surface board (oak) sitting flush on the deck for plank detail */}
+          <mesh
+            position={[0, M(6) + 0.001, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            receiveShadow
+            material={MAT.woodOak() as THREE.Material}
+          >
+            <shapeGeometry args={[slab.shape]} />
+          </mesh>
+        </group>
+      ) : (
+        <mesh
+          key={`room-${slab.id}`}
+          position={[0, 0.001, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          receiveShadow
+          material={slab.material}
+        >
+          <shapeGeometry args={[slab.shape]} />
+        </mesh>
+      )))}
+    </>
+  )
+}
+
 function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus }: {
   env: EnvironmentState; floorVariant: FloorVariant; wallMaterialId: string; walkMode: boolean; envPreset: EnvPreset; showHouse: boolean;
   stackView: boolean; houseStyle: HouseStyle; residents: number; onResidentStatus?: (s: ResidentStatus) => void;
 }) {
   const doc = usePlanStore((s) => s.doc)
   const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
+
+  // Identity token for the on-demand shadow map: a fresh reference whenever
+  // anything it depicts changes. `floor` covers every plan edit — the store
+  // deep-clones the document, so its identity changes on any mutation — and the
+  // rest cover the toggles and the sun. Deliberately conservative: an extra
+  // shadow re-render costs a frame, a missed one leaves furniture floating.
+  const worldKey = useMemo(
+    () => ({}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      floor, showHouse, stackView, walkMode, floorVariant, wallMaterialId, houseStyle,
+      env.sun.direction.x, env.sun.direction.y, env.sun.direction.z,
+      env.lighting.sun.intensity, env.sun.aboveHorizon,
+    ],
+  )
+
   if (!floor) return null
   const { width, height } = floor.extent
   const wM = M(width), hM = M(height)
@@ -6226,32 +6198,29 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           corner AO shape the walls — the reference's moody falloff instead of a
           washed-out even glow (near-white walls otherwise blow out at eye level). */}
       <ambientLight color={new THREE.Color(env.lighting.ambient.color).lerp(new THREE.Color('#ffecd0'), 0.18)} intensity={env.lighting.ambient.intensity * 0.56} />
-      {env.sun.aboveHorizon && (
-        <directionalLight
-          position={[env.sun.direction.x * SUN_DISTANCE, env.sun.direction.y * SUN_DISTANCE, env.sun.direction.z * SUN_DISTANCE]}
-          intensity={env.lighting.sun.intensity}
-          color={env.lighting.sun.color}
-          castShadow={env.lighting.sun.castShadow}
-          shadow-mapSize-width={readTier() === 'high' ? 4096 : 2048}
-          shadow-mapSize-height={readTier() === 'high' ? 4096 : 2048}
-          shadow-camera-near={0.1}
-          shadow-camera-far={50}
-          shadow-camera-left={-(Math.max(wM, hM) + 4)}
-          shadow-camera-right={Math.max(wM, hM) + 4}
-          shadow-camera-top={Math.max(wM, hM) + 4}
-          shadow-camera-bottom={-(Math.max(wM, hM) + 4)}
-          shadow-bias={-0.0005}
-          shadow-normalBias={0.02}
-          shadow-radius={5}
-        />
-      )}
-      {/* Functional room lighting — real point lights from the lighting model. */}
-      <RoomLights devices={floor.devices} mode={doc?.activeModeKey} />
+      {env.sun.aboveHorizon && <SunLight env={env} wM={wM} hM={hM} cx={cx} cz={cz} />}
 
-      {/* Warm recessed downlights — premium interior atmosphere (budgeted) */}
+      {/* The sun's shadow map is view-independent — orbiting cannot change a
+          texel of it — so it is re-rendered on change instead of every frame. */}
+      <ShadowController worldKey={worldKey} dynamic={residents > 0} />
+      {/* Every interior point light — placed luminaires, recessed downlights and
+          cove washes — on one fixed-size pool. Forward rendering shades each
+          surface against every enabled light, so the count is the frame budget;
+          the rig re-points a constant number of lights at whatever currently
+          matters instead of mounting one per fixture. */}
+      <LightRig
+        rooms={floor.rooms}
+        devices={floor.devices}
+        furniture={floor.furniture}
+        mode={doc?.activeModeKey}
+        categoryOf={deviceCategoryOf}
+        sizeOf={furnitureSizeOf}
+      />
+
+      {/* Downlight fixtures — the emissive disc only (walk mode) */}
       <RoomDownlights rooms={floor.rooms} walkMode={walkMode} />
 
-      {/* Cove lighting — the reference's warm perimeter glow line */}
+      {/* Cove lighting — the reference's warm perimeter glow strips */}
       <CoveLighting rooms={floor.rooms} />
 
       {/* Night-city backdrop — visible through windows in evening/night */}
@@ -6293,60 +6262,20 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
       <CeilingFade rooms={floor.rooms} walkMode={walkMode} />
       {/* v18/v26 — per-room floor overrides via Shape geometry.
           Outdoor zones (terraces) render as a raised wood deck with a low curb. */}
-      {floor.rooms.filter((r: Room) => (r.floorMaterialId || r.floorVariant || r.zoneType === 'outdoor') && r.polygon.length >= 3).map((r: Room) => {
-        const isOutdoor = r.zoneType === 'outdoor'
-        const shape = new THREE.Shape()
-        shape.moveTo(M(r.polygon[0].x), -M(r.polygon[0].y))
-        for (let i = 1; i < r.polygon.length; i++) {
-          shape.lineTo(M(r.polygon[i].x), -M(r.polygon[i].y))
-        }
-        shape.closePath()
-
-        if (isOutdoor) {
-          // Raised deck: extrude the shape a few cm to give it physical presence
-          return (
-            <group key={`room-${r.id}`}>
-              {/* Deck slab — extruded wood */}
-              <mesh
-                position={[0, 0.0, 0]}
-                rotation={[Math.PI / 2, 0, 0]}
-                receiveShadow
-                castShadow
-                material={MAT.woodWalnut() as THREE.Material}
-              >
-                <extrudeGeometry args={[shape, { depth: M(6), bevelEnabled: false }]} />
-              </mesh>
-              {/* Top surface board (oak) sitting flush on the deck for plank detail */}
-              <mesh
-                position={[0, M(6) + 0.001, 0]}
-                rotation={[Math.PI / 2, 0, 0]}
-                receiveShadow
-                material={MAT.woodOak() as THREE.Material}
-              >
-                <shapeGeometry args={[shape]} />
-              </mesh>
-            </group>
-          )
-        }
-
-        return (
-          <mesh
-            key={`room-${r.id}`}
-            position={[0, 0.001, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            material={matFromCatalog(resolveFloorMaterial(r))}
-          >
-            <shapeGeometry args={[shape]} />
-          </mesh>
-        )
-      })}
+      <RoomFloors rooms={floor.rooms} />
+      {/* Soft ground contact under everything standing on the floor.
+          This is a second shadow render (scene → depth FBO → two blur passes),
+          so like the sun's map it runs on change rather than continuously:
+          drei re-arms its `frames` countdown on every re-render of this
+          component, and `Scene` re-renders on any plan or toggle change.
+          Residents walking are the one case that needs it live. */}
       <ContactShadows
         position={[cx, 0.012, cz]}
         opacity={env.lighting.sun.shadowIntensity}
         scale={Math.max(wM, hM) * 1.4}
         blur={2.4}
         far={2.5}
+        frames={residents > 0 ? Infinity : 12}
         resolution={readTier() === 'high' ? 1024 : 512}
       />
 
@@ -6454,7 +6383,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 
       {/* Local procedural studio IBL — reflections on metals/glass/gloss,
           offline-first (no CDN HDRI, no Suspense/network dependency). */}
-      <LocalEnvironment phase={env.phase} preset={envPreset} />
+      <SkyEnvironment env={env} preset={envPreset} />
     </>
   )
 }
@@ -6595,6 +6524,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
     if (document.fullscreenElement) void document.exitFullscreen()
     else void el.requestFullscreen?.()
   }
+  // Contact-hardening shadows. This rewrites a global three shader chunk, so it
+  // has to run before the canvas below compiles its first material — hence the
+  // render phase rather than an effect. The call is idempotent and guarded, and
+  // returns false rather than breaking if three's shader ever changes shape.
+  // Only on 'high': PCSS costs roughly twice the shadow taps of plain PCF.
+  useMemo(() => (readTier() === 'high' ? enablePcssShadows() : false), [])
+
   // Adaptive resolution: render at up to the device's real pixel ratio (capped
   // at 2 so 3× phones don't melt), which keeps edges crisp on hi-dpi screens
   // instead of the old flat 1.5. PerformanceMonitor then steps it DOWN under
