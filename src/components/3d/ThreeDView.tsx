@@ -27,31 +27,29 @@
  */
 
 
-import { useEffect, useMemo, useRef, useState, Suspense, Component } from 'react'
-import type { ReactNode, TouchEvent as ReactTouchEvent } from 'react'
-import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation, DepthOfField } from '@react-three/postprocessing'
-import type { DepthOfFieldEffect } from 'postprocessing'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import type { TouchEvent as ReactTouchEvent } from 'react'
 import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point } from '@/types'
-
-// ── v51 Rendering-Layer: Post-Processing (isoliert, tier-gegated, fallback-sicher)
-const CA_OFFSET = new THREE.Vector2(0.0005, 0.0005)
-class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() { return { failed: true } }
-  render() { return this.state.failed ? null : this.props.children }
-}
 import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
 import { LightRig } from './LightRig'
 import { SunLight } from './SunLight'
 import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
+import { SkyDome } from './SkyDome'
+import { WorldAround } from './WorldAround'
+import { PostFX } from './PostFX'
+import { AdaptiveQuality } from './AdaptiveQuality'
+import { QualityMenu } from './QualityMenu'
+import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
+import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
+import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, ContactShadows, PointerLockControls, PerformanceMonitor, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
+import { OrbitControls, ContactShadows, PointerLockControls, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
 import { usePlanStore } from '@/store/usePlanStore'
 import { LiveTwinReflection } from './LiveTwinReflection'
 import { VirtualResidents, type ResidentStatus } from './VirtualResidents'
@@ -144,10 +142,10 @@ let _mat: MatCache | null = null
 
 function buildMaterials(): MatCache {
   const T = getTextures()
-  // Roughness micro-detail maps are uploaded only on the 'high' tier — they add
-  // a (cheap, per-fragment) texture sample but cost GPU memory/bandwidth, so weak
-  // devices skip them and keep the lean path.
-  const HQ = readTier() === 'high'
+  // Roughness micro-detail maps add a (cheap, per-fragment) texture sample but
+  // cost GPU memory and bandwidth, so weak devices skip them and keep the lean
+  // path. `detailMaps` is the profile's explicit vote on that trade.
+  const HQ = activeProfile().detailMaps
   const rough = (c: HTMLCanvasElement, r: [number, number]) =>
     HQ ? { roughnessMap: makeTex(c, r, false) } : {}
   return {
@@ -404,37 +402,12 @@ function buildMaterials(): MatCache {
       metalness: 1.0,
       envMapIntensity: 1.2,
     }),
-    // Real glazing: a light, see-through dielectric pane (was an opaque near-black
-    // mirror). Low opacity makes windows transparent; the local IBL still reflects
-    // off the smooth surface via Fresnel, so panes read as glass, not holes.
-    // depthWrite:false blends the pane over the opaque geometry behind it.
-    // Real physical glazing: transmission (refraction) on the 'high' tier for
-    // that thick, light-bending picture-window look; a cheap transparent
-    // dielectric elsewhere so mid/low tiers stay fast. Same singleton either way.
-    glass: readTier() === 'high'
-      ? new THREE.MeshPhysicalMaterial({
-          color: '#eef3f7',
-          roughness: 0.06,
-          metalness: 0.0,
-          transmission: 1.0,       // true refractive glass
-          thickness: 0.05,         // thin pane
-          ior: 1.5,                // window glass
-          transparent: true,
-          depthWrite: false,
-          envMapIntensity: 1.3,
-          specularIntensity: 1.0,
-          attenuationColor: '#dfe8ee',
-          attenuationDistance: 6,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: '#bfc9d4',
-          roughness: 0.05,
-          metalness: 0.0,
-          transparent: true,
-          opacity: 0.25,
-          depthWrite: false,
-          envMapIntensity: 1.2,
-        }),
+    // Glazing comes from the glass family (`lib/render/glass.ts`), which
+    // parameterises panes physically — refractive index, transmission with a
+    // real thickness, Beer-Lambert body colour (the faint green of float glass),
+    // optional dispersion — and degrades to a tuned transparent dielectric on
+    // profiles that cannot afford a transmission pass. Same singleton either way.
+    glass: glassMaterial('clear'),
     // Premium wool rug — color + heavy normal for that thick-pile look.
     // polygonOffset pushes it slightly forward of the floor at the same Y → no z-fighting.
     rug: new THREE.MeshStandardMaterial({
@@ -551,9 +524,28 @@ function leanizeForPerf(cache: MatCache): void {
 function ensureMat(): MatCache {
   if (!_mat) {
     _mat = buildMaterials()
-    if (readTier() !== 'high') leanizeForPerf(_mat)
+    if (!activeProfile().richMaterials) leanizeForPerf(_mat)
   }
   return _mat
+}
+
+/**
+ * Drop every cached material so the next frame rebuilds them for the profile
+ * now in force. Called when the user changes the quality setting: the shader
+ * *programs* differ between profiles (clearcoat/sheen lobes, transmission,
+ * detail-map samplers), so patching uniforms in place would not be enough — the
+ * materials have to be recompiled from scratch.
+ */
+function resetMaterialCaches(): void {
+  if (_mat) {
+    for (const m of Object.values(_mat)) m.dispose()
+    _mat = null
+  }
+  for (const m of catalogMatCache.values()) m.dispose()
+  catalogMatCache.clear()
+  for (const m of SLOT_MAT_CACHE.values()) m.dispose()
+  SLOT_MAT_CACHE.clear()
+  disposeGlassMaterials()
 }
 
 /** Floor variants the UI can switch between. */
@@ -649,9 +641,10 @@ function matFromCatalog(material: Material, opts?: { doubleSide?: boolean }): TH
       concrete: { clearcoat: 0.2, clearcoatRoughness: 0.45 },
     }
     const g = GLOSS[material.category]
-    // The clearcoat/sheen finishes are per-light-expensive; only build them on
-    // 'high' devices, otherwise fall back to the cheap standard material.
-    const hq = readTier() === 'high'
+    // The clearcoat/sheen finishes are per-light-expensive; only build them
+    // when the profile budgets for rich materials, otherwise fall back to the
+    // cheap standard material.
+    const hq = activeProfile().richMaterials
     // Catalog floors that had no map render as a flat solid colour. Bind existing
     // textures (reuse — no new generation): concrete screed, wool carpet, walnut
     // parquet. Smooth ceramic stays untextured (polished = flat is correct).
@@ -3180,9 +3173,10 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         <mesh castShadow material={MAT.aluminium()}>
           <boxGeometry args={[wM, frameH, depth]} />
         </mesh>
-        {/* Real reflection on 'high': a planar reflector mirrors the actual
-            scene (deep mirror reflections). Lower tiers keep the cheap chrome. */}
-        {readTier() === 'high' ? (
+        {/* A planar reflector mirrors the actual scene (deep, true mirror
+            reflections) where the profile budgets for it; lower profiles keep
+            the cheap chrome stand-in. */}
+        {activeProfile().reflectiveFloor ? (
           <mesh position={[0, 0, depth / 2 + 0.004]}>
             <planeGeometry args={[wM - 0.04, frameH - 0.04]} />
             <MeshReflectorMaterial
@@ -4809,27 +4803,9 @@ interface ActiveFlight {
   restoreFov?: number
 }
 
-/**
- * Shared camera-focus channel: the CinematicDirector writes where the story
- * looks and how hard to pull focus; `CinematicFocus` (the DOF driver) reads
- * it each frame. A plain mutable object — no React state at 60 fps.
- */
-const cameraFocus = {
-  point: new THREE.Vector3(0, 1, 0),
-  /** 0 = ambient depth … 1 = full cinematic focus pull (mid-glide). */
-  pull: 0,
-}
+/* The shared camera-focus channel (`cameraFocusBus`) and the depth-of-field
+   driver that reads it now live beside the post stack, in `PostFX`. */
 
-/**
- * Contextual depth of field. At rest the focal plane sits exactly on the
- * orbit target (whatever the user frames is sharp); during a glide the
- * director pulls focus onto the destination and the bokeh swells, then the
- * landing relaxes back — the classic focus pull, never a static blur.
- */
-// Foto-Look — swap the renderer tone-map at runtime. AgX (photographic) has a
-// gentler highlight roll-off and truer colour than ACES; a one-time material
-// recompile applies it. Off by default so the tuned "Brillant" (ACES) look is
-// the baseline; the toggle is the opt-in maximum-photorealism path.
 // Freezes a fully static subtree's world-matrix updates after first commit —
 // the neighbourhood, house shell, terrace court and ghost floors never move,
 // so skipping their per-frame matrix work saves real CPU on large scenes.
@@ -4846,20 +4822,10 @@ function Static({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>
 }
 
-function ToneMapController({ photo }: { photo: boolean }) {
-  const gl = useThree((s) => s.gl)
-  const scene = useThree((s) => s.scene)
-  useEffect(() => {
-    gl.toneMapping = photo ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping
-    gl.toneMappingExposure = photo ? 1.0 : 0.95
-    scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material
-      if (Array.isArray(m)) m.forEach((mm) => { mm.needsUpdate = true })
-      else if (m) (m as THREE.Material).needsUpdate = true
-    })
-  }, [gl, scene, photo])
-  return null
-}
+/* Tone mapping moved into the post chain (`PostFX`). The renderer stays on
+   `NoToneMapping` so the whole pipeline runs in HDR and maps exactly once, at
+   the end — the Foto-Look toggle now picks the *effect's* mode (AgX vs ACES)
+   instead of swapping the renderer's and forcing a material recompile. */
 
 // One row of the Bau-Studio popover — chips (labelled) or colour dots.
 function BauRow({ label, options, active, onPick, shape }: {
@@ -4893,23 +4859,6 @@ function BauRow({ label, options, active, onPick, shape }: {
       </div>
     </div>
   )
-}
-
-function CinematicFocus({ walkMode }: { walkMode: boolean }) {
-  const fx = useRef<DepthOfFieldEffect>(null)
-  const controls = useThree((s) => s.controls) as { target?: THREE.Vector3 } | null
-  useFrame((_, dt) => {
-    const eff = fx.current
-    if (!eff || !eff.target) return
-    const anchor = cameraFocus.pull > 0.02 || !controls?.target ? cameraFocus.point : controls.target
-    eff.target.x = THREE.MathUtils.damp(eff.target.x, anchor.x, 7, dt)
-    eff.target.y = THREE.MathUtils.damp(eff.target.y, anchor.y, 7, dt)
-    eff.target.z = THREE.MathUtils.damp(eff.target.z, anchor.z, 7, dt)
-    // Eye-level walking wants uniform sharpness — the bokeh breathes to zero.
-    const scale = walkMode ? 0 : 1.2 + cameraFocus.pull * 2.2
-    eff.bokehScale = THREE.MathUtils.damp(eff.bokehScale, scale, 5, dt)
-  })
-  return <DepthOfField ref={fx} target={[0, 1, 0]} focalLength={0.08} bokehScale={1.2} height={480} />
 }
 
 /** Flies the orbit camera like a AAA game: eased arcs to presets/rooms and the
@@ -5197,9 +5146,9 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
   const built = useMemo(() => {
     const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
     // Detail budget: fine garnish (flower beds, parasols, gutters, fence posts,
-    // rear windows …) only on the high quality tier so weak GPUs keep the
-    // silhouette-level scene and stay smooth.
-    const rich = readTier() === 'high'
+    // rear windows …) only where the profile budgets for it, so weak GPUs keep
+    // the silhouette-level scene and stay smooth.
+    const rich = activeProfile().richMaterials
     // Night recession — the reference dollhouse floats in near-darkness. The
     // interior lights are shadowless and would keep painting the lawn, so the
     // exterior albedo itself follows the sky (cheaper and more reliable than
@@ -6185,6 +6134,11 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 
   return (
     <>
+      {/* The sky the camera sees, from the same Preetham model `SkyEnvironment`
+          bakes into the reflections — so the view through the glazing and the
+          sky mirrored in it can no longer be two unrelated images. */}
+      <SkyDome env={env} span={Math.max(wM, hM)} />
+
       {/* Environment lighting — ambient + hemisphere come from the environment
           model. The directional key uses the model's sun appearance; its
           position is still chosen geometrically until sun-position math lands. */}
@@ -6240,8 +6194,23 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         />
       )}
 
-      {/* Surrounding new-build neighbourhood — environmental context around the plan. */}
-      <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />
+      {/* What surrounds the plan. With a real-world anchor this is the actual
+          place — official aerial imagery on the ground, buildings from the
+          cadastre and OpenStreetMap; without one it is the generated
+          new-build neighbourhood this view always had. `WorldAround` owns that
+          choice, and switches ground and buildings together so a photograph is
+          never laid under invented streets. */}
+      {doc?.geo
+        ? (
+          <WorldAround
+            planId={doc.id}
+            geo={doc.geo}
+            cx={cx} cz={cz} wM={wM} hM={hM}
+            phase={env.phase}
+            daylightScale={env.lighting.exteriorAlbedoScale}
+          />
+        )
+        : <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />}
 
       {/* Own-house exterior envelope (Klinker + Ziegel roof) — toggleable so the
           plan can be seen as the real building instead of an open dollhouse. */}
@@ -6276,7 +6245,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         blur={2.4}
         far={2.5}
         frames={residents > 0 ? Infinity : 12}
-        resolution={readTier() === 'high' ? 1024 : 512}
+        resolution={activeProfile().contactShadowSize}
       />
 
       {/* Walls — with corner extensions and pillars for clean joints */}
@@ -6508,6 +6477,11 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
     const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
     return (fl?.rooms ?? []).filter((r) => r.polygon.length >= 3).map((r) => ({ id: r.id, name: r.name }))
   }, [planDoc])
+  // Plan extent in metres — sizes the god-ray sun distance in the post chain.
+  const sceneSpan = useMemo(() => {
+    const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
+    return fl ? Math.max(M(fl.extent.width), M(fl.extent.height)) : 12
+  }, [planDoc])
 
   // Material target: the whole plan or ONE room — every room is individually
   // stylable. Writes go into the document (persisted, undoable, 2D↔3D sync),
@@ -6528,16 +6502,22 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // has to run before the canvas below compiles its first material — hence the
   // render phase rather than an effect. The call is idempotent and guarded, and
   // returns false rather than breaking if three's shader ever changes shape.
-  // Only on 'high': PCSS costs roughly twice the shadow taps of plain PCF.
-  useMemo(() => (readTier() === 'high' ? enablePcssShadows() : false), [])
+  // Profile-gated: PCSS costs roughly twice the shadow taps of plain PCF.
+  const profile = activeProfile()
+  useMemo(() => (profile.softShadows ? enablePcssShadows() : false), [profile.softShadows])
 
-  // Adaptive resolution: render at up to the device's real pixel ratio (capped
-  // at 2 so 3× phones don't melt), which keeps edges crisp on hi-dpi screens
-  // instead of the old flat 1.5. PerformanceMonitor then steps it DOWN under
-  // load and back UP when headroom returns — a smooth ramp, not the old
-  // one-way drop to 1. Material quality is never touched.
-  const dprCap = useMemo(() => Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), [])
-  const [dprMax, setDprMax] = useState(() => Math.min(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), 1.75))
+  // Resolution is no longer a fixed cap: `AdaptiveQuality` drops it while the
+  // camera moves and supersamples past native once it settles, so the only
+  // value needed here is the profile's motion floor to start from.
+  const [profileNonce, setProfileNonce] = useState(0)
+  useEffect(() => subscribeRenderProfile(() => {
+    // Shader programs differ between profiles (transmission, clearcoat/sheen
+    // lobes, detail-map samplers), so the caches are dropped and the canvas is
+    // remounted on the new nonce rather than patched in place.
+    resetMaterialCaches()
+    setProfileNonce((n) => n + 1)
+  }), [])
+
   // v17 — warm the texture cache (IndexedDB or generate) before mounting the 3D Canvas
   const [texturesReady, setTexturesReady] = useState(false)
   useEffect(() => {
@@ -6800,71 +6780,39 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {texturesReady && (
         <Suspense fallback={<LoadingFallback />}>
           <Canvas
+            key={profileNonce}
             camera={{ position: [6, 6, 8], fov: 38 }}
             shadows="soft"
-            dpr={[1, dprMax]}
+            dpr={profile.dprMotion}
             gl={{
               antialias: true,
               alpha: false,
               preserveDrawingBuffer: true,
               powerPreference: 'high-performance',
-              toneMapping: THREE.AgXToneMapping,
+              // The composer owns tone mapping (see PostFX): it renders into a
+              // half-float buffer and maps at the end of the chain, so bloom,
+              // depth of field and ambient occlusion all operate on true
+              // radiance instead of on values already clipped to white.
+              toneMapping: THREE.NoToneMapping,
               toneMappingExposure: 1.0,
               outputColorSpace: THREE.SRGBColorSpace,
             }}
             style={{ background: `linear-gradient(180deg, ${env.sky.zenithColor} 0%, ${env.sky.horizonColor} 100%)` }}
           >
-            <PerformanceMonitor
-              bounds={(rate) => (rate > 90 ? [55, 90] : [48, 60])}
-              flipflops={3}
-              onDecline={() => setDprMax((d) => Math.max(1, Math.round((d - 0.25) * 100) / 100))}
-              onIncline={() => setDprMax((d) => Math.min(dprCap, Math.round((d + 0.25) * 100) / 100))}
-              onFallback={() => setDprMax(1)}
-            />
+            <AdaptiveQuality />
             <CompassTracker needle={compassNeedleRef} />
             <CaptureHelper captureRef={captureRef} />
             {!walkMode && <CinematicDirector req={flyReq} hud={tourHud} onTourEnd={endTour} />}
-            <ToneMapController photo={photoLook} />
             <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} />
-            <RenderFXBoundary>
-              {readTier() === 'high' && dprMax > 1 ? (
-                /* MSAA 4× resolves geometry edges BEFORE post, then SMAA cleans
-                   the shaded/sub-pixel edges — together they kill the jaggies on
-                   walls, furniture and the neighbourhood roofs. */
-                <EffectComposer multisampling={4}>
-                  {/* N8AO — modern high-quality ambient occlusion (contact darkening
-                      in corners / under furniture), a big step up from SSAO for the
-                      grounded archviz look. Half-res + medium quality stays perf-safe. */}
-                  <N8AO
-                    aoRadius={0.9}
-                    distanceFalloff={1.0}
-                    intensity={2.6}
-                    quality="medium"
-                    halfRes
-                    color="#080810"
-                  />
-                  {/* Contextual DOF — focal plane rides the orbit target; the
-                      CinematicDirector pulls focus during glides. */}
-                  <CinematicFocus walkMode={walkMode} />
-                  <Bloom luminanceThreshold={0.88} intensity={0.24} mipmapBlur radius={0.55} />
-                  <HueSaturation saturation={0.08} />
-                  <BrightnessContrast contrast={0.05} />
-                  <ChromaticAberration offset={CA_OFFSET} radialModulation modulationOffset={0.35} />
-                  <Vignette offset={0.3} darkness={0.42} />
-                  <SMAA />
-                </EffectComposer>
-              ) : readTier() !== 'off' && (
-                /* Mid tier: MSAA 2× + SMAA so edges are smooth here too (the old
-                   pass had NO anti-aliasing → the "pixelig an Ecken" look), plus
-                   the cheap contrast/vignette mood shaders. No AO/bloom → still
-                   light enough for weaker GPUs. */
-                <EffectComposer multisampling={2}>
-                  <BrightnessContrast contrast={0.07} brightness={-0.008} />
-                  <Vignette offset={0.32} darkness={0.4} />
-                  <SMAA />
-                </EffectComposer>
-              )}
-            </RenderFXBoundary>
+            <PostFX
+              walkMode={walkMode}
+              sunDirection={env.sun.direction}
+              sunAboveHorizon={env.sun.aboveHorizon}
+              sunColor={env.lighting.sun.color}
+              span={sceneSpan}
+              photoLook={photoLook}
+              lite={preview}
+            />
           </Canvas>
         </Suspense>
         )}
@@ -6940,7 +6888,15 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {!preview && (
         <div className="absolute top-4 right-4 z-10 surface-elevated px-3 py-2 text-xs text-[color:var(--muted)] hidden md:flex items-center gap-2">
           <Camera size={12} className="text-[color:var(--accent)]" />
-          PBR · Texturen · Soft Shadows · ACES
+          {[
+            'PBR',
+            profile.softShadows ? 'PCSS-Schatten' : 'Soft Shadows',
+            profile.ao !== 'off' && 'AO',
+            profile.ssr && 'SSR',
+            profile.godRays && 'Lichtstrahlen',
+            profile.transmission && 'Echtes Glas',
+            photoLook ? 'AgX HDR' : 'ACES HDR',
+          ].filter(Boolean).join(' · ')}
         </div>
         )}
 
@@ -7058,6 +7014,8 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               )}
             </button>
           )}
+          {/* Render-Qualität — GPU-erkanntes Profil, live überschreibbar. */}
+          <QualityMenu />
           {!walkMode && <div className="my-0.5 h-px w-6 bg-[color:var(--border)]" />}
           <button
             onClick={() => captureRef.current?.()}
@@ -7077,9 +7035,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         )}
 
         {/* Compass + scale — the reference's right-edge viewport widgets.
-            The needle div is rotated imperatively by CompassTracker. */}
+            The needle div is rotated imperatively by CompassTracker.
+            Anchored to the bottom-right and click-through: vertically centred it
+            shared the right-hand column with the camera/quality toolbar above,
+            and on a tall viewport it covered the toolbar's lowest buttons — a
+            read-only widget was eating clicks meant for controls. */}
         {!preview && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
+        <div className="pointer-events-none absolute bottom-6 right-4 z-10 hidden sm:flex flex-col items-center gap-2">
           <div className="relative flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
             <div ref={compassNeedleRef} className="flex flex-col items-center will-change-transform">
               <span className="text-[9px] font-semibold leading-none text-[color:var(--accent)]">N</span>

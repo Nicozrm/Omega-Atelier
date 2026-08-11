@@ -283,12 +283,33 @@ export interface PlanDocument {
   tags?: string[]
   /** Real-world anchor of the plan (composer-generated plans remember where
    *  they were captured) — enables satellite ground, sun-by-location, … */
-  geo?: { lat: number; lng: number }
+  geo?: PlanGeo
   createdAt: ISODateTime
   updatedAt: ISODateTime
   /** Random per-browser-session ID, used to detect echo of own writes
    *  in realtime collaboration. Stable for the lifetime of one tab. */
   clientId?: string
+}
+
+/**
+ * Real-world anchoring for a plan.
+ *
+ * `lat`/`lng` alone already drive the sun's true position; the two optional
+ * fields let the world layer go further — a label to name the place in the UI,
+ * and the building's rotation against true north, without which an aerial
+ * photograph and the model on top of it point in different directions.
+ *
+ * Both are optional so every plan saved before they existed still loads: the
+ * schema preserves unknown fields, and a missing rotation simply means "aligned
+ * with the plan grid".
+ */
+export interface PlanGeo {
+  lat: number
+  lng: number
+  /** Human-readable place label, e.g. "Kolpingstraße 12, Rheine". */
+  label?: string
+  /** Building rotation against true north, degrees. */
+  orientationDeg?: number
 }
 
 // ───────────────────────── Supabase rows ─────────────────────────

@@ -463,6 +463,60 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
     inset 0 -1px 0 0 rgba(0, 0, 0, 0.28);
 }
 
+/* ── 3D-HUD glass ────────────────────────────────────────────────────
+   The overlays that float *on top of the render* need a heavier treatment
+   than the app's flat-background panels: behind them is a photographic image
+   with its own colour and contrast, so a simple translucent fill would let the
+   scene bleed through and make the text unreadable at some camera angles.
+
+   The recipe mirrors what real glass does over a bright backdrop:
+     · a strong blur plus a saturation lift, so the scene reads as a soft
+       colour field rather than recognisable shapes,
+     · a brightness *reduction* on what shows through, which is what buys the
+       contrast the text needs,
+     · a light hairline along the top edge and a dark one along the bottom —
+       a bevel catches light above and shades below, and that single asymmetry
+       is most of what makes a pane look thick,
+     · a faint warm inner glow picking up the interface accent, as if the panel
+       edge were catching the scene's own key light. */
+.glass-hud {
+  /* Deliberately sets no `position`: an unlayered declaration here would beat
+     Tailwind's layered `absolute`/`fixed` utilities, silently dropping every
+     panel that uses this class back into normal flow. Callers position the
+     element themselves, which also gives `::before` its containing block. */
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7) brightness(0.86);
+  backdrop-filter: blur(22px) saturate(1.7) brightness(0.86);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.30),
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.34),
+    inset 0 0 22px 0 rgba(199, 162, 78, 0.05);
+}
+/* Specular sweep: a single soft highlight across the top third, the way a
+   curved glass edge picks up the brightest thing in the room. */
+.glass-hud::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 22%,
+    transparent 46%
+  );
+}
+/* Without backdrop-filter support the panel must stand on its own fill,
+   otherwise the render shows straight through the text. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-hud { background: color-mix(in srgb, var(--surface) 96%, transparent); }
+}
+
 /* ── Chip / Badge ───────────────────────────────────────────────────── */
 .chip {
   display: inline-flex;

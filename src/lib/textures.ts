@@ -20,6 +20,7 @@
  */
 
 import * as THREE from 'three'
+import { activeProfile } from '@/lib/render/quality'
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
@@ -116,10 +117,17 @@ export function makeTex(
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
   tex.repeat.set(repeat[0], repeat[1])
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace
-  // Anisotropic filtering keeps tiled surfaces (floors/walls) crisp at the
-  // grazing angles they are almost always viewed at. three clamps this to the
-  // GPU's getMaxAnisotropy() at upload, so 16 is safe on mobile (auto-reduced).
-  tex.anisotropy = 16
+  // Anisotropic filtering keeps tiled surfaces (floors, walls) crisp at the
+  // grazing angles they are almost always viewed at — without it a floor
+  // dissolves into shimmer a few metres from the camera, which is the single
+  // most visible sampling artefact in an interior.
+  //
+  // It is not free, though: each sample multiplies texture-fetch bandwidth, and
+  // the floor is usually the largest surface on screen. Asking for 16 (three
+  // clamps to `getMaxAnisotropy()`) means always requesting the GPU's maximum,
+  // which is exactly what a phone on the performance profile must not do — so
+  // the level comes from the render profile.
+  tex.anisotropy = activeProfile().anisotropy
   tex.needsUpdate = true
   return tex
 }
