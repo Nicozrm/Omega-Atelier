@@ -49,6 +49,7 @@ import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
 import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
 import { exposureFor } from '@/lib/render/exposure'
+import { applyBoxUvScales, boxUvScales } from '@/lib/render/wallUv'
 import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
 import { enableSpecularAA } from '@/lib/render/specularAA'
@@ -235,11 +236,25 @@ function buildMaterials(): MatCache {
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     }),
 
-    // ─── Walls ──────────────────────────────────────────────
+    /*
+     * ─── Walls ──────────────────────────────────────────────
+     *
+     * Repeat 1 : the tiling lives on the wall geometry, not here.
+     *
+     * A fixed repeat on the texture means every box face shows the same number
+     * of tiles whatever its size, so on one door frame the pier, the reveal and
+     * the wall body carried the same plaster at three different scales and
+     * aspect ratios — see `lib/render/wallUv`. `Wall3D` now scales each face's
+     * UVs by its real extent, which needs the material's own repeat to be
+     * neutral or the two would multiply.
+     *
+     * Keeping the scale on the geometry also keeps one material across every
+     * wall in the plan, so they still batch.
+     */
     wallPlaster: new THREE.MeshStandardMaterial({
-      map: makeTex(T.plasterC, [2, 2]),
-      normalMap: makeTex(T.plasterN, [2, 2], false),
-      ...rough(T.plasterR, [2, 2]),
+      map: makeTex(T.plasterC),
+      normalMap: makeTex(T.plasterN, [1, 1], false),
+      ...rough(T.plasterR, [1, 1]),
       normalScale: new THREE.Vector2(0.2, 0.2),
       // Near-white with a hint of warmth — the reference interiors read as
       // white walls against dark floors; warm light provides the tint.
@@ -248,25 +263,25 @@ function buildMaterials(): MatCache {
       metalness: 0.0,
     }),
     wallConcrete: new THREE.MeshStandardMaterial({
-      map: makeTex(T.concreteC, [2, 2]),
-      normalMap: makeTex(T.concreteN, [2, 2], false),
+      map: makeTex(T.concreteC),
+      normalMap: makeTex(T.concreteN, [1, 1], false),
       normalScale: new THREE.Vector2(0.5, 0.5),
-      ...rough(T.concreteR, [2, 2]),
+      ...rough(T.concreteR, [1, 1]),
       color: '#c9c5be',
       roughness: 0.85,
       metalness: 0.04,
     }),
     wallWallpaper: new THREE.MeshStandardMaterial({
-      map: makeTex(T.wallpaperC, [2, 3]),
-      normalMap: makeTex(T.wallpaperN, [2, 3], false),
+      map: makeTex(T.wallpaperC),
+      normalMap: makeTex(T.wallpaperN, [1, 1], false),
       normalScale: new THREE.Vector2(0.25, 0.25),
-      ...rough(T.wallpaperR, [2, 3]),
+      ...rough(T.wallpaperR, [1, 1]),
       color: '#ece4d2',
       roughness: 0.88,
       metalness: 0.0,
     }),
     wallSel: new THREE.MeshStandardMaterial({
-      map: makeTex(T.plasterC, [2, 2]),
+      map: makeTex(T.plasterC),
       color: '#cdd9ee',
       roughness: 0.7,
       metalness: 0.05,
@@ -839,6 +854,43 @@ function cornerExtensionsFor(wall: WallLike, allWalls: WallLike[]): { extA: numb
   return { extA, extB }
 }
 
+/**
+ * Skirting-board height, metres. One constant because the trim has to be the
+ * same height on a solid wall and on the piers beside a door — a step at the
+ * frame is worse than no trim at all.
+ */
+const SKIRT_H = 0.08
+/** Alias used in the opening branch, for readability at the call sites. */
+const OPENING_SKIRT_H = SKIRT_H
+
+/**
+ * A wall box whose texture keeps the same grain on every face.
+ *
+ * `boxGeometry` maps 0…1 across each face regardless of its size, so a shared
+ * material with a fixed repeat drew the plaster at one scale on a 6 m wall and
+ * at another on the 24 cm reveal beside a door — surfaces that meet at a corner
+ * the camera stands right next to in walk mode. Here the geometry carries the
+ * tiling instead, sized from the box's real extent, so a tile covers
+ * `WALL_TILE_M` everywhere. The material stays shared, so walls still batch.
+ *
+ * Geometry is per-wall in any case (every wall has its own dimensions), so this
+ * costs nothing beyond the UV rewrite it performs once at build time.
+ */
+function WallBox({ args, ...props }: { args: [number, number, number] } & Omit<React.ComponentProps<'mesh'>, 'args'>) {
+  const [w, h, d] = args
+  const geometry = useMemo(() => {
+    const g = new THREE.BoxGeometry(w, h, d)
+    const uv = g.attributes.uv?.array as Float32Array | undefined
+    if (uv) {
+      applyBoxUvScales(uv, boxUvScales(w, h, d))
+      g.attributes.uv.needsUpdate = true
+    }
+    return g
+  }, [w, h, d])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  return <mesh {...props} geometry={geometry} />
+}
+
 function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 0, extB = 0, subtype = 'wall', openingWidth, openingHeight, openingSill, interiorSign = 1, outNx = 0, outNz = 0, dim = false }: {
   id?: string; a: Point; b: Point; thickness: number; height?: number; selected?: boolean;
   material: Material; extA?: number; extB?: number; subtype?: WallSubtype;
@@ -866,13 +918,24 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
   // clone remembers its base opacity / transparency so the fade multiplies
   // instead of clobbering (glass stays glass; opaque plaster stays opaque).
   const fade = useMemo(() => {
+    /*
+     * Every wall used to clone all four materials, glass included — so a plan
+     * with forty solid walls carried forty glass clones that never reached a
+     * draw call, plus forty disposals behind them. Glass is cloned only where a
+     * pane actually exists; elsewhere the shared one is referenced but never
+     * fades, so it must stay out of the mutation list below and out of the
+     * disposal — mutating a shared material would fade every pane in the scene.
+     */
+    const needsGlass = subtype === 'window' || subtype === 'door'
     const clones = {
       body:   (selected ? MAT.wallSel() : matFromCatalog(material)).clone(),
       cap:    MAT.shellDark().clone(),
-      glass:  MAT.glass().clone(),
+      glass:  needsGlass ? MAT.glass().clone() : undefined,
       skirt:  MAT.matteWhite().clone(),
     }
-    const list = (Object.values(clones) as THREE.Material[]).map((mm) => {
+    const owned = [clones.body, clones.cap, clones.glass, clones.skirt]
+      .filter((m): m is THREE.Material => !!m)
+    const list = owned.map((mm) => {
       const rec = {
         m: mm,
         base: (mm as THREE.MeshStandardMaterial).opacity ?? 1,
@@ -882,8 +945,8 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
       mm.transparent = true
       return rec
     })
-    return { ...clones, list }
-  }, [selected, material])
+    return { ...clones, glass: clones.glass ?? MAT.glass(), list }
+  }, [selected, material, subtype])
   useEffect(() => {
     const list = fade.list
     return () => list.forEach((r) => r.m.dispose())
@@ -929,7 +992,7 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     // Modern white skirting (Sockelleiste): matte white, ~8cm tall, protruding a
     // touch past the wall face on both sides so it reads as real trim where the
     // wall meets the floor — the archviz "finished room" detail.
-    const baseboardHeight = 0.08
+    const baseboardHeight = SKIRT_H
     const baseMaterial = fade.skirt
     // Exterior walls (thick perimeter walls) get dark cladding on the outside
     // face so the dollhouse reads as a dark shell around warm interiors.
@@ -937,9 +1000,7 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     return (
       <group position={[M(midX), heightM / 2, M(midY)]} rotation={[0, -angle, 0]}>
         {/* Main wall body */}
-        <mesh castShadow receiveShadow material={mat}>
-          <boxGeometry args={[lengthM, heightM, thickM]} />
-        </mesh>
+        <WallBox castShadow receiveShadow material={mat} args={[lengthM, heightM, thickM]} />
         {/* Cut-section cap — dark anthracite band along the sliced top */}
         <mesh position={[0, heightM / 2 + 0.015, 0]} material={cap}>
           <boxGeometry args={[lengthM + 0.004, 0.03, thickM + 0.004]} />
@@ -970,26 +1031,44 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     <group position={[M(midX), 0, M(midY)]} rotation={[0, -angle, 0]}>
       {/* Left side — full height */}
       {sideW > 0 && (
-        <mesh position={[-(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[sideW, heightM, thickM]} />
-        </mesh>
+        <WallBox position={[-(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat} args={[sideW, heightM, thickM]} />
       )}
       {/* Right side — full height */}
       {sideW > 0 && (
-        <mesh position={[(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[sideW, heightM, thickM]} />
-        </mesh>
+        <WallBox position={[(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat} args={[sideW, heightM, thickM]} />
       )}
       {/* Lintel — above opening */}
       {lintelH > 0 && (
-        <mesh position={[0, opSill + opH + lintelH / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[opW, lintelH, thickM]} />
-        </mesh>
+        <WallBox position={[0, opSill + opH + lintelH / 2, 0]} castShadow receiveShadow material={mat} args={[opW, lintelH, thickM]} />
       )}
       {/* Sill — only for windows */}
       {!isDoor && opSill > 0 && (
-        <mesh position={[0, opSill / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[opW, opSill, thickM]} />
+        <WallBox position={[0, opSill / 2, 0]} castShadow receiveShadow material={mat} args={[opW, opSill, thickM]} />
+      )}
+      {/*
+        Skirting on the piers beside the opening, and across the full width
+        under a window sill.
+
+        It used to exist only on the `subtype === 'wall'` branch, so a room with
+        one door had trim on three walls and a bare plaster-to-floor junction on
+        the fourth — visible from anywhere in the room, and exactly the kind of
+        break that makes an interior read as unfinished. A door interrupts a
+        skirting board at the frame; it does not abolish it.
+      */}
+      {sideW > 0 && (
+        <>
+          <mesh position={[-(opW / 2 + sideW / 2), OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+            <boxGeometry args={[sideW, OPENING_SKIRT_H, thickM + 0.02]} />
+          </mesh>
+          <mesh position={[(opW / 2 + sideW / 2), OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+            <boxGeometry args={[sideW, OPENING_SKIRT_H, thickM + 0.02]} />
+          </mesh>
+        </>
+      )}
+      {/* Under a window the wall is continuous, so the trim runs straight through. */}
+      {!isDoor && opSill > OPENING_SKIRT_H && (
+        <mesh position={[0, OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+          <boxGeometry args={[opW, OPENING_SKIRT_H, thickM + 0.02]} />
         </mesh>
       )}
       {/* Cut-section cap — dark anthracite band along the sliced top */}
