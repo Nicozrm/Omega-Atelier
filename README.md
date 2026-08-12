@@ -1,51 +1,27 @@
-# OMEGA Atelier 2.0
+# OMEGA Atelier
 
-> Das ultimative Smart-Home-Planungstool – cloud-basiert, mobile-first, produktionsreif.
+<p align="center">
+  <strong>The intelligent workspace for designing, visualizing and connecting smart homes.</strong>
+</p>
 
-Edles Dark-Theme, Canvas-basierter Grundriss-Editor, 324+ Geräte aus 25 Ökosystemen, 9 Omega-Modi, Multi-Floor, Realtime-Kollaboration via Supabase.
+<p align="center">
+  Design your home. Visualize it in 3D. Connect your devices.
+  <br>
+  One workspace. One Digital Twin.
+</p>
 
-## Repository-Überblick
+<p align="center">
+  <img src="./docs/assets/omega-atelier-showcase.gif"
+       alt="OMEGA Atelier product showcase"
+       width="900">
+</p>
 
-| Pfad | Inhalt |
-|---|---|
-| `src/`, `public/`, `supabase/` | Die OMEGA-Atelier-App (Vite + React + Supabase) |
-| `nobleframe/` | Statische NobleFrame-Website (Cloudflare Pages, eigenständig — siehe `nobleframe/DEPLOY.md`) |
-| `docs/` | Setup-Guides, Roadmap, Design-Notizen |
-| `docs/changelog/` | Historische Feature-Changelogs (v11–v43+) |
-| `docs/reports/` | Sprint-/Verifikations-Berichte |
-
-## Tech-Stack
-
-- **Build**: Vite 5 + React 18 + TypeScript 5
-- **Styling**: Tailwind CSS 4 (via `@theme`), Inter / JetBrains Mono
-- **State**: Zustand (per-slice) + persist middleware
-- **Backend**: Supabase (Auth + Postgres + Realtime + Storage)
-- **Canvas**: Reines HTML5 Canvas mit custom Hooks (keine Library – maximale Performance)
-- **3D**: three.js + React Three Fiber (+ Postprocessing)
-- **Routing**: React Router 6
-- **Deployment**: GitHub Pages (CI, `deploy-pages.yml`)
-
-## Quick Start
-
-### 1. Dependencies
-
-```bash
-pnpm install     # oder npm / yarn
-```
-
-### 2. Supabase einrichten
-
-1. Projekt auf [supabase.com](https://supabase.com) anlegen.
-2. **SQL Editor → New query**: den Inhalt von `supabase/migrations/20260812000000_init.sql` einfügen und ausführen.
-   Das Skript ist idempotent — es legt nur an, was fehlt, und löscht nichts. Ein erneuter Lauf aktualisiert Policies, ohne Pläne anzufassen.
-3. Unter **Authentication → Providers** Google aktivieren (Client ID + Secret aus der Google Cloud Console).
-4. Unter **Authentication → URL Configuration** als Site-URL und Redirect-URL eintragen:
-   `https://nicozrm.github.io/Omega-Atelier/plans` und `http://localhost:5173/plans` für lokale Entwicklung.
-5. `.env.example` zu `.env.local` kopieren und befüllen:
-
-```bash
-cp .env.example .env.local
-```
+<p align="center">
+  <img src="https://img.shields.io/badge/React-TypeScript-blue">
+  <img src="https://img.shields.io/badge/3D-Three.js-black">
+  <img src="https://img.shields.io/badge/Cloud-Supabase-green">
+  <img src="https://img.shields.io/badge/PWA-Ready-purple">
+</p>
 
 ```env
 VITE_SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
