@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useOutdoorTextures } from '@/hooks/useOutdoorTextures'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useSkyEnvironment } from './skyEnvironment'
@@ -1586,9 +1587,14 @@ export function Neighbourhood3D({ world, phase, daylightScale, season, rich, gro
    * 25 m Kamerabewegung wäre das ein Neuaufbau des gesamten Materialsatzes —
    * spürbares Stocken und GPU-Speicher, der auf- und abgebaut wird.
    */
+  // Starts the baked outdoor library loading and returns a version that bumps
+  // once it lands, so these materials rebuild against the new pixels exactly
+  // once instead of only after a reload.
+  const bakedVersion = useOutdoorTextures()
   const mats = useMemo(
     () => buildMaterials(world, season, daylightScale, phase),
-    [world, season, daylightScale, phase],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [world, season, daylightScale, phase, bakedVersion],
   )
 
   /*

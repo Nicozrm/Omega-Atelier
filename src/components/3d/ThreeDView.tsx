@@ -68,6 +68,8 @@ import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
 import { resetProceduralTextures } from '@/lib/proceduralTextures'
 import { applyPhotoTextures, resetPhotoTextures } from '@/lib/photoTextureLoader'
+import { useOutdoorTextures } from '@/hooks/useOutdoorTextures'
+import { resetOutdoorTextures } from '@/lib/outdoorTextureLoader'
 import { canopyGeometry } from '@/lib/render/canopy'
 import {
   X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
@@ -619,6 +621,8 @@ function resetMaterialCaches(): void {
   // And the photographic sets, which bake the profile's anisotropy into every
   // decoded texture and are skipped entirely below the detail-map threshold.
   resetPhotoTextures()
+  // Same for the Blender-baked outdoor library.
+  resetOutdoorTextures()
 }
 
 /** Floor variants the UI can switch between. */
@@ -5286,6 +5290,9 @@ function mulberry32(seed: number) {
 function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
   wM: number; hM: number; cx: number; cz: number; phase: DayPhase; daylightScale: number
 }) {
+  // The klinker, roof and paver surfaces this builds from are the ones the
+  // Blender bake replaces, so this memo has to rebuild when they land too.
+  const bakedOutdoorVersion = useOutdoorTextures()
   const built = useMemo(() => {
     const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
     // Detail budget: fine garnish (flower beds, parasols, gutters, fence posts,
@@ -5829,7 +5836,8 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
     }
 
     return { nodes, allMats, extraTex }
-  }, [wM, hM, cx, cz, phase, daylightScale])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wM, hM, cx, cz, phase, daylightScale, bakedOutdoorVersion])
 
   useEffect(() => {
     const mats = built.allMats, texs = built.extraTex
