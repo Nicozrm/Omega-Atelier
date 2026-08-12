@@ -23,7 +23,7 @@ Edles Dark-Theme, Canvas-basierter Grundriss-Editor, 324+ Geräte aus 25 Ökosys
 - **Canvas**: Reines HTML5 Canvas mit custom Hooks (keine Library – maximale Performance)
 - **3D**: three.js + React Three Fiber (+ Postprocessing)
 - **Routing**: React Router 6
-- **Deployment**: GitHub Pages (CI, `deploy-pages.yml`) oder Vercel (`vercel.json`)
+- **Deployment**: GitHub Pages (CI, `deploy-pages.yml`)
 
 ## Quick Start
 
@@ -36,9 +36,11 @@ pnpm install     # oder npm / yarn
 ### 2. Supabase einrichten
 
 1. Projekt auf [supabase.com](https://supabase.com) anlegen.
-2. In der SQL-Konsole die Migration aus `supabase/migrations/20260101000000_init.sql` ausführen.
-3. Unter **Authentication → Providers** Google und Apple aktivieren (OAuth-Keys in Supabase Dashboard eintragen).
-4. Unter **Authentication → URL Configuration** die Redirect-URL auf deine Vercel-Domain setzen (und `http://localhost:5173` für local dev).
+2. **SQL Editor → New query**: den Inhalt von `supabase/migrations/20260812000000_init.sql` einfügen und ausführen.
+   Das Skript ist idempotent — es legt nur an, was fehlt, und löscht nichts. Ein erneuter Lauf aktualisiert Policies, ohne Pläne anzufassen.
+3. Unter **Authentication → Providers** Google aktivieren (Client ID + Secret aus der Google Cloud Console).
+4. Unter **Authentication → URL Configuration** als Site-URL und Redirect-URL eintragen:
+   `https://nicozrm.github.io/Omega-Atelier/plans` und `http://localhost:5173/plans` für lokale Entwicklung.
 5. `.env.example` zu `.env.local` kopieren und befüllen:
 
 ```bash
@@ -64,19 +66,23 @@ pnpm build
 pnpm preview
 ```
 
-## Deployment (Vercel + Supabase)
+## Deployment (GitHub Pages + Supabase)
 
-1. Repo nach GitHub pushen.
-2. Auf [vercel.com](https://vercel.com) importieren.
-3. Environment Variables setzen (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
-4. Framework Preset: **Vite** – Build Command `pnpm build`, Output Directory `dist`.
-5. Deploy. Die Vercel-Domain in Supabase unter **Authentication → URL Configuration** ergänzen.
+1. Repo nach GitHub pushen — der Workflow `deploy-pages.yml` baut und veröffentlicht bei jedem Push auf `main`.
+2. Unter **Settings → Secrets and variables → Actions** die beiden Werte hinterlegen:
+   `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY`.
+3. Unter **Settings → Pages** als Source **GitHub Actions** wählen.
+4. Die Live-URL in Supabase unter **Authentication → URL Configuration** ergänzen.
+
+Der `anon`-Key ist für den Browser bestimmt und landet im Bundle — das ist so vorgesehen.
+Was ihn absichert, ist Row Level Security, nicht seine Geheimhaltung. Der `service_role`-Key
+dagegen umgeht RLS und darf niemals in eine `VITE_`-Variable.
 
 ## Feature-Matrix
 
 | Feature | Status | Phase |
 |---|---|---|
-| E-Mail-Auth + Google/Apple OAuth | ✅ | 1 |
+| E-Mail-Auth + Google OAuth | ✅ | 1 |
 | Cloud-Speicherung (`plans` Tabelle, JSONB) | ✅ | 1 |
 | Row Level Security | ✅ | 1 |
 | Multi-Floor Editor | ✅ | 1 |

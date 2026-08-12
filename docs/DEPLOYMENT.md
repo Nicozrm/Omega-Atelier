@@ -18,9 +18,9 @@ automatisch; falls die Organisation das blockt, einmal manuell setzen.
 `vite.config.ts` liest `process.env.GITHUB_PAGES_BASE`:
 - **GitHub Pages:** `/<repo>/` (Projekt-Site-Unterpfad) — Assets, Manifest-`start_url`/`scope`
   und Router-`basename` (`import.meta.env.BASE_URL`) ziehen automatisch mit.
-- **Vercel / lokal:** unbesetzt → `/` (Root). `vercel.json` bleibt unverändert gültig.
+- **Lokal:** unbesetzt → `/` (Root).
 
-So konkurrieren Pages und die bestehende Vercel-Konfiguration nicht.
+GitHub Pages ist der einzige Host; die frühere Vercel-Konfiguration ist entfernt.
 
 ## Live-URL
 `https://<owner>.github.io/<repo>/` → für dieses Repo:

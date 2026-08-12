@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
 
-// Base path. Vercel/local serve at root ('/'); the GitHub Pages workflow sets
+// Base path. Local dev serves at root ('/'); the GitHub Pages workflow sets
 // GITHUB_PAGES_BASE to "/<repo>/" so assets and the SPA resolve under the
 // project-site sub-path. Keeps both hosting targets working from one config.
 const base = process.env.GITHUB_PAGES_BASE || '/'

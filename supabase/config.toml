@@ -52,16 +52,18 @@ subject = "Du bist eingeladen · OMEGA Atelier"
 content_path = "./templates/invite.html"
 
 # ── Social login ────────────────────────────────────────────────────────────
-# Client IDs/secrets come from Google Cloud + Apple Developer and are supplied
-# as env vars (never committed). Set them where you run the Supabase CLI, or
-# configure the same providers in the dashboard → Authentication → Providers.
+# Google ist der einzige OAuth-Anbieter (neben E-Mail + Passwort).
+# Client ID und Secret kommen aus der Google Cloud Console und werden als
+# Umgebungsvariablen gereicht — niemals ins Repo. Entweder dort setzen, wo die
+# Supabase CLI läuft, oder denselben Anbieter im Dashboard unter
+# Authentication → Providers eintragen.
+#
+# Apple wurde entfernt: es verlangt eine kostenpflichtige Developer-
+# Mitgliedschaft und ein serverseitig aus einem .p8-Schlüssel signiertes
+# Client-Secret, das alle sechs Monate neu erzeugt werden muss. Für einen
+# zweiten Anbieter neben Google rechnet sich das nicht.
 [auth.external.google]
 enabled = true
 client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
-# skip_nonce_check only if you use the implicit flow; default keeps it strict.
-
-[auth.external.apple]
-enabled = true
-client_id = "env(SUPABASE_AUTH_APPLE_CLIENT_ID)"
-secret = "env(SUPABASE_AUTH_APPLE_SECRET)"
+# skip_nonce_check nur beim impliziten Flow; der Default bleibt streng.
