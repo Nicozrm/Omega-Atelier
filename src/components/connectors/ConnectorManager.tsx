@@ -22,7 +22,7 @@ import { SegmentedControl } from '@/ui'
 import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import { createHomeAssistantConnector, SimulatedHaTransport, WebSocketHaTransport, haWebsocketUrl } from '@/connectors/homeAssistant'
 import { createMqttConnector, SimulatedMqttBroker } from '@/connectors/mqtt'
-import { createTuyaConnector, HttpTuyaTransport, type TuyaRegion } from '@/connectors/tuya'
+import { createTuyaConnector, HttpTuyaTransport, relayBaseUrl, tuyaRelayUrl, type TuyaRegion } from '@/connectors/tuya'
 import { createOnvifConnector, HttpOnvifTransport, onvifBridgeBaseUrl, type OnvifCameraConfig } from '@/connectors/onvif'
 import { CameraLiveView } from './CameraLiveView'
 import { createBrandConnector, createGoveeClient, createSwitchBotClient } from '@/connectors/brands'
@@ -47,15 +47,26 @@ function loadHaConfig(): HaLiveConfig {
 }
 function saveHaConfig(c: HaLiveConfig) { try { localStorage.setItem(HA_CONFIG_KEY, JSON.stringify(c)) } catch { /* ignore */ } }
 
-interface TuyaLiveConfig { region: TuyaRegion; clientId: string; secret: string; uid: string }
+interface TuyaLiveConfig { region: TuyaRegion; clientId: string; secret: string; uid: string; relay: string }
 function loadTuyaConfig(): TuyaLiveConfig {
+  // One relay serves every vendor, so a URL already entered for Govee/SwitchBot
+  // is the sensible default here rather than a second empty field.
+  const shared = loadCloudConfig().relay
   try {
     const raw = localStorage.getItem(TUYA_CONFIG_KEY)
-    if (raw) { const p = JSON.parse(raw) as Partial<TuyaLiveConfig>; return { region: p.region ?? 'eu', clientId: p.clientId ?? '', secret: p.secret ?? '', uid: p.uid ?? '' } }
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<TuyaLiveConfig>
+      return {
+        region: p.region ?? 'eu', clientId: p.clientId ?? '', secret: p.secret ?? '',
+        uid: p.uid ?? '', relay: relayBaseUrl(p.relay ?? shared),
+      }
+    }
   } catch { /* ignore */ }
-  return { region: 'eu', clientId: '', secret: '', uid: '' }
+  return { region: 'eu', clientId: '', secret: '', uid: '', relay: relayBaseUrl(shared) }
 }
-function saveTuyaConfig(c: TuyaLiveConfig) { try { localStorage.setItem(TUYA_CONFIG_KEY, JSON.stringify(c)) } catch { /* ignore */ } }
+function saveTuyaConfig(c: TuyaLiveConfig) {
+  try { localStorage.setItem(TUYA_CONFIG_KEY, JSON.stringify({ ...c, relay: relayBaseUrl(c.relay) })) } catch { /* ignore */ }
+}
 
 interface OnvifLiveConfig {
   bridgeUrl: string
@@ -179,15 +190,26 @@ function makeLiveHaDescriptor(cfg: HaLiveConfig): ConnectorDescriptor {
   }
 }
 
-/** Build a live Tuya Cloud connector descriptor from user credentials. */
+/**
+ * Build a live Tuya Cloud connector descriptor from user credentials.
+ *
+ * Routed through the relay when one is configured. Tuya's signed headers
+ * (`client_id`, `sign`, `t`, `sign_method`, `nonce`, `access_token`) are none of
+ * them CORS-safelisted, so every request preflights — and the data centre
+ * answers no preflight and sets no `allow-origin`. The relay has understood
+ * `tuya-<region>` all along; only this call site addressed the data centre
+ * directly, which is why Tuya was the one vendor documented as *needing* the
+ * relay and unable to use it.
+ */
 function makeLiveTuyaDescriptor(cfg: TuyaLiveConfig): ConnectorDescriptor {
+  const base = tuyaRelayUrl(cfg.relay, cfg.region) ?? cfg.region
   return {
     label: 'Tuya Cloud',
     kind: 'tuya',
     make: () => createTuyaConnector({
       id: LIVE_TUYA_ID,
       label: 'Tuya Cloud',
-      transport: new HttpTuyaTransport(cfg.region),
+      transport: new HttpTuyaTransport(base),
       clientId: cfg.clientId,
       secret: cfg.secret,
       uid: cfg.uid || undefined,
@@ -538,9 +560,13 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
   const [clientId, setClientId] = useState(saved.clientId)
   const [secret, setSecret] = useState(saved.secret)
   const [uid, setUid] = useState(saved.uid)
+  const [relay, setRelay] = useState(saved.relay)
   const connected = session?.health.status === 'connected'
   const active = !!session && session.health.status !== 'disconnected'
-  const canConnect = clientId.trim().length > 8 && secret.trim().length > 8
+  // The relay belongs in the precondition for the same reason it does for
+  // SwitchBot: without it a browser cannot reach Tuya at all, and offering the
+  // button anyway only produces a "Load failed" the user cannot act on.
+  const canConnect = clientId.trim().length > 8 && secret.trim().length > 8 && relay.trim().length > 0
 
   return (
     <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--bg)] p-3.5">
@@ -574,6 +600,17 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
             </div>
           </label>
           <label className="block">
+            <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">
+              Relay-URL <span style={{ color: '#d8635f' }}>· für Tuya nötig</span>
+            </span>
+            <input
+              value={relay} onChange={(e) => setRelay(e.target.value)} onBlur={(e) => setRelay(relayBaseUrl(e.target.value))}
+              placeholder="https://<ref>.supabase.co/functions/v1/vendor-relay"
+              className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]"
+              autoComplete="off" spellCheck={false}
+            />
+          </label>
+          <label className="block">
             <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Access ID / Client ID</span>
             <input
               value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Tuya IoT Platform → Cloud → Projekt"
@@ -598,9 +635,13 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
             />
           </label>
           <div className="flex items-center justify-between gap-2 pt-0.5">
-            <span className="text-[10px] text-[color:var(--muted)] leading-tight">Wird nur lokal gespeichert. Jede Anfrage wird HMAC-SHA256-signiert.</span>
+            <span className="text-[10px] text-[color:var(--muted)] leading-tight">
+              Wird nur lokal gespeichert. Jede Anfrage wird HMAC-SHA256-signiert — die Signatur ist
+              nicht das Problem, die fehlenden CORS-Header der Tuya-Cloud sind es. Darum das Relay
+              (dieselbe Function wie für SwitchBot, Anleitung: docs/CONNECTOR_SETUP.md).
+            </span>
             <button
-              onClick={() => onConnect({ region, clientId: clientId.trim(), secret: secret.trim(), uid: uid.trim() })}
+              onClick={() => onConnect({ region, clientId: clientId.trim(), secret: secret.trim(), uid: uid.trim(), relay: relayBaseUrl(relay) })}
               disabled={!canConnect || busy}
               className="btn btn-sm btn-primary inline-flex items-center gap-1.5 shrink-0"
             >
@@ -903,7 +944,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
   const canCredentials = source === 'ha-live'
     ? ha.url.trim().length > 3 && ha.token.trim().length > 20
     : source === 'tuya-live'
-      ? tuya.clientId.trim().length > 8 && tuya.secret.trim().length > 8
+      ? tuya.clientId.trim().length > 8 && tuya.secret.trim().length > 8 && tuya.relay.trim().length > 0
       : source === 'onvif-live'
         ? onvif.bridgeUrl.trim().length > 8 && onvif.host.trim().length > 6 && onvif.username.trim().length > 0 && onvif.password.length > 0
         : !!simId
@@ -992,7 +1033,13 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
                 <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Access Secret</span>
                 <input value={tuya.secret} onChange={(e) => setTuya({ ...tuya, secret: e.target.value })} type="password" placeholder="Access Secret" className="input mt-1 !py-1.5 text-[12px]" autoComplete="off" spellCheck={false} />
               </label>
-              <p className="text-[11px] text-[color:var(--muted)]">Jede Anfrage wird HMAC-SHA256-signiert. Nur lokal gespeichert.</p>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">
+                  Relay-URL <span style={{ color: '#d8635f' }}>· nötig</span>
+                </span>
+                <input value={tuya.relay} onChange={(e) => setTuya({ ...tuya, relay: e.target.value })} onBlur={(e) => setTuya({ ...tuya, relay: relayBaseUrl(e.target.value) })} placeholder="https://<ref>.supabase.co/functions/v1/vendor-relay" className="input mt-1 !py-1.5 text-[12px]" autoComplete="off" spellCheck={false} />
+              </label>
+              <p className="text-[11px] text-[color:var(--muted)]">Jede Anfrage wird HMAC-SHA256-signiert. Nur lokal gespeichert. Die Tuya-Cloud sendet keine CORS-Header, daher das Relay.</p>
             </div>
           )}
           {step === 1 && source === 'onvif-live' && (

@@ -34,13 +34,26 @@ Einrichtung auf der Tuya IoT Platform:
    die brauchst du unten.
 3. Projekt → **Service API**: „IoT Core" (und ggf. „Device Control") dem Projekt
    hinzufügen, sonst liefert die API keine Geräte.
-4. In OMEGA (Connectors → „Hersteller-Clouds"): **Access ID, Access Secret,
-   UID, Region** eintragen + Relay-URL → „Live verbinden". Die App signiert
-   jede Anfrage lokal (HMAC-SHA256, Tuya v2). Sauger erscheinen mit
-   Start/Stopp/Zur-Basis, Lichter/Steckdosen mit An-Aus/Dimmen/Verbrauch.
+4. In OMEGA (Connectors → Karte **„Tuya Cloud · Live"**): **Rechenzentrum,
+   Relay-URL, Access ID, Access Secret** und optional die **UID** eintragen →
+   „Verbinden". Die App signiert jede Anfrage lokal (HMAC-SHA256, Tuya v2).
+   Sauger erscheinen mit Start/Stopp/Zur-Basis, Lichter/Steckdosen mit
+   An-Aus/Dimmen/Verbrauch.
+
+**Die Relay-URL ist für Tuya Pflicht**, dieselbe Function wie bei SwitchBot.
+Grund ist nicht die Signatur, sondern CORS: jede Anfrage trägt `client_id`,
+`sign`, `t`, `sign_method`, `nonce` und `access_token`, keiner davon ist ein
+CORS-safelisted Header, also gibt es immer einen Preflight — und
+`openapi.tuya*.com` beantwortet weder den Preflight noch setzt es
+`access-control-allow-origin`. Ohne Relay meldet die App genau das, statt ein
+nacktes „Load failed" zu zeigen. Ist bereits eine Relay-URL für
+Govee/SwitchBot eingetragen, übernimmt die Tuya-Karte sie als Vorgabe — eine
+Deployment genügt für alle drei.
 
 **Region** muss zum Rechenzentrum deines Smart-Life-Kontos passen (meist
-Europa/Central). Roborock läuft NICHT über Tuya — dafür der HA-Weg.
+Europa/Central) und bestimmt auch, welchen Upstream das Relay anspricht
+(`/vendor-relay/tuya-eu` usw.). Roborock läuft NICHT über Tuya — dafür der
+HA-Weg.
 
 **Saugroboter-Details (Kategorie `sd`).** OMEGA liest den Live-Zustand aus dem
 `status`-Datenpunkt (`cleaning`/`zone_clean`/… → reinigt, `goto_charge`/
