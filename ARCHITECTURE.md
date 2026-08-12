@@ -76,6 +76,7 @@ src/
 ├── hooks/            useHotkeys · useRealtimePlan (Live-Cursor + Doc-Sync).
 ├── lib/              Reine Utilities & Engines: materials · lighting · solar ·
 │                     environment · modeState · planSchema (coerce/parse) ·
+│                     snapEngine (Fangpunkte des 2D-Editors) ·
 │                     supabase · chunkRecovery · utils …
 │                     Darunter `lib/render/` — die renderer-neutrale Hälfte der
 │                     3D-Darstellung (siehe §7). Reine Mathematik & Zuordnungen,
@@ -172,6 +173,7 @@ liegt in `lib/render/` und ist damit unter Vitest testbar, ohne WebGL.
 | `shadowFrustum.ts` | Größe und Platzierung des Sonnen-Shadow-Frustums (Bounding-Sphere des Grundstücks). |
 | `skyModel.ts` | Weltzustand → Atmosphären- und Innen-Bounce-Parameter der Umgebungskarte; stetige Belichtungsrampe. |
 | `pcssShadows.ts` | Der PCSS-Shader-Patch (kontaktharte weiche Schatten) inklusive Guards. |
+| `specularAA.ts` | Normal-Varianz-Roughness-Filter gegen Specular-Flimmern (Shader-Patch + reine TS-Spiegelung der Formel). |
 
 ### `components/3d/` — THREE-Anbindung
 
@@ -201,6 +203,22 @@ liegt in `lib/render/` und ist damit unter Vitest testbar, ohne WebGL.
    Innen-Bounce und Sonne in `skyModel.ts` stammt aus Messungen (weiße matte
    Kugel unter jedem Anteil einzeln, echtes WebGL). Wer daran dreht, misst nach
    — per Augenmaß fällt eine Verschiebung um Faktor 2 nicht auf.
+
+4. **Das Qualitätsbudget steht in `quality.ts` — nirgends sonst.** Jede
+   Renderer-Entscheidung liest ihr Feld aus `activeProfile()`. `readTier()` ist
+   nur noch ein Shim auf dieselbe Quelle und liefert seit der Umstellung nie
+   mehr `'off'`; wer damit ein Budget bestimmt, bekommt eine gröbere Antwort als
+   das Profil bereits kennt. Genau so sind zwei Werte auseinandergelaufen: die
+   Shadow-Map hing an `readTier()` (4096/2048 statt der profileigenen
+   1024…4096), und der Licht-Pool an `lightBudgetForTier()` (8/4/2 statt
+   `maxDynamicLights` 24/16/10/6). Beide lesen jetzt das Profil.
+
+5. **Shader-Patches sind eng, geschützt und idempotent.** `pcssShadows` und
+   `specularAA` schreiben prozessglobale `THREE.ShaderChunk`s um. Der Vertrag ist
+   in beiden gleich: exakte Anker (auf Eindeutigkeit geprüft), Abbruch statt
+   Teil-Patch wenn three sie nicht mehr enthält, mehrfacher Aufruf ohne Wirkung
+   — und der Aufruf passiert **vor** dem ersten Material-Compile, weil three
+   Programme nach Parametern cacht, nicht nach Quelltext.
 
 ---
 
