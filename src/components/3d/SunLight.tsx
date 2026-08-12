@@ -32,7 +32,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { EnvironmentState } from '@/lib/environment'
-import { readTier } from '@/lib/render/tier'
+import { activeProfile } from '@/lib/render/quality'
 import { shadowRadius, sunDistance } from '@/lib/render/shadowFrustum'
 
 export function SunLight({ env, wM, hM, cx, cz }: {
@@ -59,7 +59,12 @@ export function SunLight({ env, wM, hM, cx, cz }: {
   const radius = shadowRadius(wM, hM)
   const distance = sunDistance(radius)
   const { x, y, z } = env.sun.direction
-  const mapSize = readTier() === 'high' ? 4096 : 2048
+  // The render profile is the single source for quality budgets (see
+  // `lib/render/quality`). This used to read the coarse `readTier()` class and
+  // resolve to 4096 or 2048, which both over-spent on the performance tier —
+  // 2048² of depth on a phone — and under-spent on ultra, where the profile
+  // asks for the full 4096 the frustum's texel density was designed around.
+  const mapSize = activeProfile().shadowMapSize
 
   return (
     <directionalLight
@@ -82,6 +87,13 @@ export function SunLight({ env, wM, hM, cx, cz }: {
       // touching their casters.
       shadow-bias={-0.0002}
       shadow-normalBias={0.02}
+      // Read by the PCSS patch as the *minimum* filter radius, in texels: the
+      // floor that keeps a hard contact edge from aliasing into stair-steps
+      // where the penumbra estimate collapses to zero. Because it is counted in
+      // texels it tracks `mapSize` automatically — a smaller map gets a wider
+      // world-space floor, which is exactly what hides its coarser texels.
+      // Stock three ignores it on the PCF_SOFT path, so on profiles without
+      // PCSS this is inert rather than wrong.
       shadow-radius={4}
     />
   )

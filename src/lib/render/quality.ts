@@ -61,6 +61,52 @@ export interface RenderProfile {
   dispersion: boolean
   /** Upload roughness/detail micro-maps (extra sampler + VRAM). */
   detailMaps: boolean
+  /**
+   * Multiplier on the generated size of every procedural texture.
+   *
+   * The most direct lever there is on how sharp a material *looks*, and the one
+   * that decides whether walk mode reads as a photograph or as a blur: at 1× the
+   * wall maps are 256², so a 4 m wall carries about 1.3 texels per centimetre
+   * and dissolves as soon as you stand next to it.
+   *
+   * It is also the most expensive lever, quadratically so. Measured across both
+   * generated libraries — the 54 interior maps in `lib/textures` (30 authored
+   * at 256², 24 at 512²) and the outdoor surfaces in `lib/proceduralTextures`
+   * (brick, board, roof, asphalt, pavers, lawn), mipmaps included:
+   *
+   *   | scale · cap  | interior | outdoor | total  | profiles              |
+   *   | 1× · 512     |    42 MB |   24 MB |  66 MB | performance, balanced |
+   *   | 2× · 512     |    72 MB |   33 MB | 105 MB | high                  |
+   *   | 2× · 1024    |   168 MB |   81 MB | 249 MB | ultra                 |
+   *
+   * Generation cost scales the same way — paid once behind the loading spinner,
+   * then cached in IndexedDB (interior only; the outdoor set is cheap enough to
+   * rebuild). The night-city backdrop is exempt: at 2048×512 it is already the
+   * largest texture in the app and it is seen through a window from across a
+   * room, so more pixels buy nothing.
+   *
+   * Integer only: 256 and 512 are powers of two and mipmap cleanly, and so is
+   * everything they reach by doubling.
+   */
+  textureScale: 1 | 2
+  /**
+   * Ceiling on any single generated map, in pixels.
+   *
+   * Why a cap and not just a bigger multiplier: the bundle is authored at two
+   * sizes, and they are not equally worth enlarging. The 256² half is the wall
+   * plaster, the fabrics, the metals, the plastics — most of the surface area
+   * of an interior, and the half that actually looks soft. The 512² half is
+   * mostly floors, which are already the sharpest thing in the frame.
+   *
+   * Doubling everything therefore spends two thirds of its VRAM (168 MB vs
+   * 72 MB) on the maps with the least to gain. Capping at 512 doubles the soft
+   * half and leaves the floors alone, which is where `high` sits; `ultra` lifts
+   * the cap because it can afford to.
+   *
+   * Never smaller than the authored size — a cap below it would blur the
+   * material rather than sharpen it, which is the opposite of the point.
+   */
+  textureMaxSize: number
   /** Texture anisotropy cap (clamped again by the GPU limit). */
   anisotropy: number
   /** Keep expensive PBR lobes (clearcoat / sheen / anisotropy) in materials. */
@@ -107,6 +153,8 @@ const BASE: Omit<RenderProfile, 'id' | 'label' | 'hint'> = {
   transmission: false,
   dispersion: false,
   detailMaps: false,
+  textureScale: 1,
+  textureMaxSize: 512,
   anisotropy: 2,
   richMaterials: false,
   maxDynamicLights: 6,
@@ -146,6 +194,8 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     transmission: true,
     dispersion: true,
     detailMaps: true,
+    textureScale: 2,
+    textureMaxSize: 1024,
     anisotropy: 16,
     richMaterials: true,
     maxDynamicLights: 24,
@@ -177,6 +227,7 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     transmission: true,
     dispersion: false,
     detailMaps: true,
+    textureScale: 2,
     anisotropy: 8,
     richMaterials: true,
     maxDynamicLights: 16,

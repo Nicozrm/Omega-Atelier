@@ -17,6 +17,7 @@ import type { Floor, Point, RemoteCursor, Tool, WallSubtype } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { snap, clamp, dist, pointInPolygon } from '@/lib/utils'
+import { resolveSnap, snapLabel, type SnapResult } from '@/lib/snapEngine'
 import { play as playSound } from '@/lib/sound'
 import { cinematicReact } from '@/lib/cinematic'
 import { resolveFloorMaterial } from '@/lib/materials'
@@ -110,6 +111,8 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
   const dragLast = useRef<{ x: number; y: number } | null>(null)
   const [isPanning, setIsPanning] = useState(false)
   const spaceDown = useRef(false)
+  /** Shift held → constrain the wall being drawn to a fixed angle. */
+  const shiftDown = useRef(false)
   const needsRedraw = useRef(true)
   const viewportRef = useRef(viewport)
   viewportRef.current = viewport
@@ -179,6 +182,37 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
     },
     [doc],
   )
+
+  /**
+   * Snapping for the geometry tools (wall / door / window / terrace / measure).
+   *
+   * `snapWorld` above rounds to the grid and nothing else, which only ever
+   * meets an existing corner when that corner happens to sit on the grid —
+   * and composer-generated, imported or resized plans are full of corners that
+   * do not. The result is a wall that misses its neighbour by a few
+   * centimetres, which is exactly what leaves a slit of daylight in the 3D
+   * view and stops the room from reading as closed.
+   *
+   * `resolveSnap` ranks real geometry above the grid; see `lib/snapEngine` for
+   * the ordering and why it is by kind rather than by distance. The tolerance
+   * is a **pixel** radius converted to world units, so the magnet keeps the
+   * same feel at every zoom level.
+   */
+  const SNAP_PIXELS = 12
+  const snapDraw = useCallback(
+    (p: Point, origin?: Point): SnapResult => resolveSnap(p, {
+      segments: floor?.walls ?? [],
+      tolerance: SNAP_PIXELS / Math.max(viewportRef.current.zoom, 1e-6),
+      gridStep: doc?.settings.snapStep ?? 10,
+      grid: doc?.settings.snap !== false,
+      magnet: doc?.settings.magnet !== false,
+      origin,
+      angleLock: shiftDown.current,
+    }),
+    [floor?.walls, doc?.settings.snapStep, doc?.settings.snap, doc?.settings.magnet],
+  )
+  /** Last resolved snap, published by the render loop so it can draw its guides. */
+  const snapHint = useRef<SnapResult | null>(null)
 
   /**
    * v18 — snap a world point to the nearest wall if it's within 30 cm.
@@ -355,6 +389,10 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
 
     function draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
       if (!doc || !floor) return
+
+      // Cleared each frame and re-published by whichever tool preview is live,
+      // so a hint never outlives the tool that produced it.
+      snapHint.current = null
 
       // Theme — read CSS vars once per frame (cheap, lets dark mode work)
       const theme = readTheme()
@@ -1089,8 +1127,13 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
 
       // Wall / Door / Window preview
       if ((tool === 'wall' || tool === 'door' || tool === 'window') && wallStart && mouseRef.current) {
+        // Resolved once and published, so the preview line, the length read-out
+        // and the wall that pointer-down commits are the same point — a preview
+        // that lands somewhere the click does not is worse than no preview.
+        const hint = snapDraw(mouseRef.current, wallStart)
+        snapHint.current = hint
         const a = worldToScreen(wallStart)
-        const b = worldToScreen(snapWorld(mouseRef.current))
+        const b = worldToScreen(hint.point)
         const col = tool === 'door' ? 'rgba(46, 229, 157, 0.85)'
                   : tool === 'window' ? 'rgba(232, 200, 121, 0.85)'
                   : theme.selectSoft
@@ -1100,18 +1143,27 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         ctx.lineCap = 'round'
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
         ctx.setLineDash([])
-        const d = Math.hypot(wallStart.x - mouseRef.current.x, wallStart.y - mouseRef.current.y)
+        // Measured to the *snapped* end, not the raw cursor: the old read-out
+        // reported the distance to the mouse while the line was already drawn
+        // to the grid point, so it disagreed with itself by up to half a step.
+        const d = Math.hypot(wallStart.x - hint.point.x, wallStart.y - hint.point.y)
+        const deg = (Math.atan2(hint.point.y - wallStart.y, hint.point.x - wallStart.x) * 180) / Math.PI
         const tlabel = tool === 'door' ? 'Tür' : tool === 'window' ? 'Fenster' : ''
         ctx.fillStyle = col.replace(/0\.[0-9]+\)/, '1)')
         ctx.font = '11px JetBrains Mono, monospace'
         ctx.textAlign = 'center'
-        ctx.fillText(`${tlabel} ${Math.round(d)} cm`.trim(), (a.x + b.x) / 2, (a.y + b.y) / 2 - 8)
+        ctx.fillText(
+          `${tlabel} ${Math.round(d)} cm · ${Math.round(((deg % 360) + 360) % 360)}°`.trim(),
+          (a.x + b.x) / 2, (a.y + b.y) / 2 - 8,
+        )
       }
 
       // Terrace rectangle preview
       if (tool === 'terrace' && terraceStart && mouseRef.current) {
+        const hint = snapDraw(mouseRef.current)
+        snapHint.current = hint
         const a = worldToScreen(terraceStart)
-        const b = worldToScreen(snapWorld(mouseRef.current))
+        const b = worldToScreen(hint.point)
         const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
         const w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y)
         ctx.fillStyle = theme.zoneFill
@@ -1121,8 +1173,8 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         ctx.setLineDash([8, 4])
         ctx.strokeRect(x, y, w, h)
         ctx.setLineDash([])
-        const dw = Math.abs(terraceStart.x - snapWorld(mouseRef.current).x)
-        const dh = Math.abs(terraceStart.y - snapWorld(mouseRef.current).y)
+        const dw = Math.abs(terraceStart.x - hint.point.x)
+        const dh = Math.abs(terraceStart.y - hint.point.y)
         ctx.fillStyle = theme.zoneLabel
         ctx.font = '11px JetBrains Mono, monospace'
         ctx.textAlign = 'center'
@@ -1131,7 +1183,14 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
 
       // Measure tool — line + length + per-axis breakdown
       if (tool === 'measure' && measureStart) {
-        const live = measureEnd ?? mouseRef.current
+        // The live end is snapped the same way the click will snap it, so the
+        // number on screen is the number the second click records.
+        let live = measureEnd
+        if (!live && mouseRef.current) {
+          const hint = snapDraw(mouseRef.current, measureStart)
+          snapHint.current = hint
+          live = hint.point
+        }
         if (live) {
           const a = worldToScreen(measureStart)
           const b = worldToScreen(live)
@@ -1165,7 +1224,13 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
       // Device / Furniture placement preview
       const mouse = mouseRef.current
       if (mouse && tool === 'device' && hoverDevice) {
-        const p = worldToScreen(snapWorld(mouse))
+        // Mirrors the placement rule in `onPointerDown`: wall-snap first, grid
+        // second. The preview used to show only the grid position, so the ring
+        // sat somewhere the device would not actually land.
+        const wallSnapped = snapToWall(mouse)
+        const p = worldToScreen(
+          wallSnapped.x !== mouse.x || wallSnapped.y !== mouse.y ? wallSnapped : snapWorld(mouse),
+        )
         ctx.strokeStyle = theme.selectSoft
         ctx.setLineDash([4, 4]); ctx.lineWidth = 2
         ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.stroke()
@@ -1183,6 +1248,56 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
           ctx.strokeRect(p.x - sw / 2, p.y - sh / 2, sw, sh)
           ctx.setLineDash([])
         }
+      }
+
+      // Before the first click there is no preview line to publish a hint from,
+      // yet that is exactly the click that decides whether the wall joins or
+      // misses: the start point. So resolve it on hover too.
+      if (
+        !snapHint.current && mouseRef.current &&
+        (tool === 'wall' || tool === 'door' || tool === 'window' ||
+         tool === 'terrace' || tool === 'measure')
+      ) {
+        snapHint.current = snapDraw(mouseRef.current)
+      }
+
+      // Snap feedback — the guides that explain where the point went.
+      //
+      // Drawn last so nothing occludes it, and deliberately quiet: a hairline
+      // for the guide, a small open square for the anchor. The point of the
+      // marker is to answer "did it catch?" at a glance, which is exactly the
+      // question a user has while drawing and cannot otherwise see the answer
+      // to until the wall is already committed.
+      const hint = snapHint.current
+      if (hint && hint.kind !== 'grid' && hint.kind !== 'none') {
+        const at = worldToScreen(hint.point)
+        ctx.save()
+        ctx.strokeStyle = theme.select
+        ctx.lineWidth = 1
+        ctx.setLineDash([5, 4])
+        for (const g of hint.guides) {
+          const ga = worldToScreen(g.a)
+          const gb = worldToScreen(g.b)
+          ctx.beginPath(); ctx.moveTo(ga.x, ga.y); ctx.lineTo(gb.x, gb.y); ctx.stroke()
+        }
+        ctx.setLineDash([])
+        if (hint.anchor) {
+          const a = worldToScreen(hint.anchor)
+          ctx.lineWidth = 1.6
+          ctx.strokeRect(a.x - 4.5, a.y - 4.5, 9, 9)
+        }
+        const label = snapLabel(hint.kind)
+        if (label) {
+          ctx.font = '10px JetBrains Mono, monospace'
+          ctx.textAlign = 'left'
+          ctx.textBaseline = 'middle'
+          const tw = ctx.measureText(label).width + 8
+          ctx.fillStyle = 'rgba(11, 15, 20, 0.82)'
+          ctx.fillRect(at.x + 10, at.y - 18, tw, 15)
+          ctx.fillStyle = theme.select
+          ctx.fillText(label, at.x + 14, at.y - 10)
+        }
+        ctx.restore()
       }
 
       // HUD
@@ -1303,7 +1418,9 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
     }
 
     if (tool === 'wall' || tool === 'door' || tool === 'window') {
-      const snapped = snapWorld(world)
+      // The first click has no origin yet, so there is no angle to constrain —
+      // it still snaps to corners, faces and alignments.
+      const snapped = snapDraw(world, wallStart ?? undefined).point
       if (!wallStart) setWallStart(snapped)
       else {
         const subtype = tool === 'door' ? 'door' : tool === 'window' ? 'window' : 'wall'
@@ -1314,7 +1431,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
     }
 
     if (tool === 'terrace') {
-      const snapped = snapWorld(world)
+      const snapped = snapDraw(world).point
       if (!terraceStart) {
         setTerraceStart(snapped)
       } else {
@@ -1342,7 +1459,9 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
     }
 
     if (tool === 'measure') {
-      const snapped = snapWorld(world)
+      // Measuring wants the corner, not the grid point near it — a dimension
+      // that reads 3 cm off the real wall is worse than no dimension.
+      const snapped = snapDraw(world, measureStart ?? undefined).point
       if (!measureStart) {
         setMeasureStart(snapped)
         setMeasureEnd(null)
@@ -1552,6 +1671,7 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return
 
       if (e.code === 'Space') spaceDown.current = true
+      shiftDown.current = e.shiftKey
       if (e.key === 'Escape') {
         setWallStart(null)
         setMeasureStart(null)
@@ -1579,12 +1699,20 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         if (e.key === 'ArrowDown')  { e.preventDefault(); moveSelection(0, step) }
       }
     }
-    const up = (e: KeyboardEvent) => { if (e.code === 'Space') spaceDown.current = false }
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceDown.current = false
+      shiftDown.current = e.shiftKey
+    }
+    // A window that loses focus never delivers the keyup, so the lock would
+    // stay stuck on until the next Shift press.
+    const blur = () => { spaceDown.current = false; shiftDown.current = false }
+    window.addEventListener('blur', blur)
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
     }
   }, [setTool, selection.type, rotateSelection, deleteSelection, moveSelection])
 

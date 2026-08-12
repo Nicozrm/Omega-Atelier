@@ -50,6 +50,7 @@ import { readTier } from '@/lib/render/tier'
 import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
 import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
+import { enableSpecularAA } from '@/lib/render/specularAA'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, PointerLockControls, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
@@ -62,8 +63,6 @@ import { BlasterAsset3D } from './BlasterAsset3D'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
-import { getTextures, getTexturesAsync, makeTex, type TextureBundle } from '@/lib/textures'
-import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture, CloudRain, Snowflake } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
 import { useTier } from '@/hooks/useTier'
@@ -549,6 +548,14 @@ function resetMaterialCaches(): void {
   for (const m of SLOT_MAT_CACHE.values()) m.dispose()
   SLOT_MAT_CACHE.clear()
   disposeGlassMaterials()
+  // The maps themselves are generated at a profile-dependent resolution, so
+  // they are as profile-bound as the materials that sample them. Rebuilding
+  // materials around the old canvases would leave a switch to a higher profile
+  // looking identical until the next page load.
+  resetTextureBundle()
+  // Same for the outdoor library: brick, roofs, asphalt and lawn read their
+  // anisotropy and resolution once, at creation, and are cached module-wide.
+  resetProceduralTextures()
 }
 
 /** Floor variants the UI can switch between. */
@@ -4267,7 +4274,7 @@ function speakerGrilleTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-  tex.anisotropy = 4
+  tex.anisotropy = activeProfile().anisotropy
   _grilleTex = tex
   return tex
 }
@@ -4329,7 +4336,7 @@ function ensureTileTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTex
     const t = new THREE.CanvasTexture(c)
     if (srgb) t.colorSpace = THREE.SRGBColorSpace
     t.wrapS = t.wrapT = THREE.RepeatWrapping
-    t.anisotropy = 8
+    t.anisotropy = activeProfile().anisotropy
     return t
   }
   _tileTex = mk(cv, true)
@@ -4384,9 +4391,8 @@ function _mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
-  // floors, walls and roofs crisp at grazing angles instead of blurring out.
-  t.anisotropy = 16
+  // Profile-driven, like every other sampling budget — see `lib/render/quality`.
+  t.anisotropy = activeProfile().anisotropy
   return t
 }
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).
@@ -6520,6 +6526,12 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // Profile-gated: PCSS costs roughly twice the shadow taps of plain PCF.
   const profile = activeProfile()
   useMemo(() => (profile.softShadows ? enablePcssShadows() : false), [profile.softShadows])
+  // Normal-variance roughness filtering, installed the same way and for the same
+  // reason (global chunk, must precede the first compile). Deliberately *not*
+  // profile-gated: it costs two derivatives and a square root, and the sparkle
+  // it removes is worst exactly where the budget is smallest — a phone at DPR 1
+  // has no supersampling to average the glitter away. See `specularAA`.
+  useMemo(() => enableSpecularAA(), [])
 
   // Resolution is no longer a fixed cap: `AdaptiveQuality` drops it while the
   // camera moves and supersamples past native once it settles, so the only

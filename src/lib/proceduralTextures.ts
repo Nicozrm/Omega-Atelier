@@ -16,17 +16,89 @@
  */
 
 import * as THREE from 'three'
+import { activeProfile } from '@/lib/render/quality'
+import { effectiveTextureScale, sobelStrengthFor } from '@/lib/textures'
 
 export function mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1, 1]): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(cv)
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
-  // floors, walls and roofs crisp at grazing angles instead of blurring out.
-  t.anisotropy = 16
+  // Anisotropic filtering keeps brick, roofs and asphalt crisp at the grazing
+  // angles they are almost always seen under. It is not free: each level
+  // multiplies texture-fetch bandwidth, and these surfaces cover most of the
+  // screen in the dollhouse view.
+  //
+  // This used to ask for a flat 16 — "the GPU's maximum, whatever it is" — on
+  // every device, which is exactly what the render profile exists to prevent.
+  // A phone budgeted for 2 was paying eight times that on the largest surfaces
+  // in the frame.
+  t.anisotropy = activeProfile().anisotropy
   return t
 }
+/**
+ * Resolution of the outdoor material library, from the render profile.
+ *
+ * Same reasoning and same mechanism as the indoor bundle in `lib/textures` —
+ * see `effectiveTextureScale` there. Read per generator rather than pinned for
+ * a batch, because these surfaces are cached independently and built on first
+ * use, not in one pass.
+ */
+function outdoorScale(logical: number): number {
+  const p = activeProfile()
+  return effectiveTextureScale(logical, p.textureScale, p.textureMaxSize)
+}
+
+/**
+ * A drawing surface at `W × H` logical units, scaled up for the profile.
+ *
+ * The context is pre-scaled, so every coordinate and line width in the
+ * generators below keeps meaning what it meant — brick courses stay thirteen
+ * rows, mortar stays three units wide, and only the pixel count changes.
+ *
+ * The scale is chosen from `W` alone: these canvases are square apart from the
+ * city wrap, whose aspect is preserved because both axes take the same factor.
+ */
+function mkSurfaceCanvas(W: number, H: number): HTMLCanvasElement {
+  const s = outdoorScale(W)
+  const cv = document.createElement('canvas')
+  cv.width = W * s; cv.height = H * s
+  if (s !== 1) cv.getContext('2d')!.scale(s, s)
+  canvasScale.set(cv, s)
+  return cv
+}
+
+/** A surface in physical pixels, for the passes that read and write pixels. */
+function mkRawCanvas(W: number, H: number): HTMLCanvasElement {
+  const cv = document.createElement('canvas')
+  cv.width = W; cv.height = H
+  return cv
+}
+
+const canvasScale = new WeakMap<HTMLCanvasElement, number>()
+
+/**
+ * Drop every cached outdoor surface.
+ *
+ * Called on a profile change. Both things these textures carry — their
+ * anisotropy and their resolution — are read once at creation, so a cached
+ * surface silently keeps the old profile's budget until something throws it
+ * away. Without this the quality switch would appear to do nothing out here.
+ */
+export function resetProceduralTextures(): void {
+  const drop = (s: Surface | null) => {
+    if (!s) return
+    s.map.dispose(); s.bump.dispose(); s.normal.dispose(); s.roughness.dispose()
+  }
+  drop(_brickTex); _brickTex = null
+  drop(_boardTex); _boardTex = null
+  drop(_roofTex); _roofTex = null
+  drop(_asphaltTex); _asphaltTex = null
+  drop(_paverTex); _paverTex = null
+  _grassTex?.dispose(); _grassTex = null
+  _cityTex?.dispose(); _cityTex = null
+}
+
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).
 export function texRnd(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 
@@ -91,10 +163,14 @@ function lumaAt(d: Uint8ClampedArray, W: number, H: number, x: number, y: number
 export function normalFromHeight(src: HTMLCanvasElement, strength = 2.2): THREE.CanvasTexture {
   const W = src.width, H = src.height
   const d = src.getContext('2d')!.getImageData(0, 0, W, H).data
-  const out = document.createElement('canvas'); out.width = W; out.height = H
+  const out = mkRawCanvas(W, H)
   const octx = out.getContext('2d')!
   const img = octx.createImageData(W, H)
   const L = (x: number, y: number) => lumaAt(d, W, H, x, y)
+  // The Sobel measures slope per *pixel*, so a height map generated at 2×
+  // spreads the same physical relief over twice the steps and would come out
+  // half as deep — mortar joints flattening exactly as they gain detail.
+  strength = sobelStrengthFor(strength, canvasScale.get(src) ?? 1)
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -151,7 +227,7 @@ export function roughFromHeight(src: HTMLCanvasElement, o: RoughOpts): THREE.Can
   // Verwitterung: weiche Flecken, deutlich grösser als ein einzelner Stein.
   // Sie werden gekachelt gezeichnet (neunfach versetzt), damit die Fläche an
   // der Nahtstelle nicht plötzlich sauber wird.
-  const pv = document.createElement('canvas'); pv.width = W; pv.height = H
+  const pv = mkRawCanvas(W, H)
   const px = pv.getContext('2d')!
   px.fillStyle = '#808080'; px.fillRect(0, 0, W, H)
   for (let i = 0; i < 26; i++) {
@@ -168,7 +244,7 @@ export function roughFromHeight(src: HTMLCanvasElement, o: RoughOpts): THREE.Can
   }
   const pd = px.getImageData(0, 0, W, H).data
 
-  const out = document.createElement('canvas'); out.width = W; out.height = H
+  const out = mkRawCanvas(W, H)
   const octx = out.getContext('2d')!
   const img = octx.createImageData(W, H)
   for (let y = 0; y < H; y++) {
@@ -206,9 +282,9 @@ export function brickTextures(): Surface {
   if (_brickTex) return _brickTex
   const W = 512, H = 512, rows = 13, bh = H / rows, mortar = 3
   const rnd = texRnd(7)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
-  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bv = mkSurfaceCanvas(W, H)
   const bx = bv.getContext('2d')!
   cx.fillStyle = '#5f5148'; cx.fillRect(0, 0, W, H)          // mortar joint
   bx.fillStyle = '#3a3a3a'; bx.fillRect(0, 0, W, H)          // mortar = recessed
@@ -245,9 +321,9 @@ export function boardTextures(): Surface {
   if (_boardTex) return _boardTex
   const W = 512, H = 512, planks = 6, pw = W / planks
   const rnd = texRnd(23)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
-  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bv = mkSurfaceCanvas(W, H)
   const bx = bv.getContext('2d')!
   cx.fillStyle = '#6b4a2c'; cx.fillRect(0, 0, W, H)
   bx.fillStyle = '#8a8a8a'; bx.fillRect(0, 0, W, H)
@@ -282,9 +358,9 @@ export function roofTextures(): Surface {
   if (_roofTex) return _roofTex
   const W = 512, H = 512, rows = 16, rh = H / rows
   const rnd = texRnd(23)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
-  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bv = mkSurfaceCanvas(W, H)
   const bx = bv.getContext('2d')!
   /*
    * Die Ziegel werden **neutral** gezeichnet, nicht dunkel.
@@ -356,9 +432,9 @@ let _asphaltTex: Surface | null = null
 export function asphaltSurface(): Surface {
   if (_asphaltTex) return _asphaltTex
   const W = 256, H = 256, rnd = texRnd(41)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
-  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bv = mkSurfaceCanvas(W, H)
   const bx = bv.getContext('2d')!
   cx.fillStyle = '#57565a'; cx.fillRect(0, 0, W, H)
   bx.fillStyle = '#8a8a8a'; bx.fillRect(0, 0, W, H)
@@ -396,9 +472,9 @@ let _paverTex: Surface | null = null
 export function paverTextures(): Surface {
   if (_paverTex) return _paverTex
   const W = 256, H = 256, n = 4, cell = W / n, rnd = texRnd(59)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
-  const bv = document.createElement('canvas'); bv.width = W; bv.height = H
+  const bv = mkSurfaceCanvas(W, H)
   const bx = bv.getContext('2d')!
   cx.fillStyle = '#6d685f'; cx.fillRect(0, 0, W, H)          // joint sand
   bx.fillStyle = '#404040'; bx.fillRect(0, 0, W, H)
@@ -420,7 +496,7 @@ let _grassTex: THREE.CanvasTexture | null = null
 export function grassTexture(): THREE.CanvasTexture {
   if (_grassTex) return _grassTex
   const W = 256, H = 256, rnd = texRnd(83)
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H
+  const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
   cx.fillStyle = '#6a7150'; cx.fillRect(0, 0, W, H)
   // Mowing stripes — faint alternating bands so lawns read manicured.
@@ -442,9 +518,11 @@ export function grassTexture(): THREE.CanvasTexture {
 let _cityTex: THREE.CanvasTexture | null = null
 export function nightCityTexture(): THREE.CanvasTexture {
   if (_cityTex) return _cityTex
+  // Deliberately not scaled with the profile. At 2048×512 this is already the
+  // largest texture in the app, and it is a night backdrop seen through a
+  // window from across a room — the one surface where more pixels buy nothing.
   const W = 2048, H = 512
-  const cv = document.createElement('canvas')
-  cv.width = W; cv.height = H
+  const cv = mkRawCanvas(W, H)
   const ctx = cv.getContext('2d')!
   // Sky gradient: deep navy at the top → warmer haze at the horizon band.
   const HORIZON = Math.round(H * 0.52)
