@@ -183,6 +183,44 @@ function categoryOf(cat: string | undefined, caps: Capability[]): DeviceCategory
 export function mapTuyaDevice(d: TuyaDevice, connectorId: string): Device | null {
   const caps = mapStatusToCapabilities(d.status ?? [])
   if (caps.length === 0) return null
+  return buildDevice(d, connectorId, caps)
+}
+
+/**
+ * Map a Tuya device, keeping the ones whose data points we do not understand.
+ *
+ * This is the version the connector uses, and the reason is a bug that looked
+ * exactly like a broken connection: `mapTuyaDevice` returns `null` whenever it
+ * recognises none of a device's data points, and the connector dropped those
+ * silently. An account of cameras, gateways, doorbells or any device family
+ * whose DP codes are not in `mapStatusToCapabilities` therefore authenticated,
+ * discovered devices, and rendered an empty list — indistinguishable from a
+ * failed login, with nothing anywhere to act on.
+ *
+ * A device we cannot translate is still a device the account has. It comes
+ * through with no capabilities (so the UI offers no controls it cannot deliver)
+ * and carries what Tuya said about it in metadata, which is also what makes the
+ * gap reportable instead of invisible.
+ */
+export function mapTuyaDevicePassive(d: TuyaDevice, connectorId: string): Device {
+  const caps = mapStatusToCapabilities(d.status ?? [])
+  const device = buildDevice(d, connectorId, caps)
+  if (caps.length > 0) return device
+  return {
+    ...device,
+    metadata: {
+      ...device.metadata,
+      // Opaque strings, exactly like every other metadata entry — the core
+      // interprets none of them; the connector card explains them.
+      tuyaCategory: d.category ?? 'unbekannt',
+      tuyaDataPoints: String((d.status ?? []).length),
+      unsupported: 'true',
+    },
+  }
+}
+
+/** Shared construction for both mappers. */
+function buildDevice(d: TuyaDevice, connectorId: string, caps: Capability[]): Device {
   const batteryPct = asNum(val(d.status ?? [], 'battery_percentage', 'residual_electricity'))
   const dev: Device = {
     id: d.id,

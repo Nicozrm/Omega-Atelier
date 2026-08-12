@@ -28,6 +28,7 @@ import type { PlanRow } from '@/types'
 import { X } from 'lucide-react'
 import { createDemoPlan } from '@/data/demoPlan'
 import { coercePlan } from '@/lib/planSchema'
+import { shouldAutoSave } from '@/lib/autoSave'
 
 // Heavy & seldom-needed → split out into their own chunks.
 const ExportDialog = lazy(() =>
@@ -130,16 +131,37 @@ export function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, planRowId, id])
 
-  // Auto-save: when authenticated and planRowId is set, debounce-save the doc
-  // 1.5s after the last change. Skips local-only / new sessions.
+  /*
+   * Auto-save: debounce-save the doc 1.5 s after the last *edit*.
+   *
+   * The dependency list is deliberately narrow. `doc` itself must not appear
+   * here: `saveToCloud` replaces the document object when it stamps the new
+   * `docVersion`, so depending on its identity made every save re-arm the timer
+   * that had just fired — a cloud write every 1.5 seconds, indefinitely, on a
+   * plan nobody was editing. `updatedAt` is the value that tracks edits, and
+   * `shouldAutoSave` re-checks it at fire time so a save can never chain into
+   * the next one.
+   */
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSavedUpdatedAt = useRef<string | null>(null)
   const pushToast = useUIStore((s) => s.pushToast)
-  const reloadFromCloud = usePlanStore((s) => s.reloadFromCloud)
+  const docUpdatedAt = doc?.updatedAt
   useEffect(() => {
-    if (!doc || !planRowId || !supabaseReady || !user) return
+    if (!shouldAutoSave({
+      updatedAt: docUpdatedAt,
+      lastSavedUpdatedAt: lastSavedUpdatedAt.current,
+      planRowId,
+      cloudReady: supabaseReady,
+      signedIn: !!user,
+    })) return
+
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(async () => {
-      const result = await saveToCloud(planRowId)
+      // Claim this revision before the write: a failed save leaves it claimed,
+      // and the next real edit (a new `updatedAt`) retries. Without the claim a
+      // save that races its own result can re-enter here.
+      lastSavedUpdatedAt.current = docUpdatedAt ?? null
+      const result = await saveToCloud(planRowId!)
       if (result && typeof result === 'object' && 'conflict' in result) {
         pushToast({
           kind: 'warning',
@@ -152,7 +174,7 @@ export function EditorPage() {
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     }
-  }, [doc?.updatedAt, planRowId, user, saveToCloud, doc, pushToast, reloadFromCloud])
+  }, [docUpdatedAt, planRowId, user, saveToCloud, pushToast])
 
   if (loading) {
     return (

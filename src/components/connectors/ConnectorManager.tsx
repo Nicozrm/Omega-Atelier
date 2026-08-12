@@ -25,6 +25,10 @@ import { createMqttConnector, SimulatedMqttBroker } from '@/connectors/mqtt'
 import { createTuyaConnector, HttpTuyaTransport, relayBaseUrl, tuyaRelayUrl, type TuyaRegion } from '@/connectors/tuya'
 import { createOnvifConnector, HttpOnvifTransport, onvifBridgeBaseUrl, type OnvifCameraConfig } from '@/connectors/onvif'
 import { CameraLiveView } from './CameraLiveView'
+import { CameraPanel, cameraDevices } from './CameraPanel'
+import { ConnectorDiagnostics } from './ConnectorDiagnostics'
+import { IntegrationBadge, IntegrationNotice } from './IntegrationStatus'
+import { deriveIntegrationState, type IntegrationState } from '@/twin/integrationState'
 import { createBrandConnector, createGoveeClient, createSwitchBotClient } from '@/connectors/brands'
 import { ECOSYSTEM_SPECS, createEcosystemConnector, type EcosystemIcon } from '@/connectors/ecosystem'
 
@@ -549,11 +553,13 @@ const TUYA_REGIONS: { id: TuyaRegion; label: string }[] = [
  * is HMAC-SHA256-signed and hits the chosen data centre. Credentials are stored
  * locally (this browser only) and travel only toward Tuya.
  */
-function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
+function RealTuyaCard({ session, state, busy, onConnect, onDisconnect, onRecheck }: {
   session?: TwinSession
+  state: IntegrationState
   busy: boolean
   onConnect: (cfg: TuyaLiveConfig) => void
   onDisconnect: () => void
+  onRecheck: () => void
 }) {
   const saved = useMemo(() => loadTuyaConfig(), [])
   const [region, setRegion] = useState<TuyaRegion>(saved.region)
@@ -561,8 +567,16 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
   const [secret, setSecret] = useState(saved.secret)
   const [uid, setUid] = useState(saved.uid)
   const [relay, setRelay] = useState(saved.relay)
-  const connected = session?.health.status === 'connected'
   const active = !!session && session.health.status !== 'disconnected'
+  /*
+   * The credentials stay on screen for every state that a credential change can
+   * fix — which explicitly includes "authenticated but no devices": for Tuya
+   * that is nearly always the region, the UID scope or a missing IoT-Core
+   * subscription, and hiding the form behind a green tick is what made the
+   * state unreachable. Only a connection that actually produced devices, or one
+   * that is mid-flight, folds the form away.
+   */
+  const showForm = state.phase === 'disconnected' || state.phase === 'error' || state.phase === 'no-devices'
   // The relay belongs in the precondition for the same reason it does for
   // SwitchBot: without it a browser cannot reach Tuya at all, and offering the
   // button anyway only produces a "Load failed" the user cannot act on.
@@ -575,7 +589,7 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
           <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, #ff5b00 16%, transparent)', color: '#ff5b00' }}><Plug size={16} /></span>
           <div className="min-w-0">
             <div className="text-[13px] font-medium truncate">Tuya Cloud <span className="text-[10px] uppercase tracking-wide ml-1" style={{ color: '#ff5b00' }}>Live</span></div>
-            <StatusDot session={session} />
+            <IntegrationBadge state={state} />
           </div>
         </div>
         {active && (
@@ -585,7 +599,7 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
         )}
       </div>
 
-      {!connected && (
+      {showForm && (
         <div className="space-y-2.5">
           <label className="block">
             <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Rechenzentrum</span>
@@ -648,15 +662,19 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
               {busy ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Verbinden
             </button>
           </div>
-          {session?.health.status === 'error' && (
-            <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{session.health.message ?? 'Verbindung fehlgeschlagen'}</div>
-          )}
         </div>
       )}
 
-      {connected && (
-        <div className="flex items-center gap-1.5 text-[11px] text-[#3fb27f]"><CheckCircle2 size={12} /> Live verbunden — Schalten wirkt jetzt physisch.</div>
+      {state.phase === 'ready' && (
+        <div className="flex items-center gap-1.5 text-[11px] text-[#3fb27f]">
+          <CheckCircle2 size={12} />
+          {state.deviceCount} {state.deviceCount === 1 ? 'Gerät' : 'Geräte'} aus der Tuya-Cloud geladen
+          {state.capabilities.supportsControl ? ' — Schalten wirkt physisch.' : '.'}
+        </div>
       )}
+
+      {/* The state, its reason, and the one action that can change it. */}
+      <IntegrationNotice state={state} busy={busy} onRecheck={onRecheck} />
     </div>
   )
 }
@@ -679,11 +697,13 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
  * Credentials stay in this browser. Sits beside HA-Live and Tuya-Live.
  */
 type CloudVendor = 'govee' | 'switchbot'
-function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
+function CloudBrandsCard({ sessions, states, busy, onConnect, onDisconnect, onRecheck }: {
   sessions: { govee?: TwinSession; switchbot?: TwinSession }
+  states: { govee: IntegrationState; switchbot: IntegrationState }
   busy: string | null
   onConnect: (vendor: CloudVendor, cfg: BrandCloudConfig) => void
   onDisconnect: (vendor: CloudVendor) => void
+  onRecheck: (vendor: CloudVendor) => void
 }) {
   const saved = useMemo(() => loadCloudConfig(), [])
   const [goveeKey, setGoveeKey] = useState(saved.goveeKey)
@@ -694,18 +714,33 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
 
   const vendorRow = (vendor: CloudVendor, label: string, canConnect: boolean, session?: TwinSession) => {
     const active = !!session && session.health.status !== 'disconnected'
+    const state = states[vendor]
     return (
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0"><span className="text-[12px] font-medium">{label}</span><StatusDot session={session} /></div>
-        {active ? (
-          <button onClick={() => onDisconnect(vendor)} disabled={busy === vendor} className="btn btn-sm btn-ghost inline-flex items-center gap-1.5 shrink-0">
-            {busy === vendor ? <Loader2 size={13} className="animate-spin" /> : <Unplug size={13} />} Trennen
-          </button>
-        ) : (
-          <button onClick={() => onConnect(vendor, cfg())} disabled={!canConnect || busy === vendor} className="btn btn-sm btn-primary inline-flex items-center gap-1.5 shrink-0">
-            {busy === vendor ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Live verbinden
-          </button>
-        )}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[12px] font-medium">{label}</span>
+            <IntegrationBadge state={state} />
+          </div>
+          {active ? (
+            <button onClick={() => onDisconnect(vendor)} disabled={busy === vendor} className="btn btn-sm btn-ghost inline-flex items-center gap-1.5 shrink-0">
+              {busy === vendor ? <Loader2 size={13} className="animate-spin" /> : <Unplug size={13} />} Trennen
+            </button>
+          ) : (
+            <button onClick={() => onConnect(vendor, cfg())} disabled={!canConnect || busy === vendor} className="btn btn-sm btn-primary inline-flex items-center gap-1.5 shrink-0">
+              {busy === vendor ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Live verbinden
+            </button>
+          )}
+        </div>
+        {/*
+          Per vendor, not per card: SwitchBot failing while Govee is fine was
+          previously rendered as one shared error line under both.
+        */}
+        <IntegrationNotice
+          state={state}
+          busy={busy === vendor}
+          onRecheck={() => onRecheck(vendor)}
+        />
       </div>
     )
   }
@@ -760,20 +795,6 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
         auch mit reinem API-Key, denn blockiert wird der <code>Authorization</code>-Header, nicht die Signatur.
         Relay-Funktion liegt im Repo, Anleitung: docs/CONNECTOR_SETUP.md.
       </div>
-      {(sessions.govee?.health.status === 'error' || sessions.switchbot?.health.status === 'error') && (
-        <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{sessions.govee?.health.message ?? sessions.switchbot?.health.message ?? 'Verbindung fehlgeschlagen'}</div>
-      )}
-      {/* A connection that succeeds but yields nothing has to say so — that
-          silence ("verbunden", zero devices) is what made this hard to debug. */}
-      {(['govee', 'switchbot'] as const).map((vendor) => {
-        const session = sessions[vendor]
-        if (session?.health.status !== 'connected' || !session.health.message) return null
-        return (
-          <div key={vendor} className="flex items-start gap-1.5 text-[11px] text-[#e0a23c]">
-            <AlertTriangle size={12} className="mt-0.5 shrink-0" />{session.health.message}
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -782,11 +803,16 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
  * Live ONVIF connection. Credentials are sent only to the configured local
  * bridge; the camera password is intentionally not persisted by the UI.
  */
-function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
+function RealOnvifCard({ session, state, cameras, busy, onConnect, onDisconnect, onRecheck, onOpenCamera }: {
   session?: TwinSession
+  state: IntegrationState
+  /** The cameras this connector really discovered — never a placeholder list. */
+  cameras: Device[]
   busy: boolean
   onConnect: (cfg: OnvifLiveConfig) => void
   onDisconnect: () => void
+  onRecheck: () => void
+  onOpenCamera: (deviceId: string) => void
 }) {
   const saved = useMemo(() => loadOnvifConfig(), [])
   const [bridgeUrl, setBridgeUrl] = useState(saved.bridgeUrl)
@@ -797,8 +823,15 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
   const [port, setPort] = useState(String(saved.port))
   const [username, setUsername] = useState(saved.username)
   const [password, setPassword] = useState(saved.password)
-  const connected = session?.health.status === 'connected'
   const active = !!session && session.health.status !== 'disconnected'
+  /*
+   * Same rule as the Tuya card: the form stays reachable for every state a
+   * credential change can fix. "Angemeldet, aber keine Kamera gefunden" is one
+   * of them — the camera IP or the ONVIF port is the usual cause, and the old
+   * card replaced the whole form with a green success line the moment the
+   * handshake went through.
+   */
+  const showForm = state.phase === 'disconnected' || state.phase === 'error' || state.phase === 'no-devices'
   const canConnect = bridgeUrl.trim().length > 8 && host.trim().length > 6 && username.trim().length > 0 && password.length > 0
 
   return (
@@ -807,8 +840,8 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, #8f7cff 16%, transparent)', color: '#8f7cff' }}><Video size={16} /></span>
           <div className="min-w-0">
-            <div className="text-[13px] font-medium truncate">ONVIF Kamera <span className="text-[10px] uppercase tracking-wide ml-1" style={{ color: '#8f7cff' }}>Live</span></div>
-            <StatusDot session={session} />
+            <div className="text-[13px] font-medium truncate">Arenti &amp; ONVIF Kameras <span className="text-[10px] uppercase tracking-wide ml-1" style={{ color: '#8f7cff' }}>Live</span></div>
+            <IntegrationBadge state={state} />
           </div>
         </div>
         {active && (
@@ -818,7 +851,7 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
         )}
       </div>
 
-      {!connected && (
+      {showForm && (
         <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-2">
             <label className="block col-span-2">
@@ -872,15 +905,56 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
               <input value={cameraName} onChange={(e) => setCameraName(e.target.value)} placeholder="Arenti Außenkamera" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
             </label>
           </div>
-          {session?.health.status === 'error' && (
-            <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{session.health.message ?? 'ONVIF-Verbindung fehlgeschlagen'}</div>
-          )}
         </div>
       )}
 
-      {connected && (
-        <div className="flex items-center gap-1.5 text-[11px] text-[#3fb27f]"><CheckCircle2 size={12} /> ONVIF live verbunden — PTZ-Befehle gehen direkt an die Kamera.</div>
+      {/*
+        The cameras this connector actually reported. This is the piece the old
+        card was missing entirely: it printed "ONVIF live verbunden" and stopped,
+        so a successful login led to no camera function and no way into one.
+        The list is the twin's, so it cannot show a camera that is not there.
+      */}
+      {cameras.length > 0 && (
+        <div className="mt-1 space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">
+            {cameras.length === 1 ? 'Erkannte Kamera' : `Erkannte Kameras (${cameras.length})`}
+          </div>
+          {cameras.map((camera) => {
+            const online = camera.health.reachability === 'online'
+            const streaming = findCapability(camera.capabilities, 'Camera')?.streaming === true
+            return (
+              <div
+                key={camera.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface-2)] px-2.5 py-1.5"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: online ? '#3fb27f' : '#d8635f' }}
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-medium">{camera.name}</div>
+                    <div className="text-[10px] text-[color:var(--muted)]">
+                      {camera.metadata?.resolution ?? 'Auflösung unbekannt'}
+                      {streaming ? ' · Stream verfügbar' : ' · kein Stream'}
+                      {camera.metadata?.ptzSupport === 'available' ? ' · PTZ' : ''}
+                    </div>
+                  </div>
+                </div>
+                {/* Gated on the real capability: no camera device, no shortcut. */}
+                <button
+                  onClick={() => onOpenCamera(camera.id)}
+                  className="btn btn-sm btn-outline inline-flex shrink-0 items-center gap-1.5"
+                >
+                  <Video size={12} /> Kamera öffnen
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
+
+      <IntegrationNotice state={state} busy={busy} onRecheck={onRecheck} />
     </div>
   )
 }
@@ -910,16 +984,29 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
   const [devices, setDevices] = useState<Device[]>([])
   const [bindings, setBindings] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | undefined>()
+  const [result, setResult] = useState<IntegrationState | undefined>()
 
-  // Watch the twin for this wizard's connector coming online + its devices.
+  /*
+   * Watch the twin for this wizard's connector.
+   *
+   * The step only advances once discovery has actually *finished*. It used to
+   * advance on `health.status === 'connected'`, which is the same mistake the
+   * cards made: the wizard declared success while the device query was still
+   * running, and reported a failed discovery as a finished one.
+   */
   useEffect(() => {
     if (!connectorId) return
     return manager.subscribe((v) => {
-      setDevices(v.devices.filter((d) => d.connectorId === connectorId))
+      const owned = v.devices.filter((d) => d.connectorId === connectorId)
+      setDevices(owned)
       setBindings(v.bindings)
       const sess = v.sessions.find((s) => s.id === connectorId)
-      if (sess?.health.status === 'error') setError(sess.health.message ?? 'Verbindung fehlgeschlagen')
-      else if (sess?.health.status === 'connected' && step === 2) setStep(3)
+      const state = deriveIntegrationState({
+        health: sess?.health, discovery: sess?.discovery, devices: owned,
+      })
+      setResult(state)
+      if (state.phase === 'error') setError(state.message ?? 'Verbindung fehlgeschlagen')
+      else if (step === 2 && (state.phase === 'ready' || state.phase === 'no-devices')) setStep(3)
     })
   }, [connectorId, manager, step])
 
@@ -982,7 +1069,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
               {([
                 { k: 'ha-live', label: 'Home Assistant', sub: 'Echte Verbindung · WebSocket + Token', color: '#41bd84', icon: Server },
                 { k: 'tuya-live', label: 'Tuya Cloud', sub: 'Echte Verbindung · signierte OpenAPI', color: '#ff5b00', icon: Plug },
-                { k: 'onvif-live', label: 'ONVIF Kamera', sub: 'Echte Verbindung · LAN + PTZ', color: '#8f7cff', icon: Video },
+                { k: 'onvif-live', label: 'Arenti & ONVIF Kamera', sub: 'Echte Verbindung · Livebild + PTZ', color: '#8f7cff', icon: Video },
                 { k: 'sim', label: 'Simuliertes Ökosystem', sub: '30 Marken · sofort, ohne Zugangsdaten', color: 'var(--accent)', icon: Sparkles },
               ] as const).map((o) => (
                 <button
@@ -1107,7 +1194,21 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
           {/* Step 3 — room assignment */}
           {step === 3 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-[12px] text-[#3fb27f]"><CheckCircle2 size={14} /> {devices.length} {devices.length === 1 ? 'Gerät' : 'Geräte'} gefunden — Räume zuordnen:</div>
+              {devices.length > 0 ? (
+                <div className="flex items-center gap-1.5 text-[12px] text-[#3fb27f]"><CheckCircle2 size={14} /> {devices.length} {devices.length === 1 ? 'Gerät' : 'Geräte'} gefunden — Räume zuordnen:</div>
+              ) : (
+                /* Connected and empty is its own outcome — not a success, not a
+                   failure, and the wizard has to say which of the two it is. */
+                <div className="flex items-start gap-1.5 text-[12px] text-[#e0a23c]">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>{result?.message ?? 'Verbunden, aber es wurden keine Geräte gefunden.'}</span>
+                </div>
+              )}
+              {result?.capabilities.supportsCamera && (
+                <div className="text-[11px] text-[color:var(--muted)]">
+                  {result.cameraCount} {result.cameraCount === 1 ? 'Kamera erkannt' : 'Kameras erkannt'} — über „Kameras" im Kopf des Digital Twin erreichbar.
+                </div>
+              )}
               <div className="max-h-[280px] space-y-1.5 overflow-y-auto omega-scroll pr-1">
                 {devices.map((d) => (
                   <div key={d.id} className="flex items-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--bg)] p-2">
@@ -1122,7 +1223,6 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
                     </select>
                   </div>
                 ))}
-                {devices.length === 0 && <div className="text-[12px] text-[color:var(--muted)]">Keine steuerbaren Geräte gefunden.</div>}
               </div>
             </div>
           )}
@@ -1163,6 +1263,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
   const [flashId, setFlashId] = useState<string | null>(null)
   const [view, setView] = useState<'grundriss' | 'geraete'>('grundriss')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [cameraPanel, setCameraPanel] = useState<{ deviceId?: string } | null>(null)
   const prevRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
@@ -1199,6 +1300,29 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
   const binding = useMemo(() => resolveRoomBinding(devices, rooms, bindings), [devices, rooms, bindings])
   const roomOptions = rooms.map((r) => ({ id: r.id, name: r.name }))
   const sessionFor = (id: string) => sessions.find((s) => s.id === id)
+
+  /**
+   * One integration's real state: transport health, discovery outcome and the
+   * devices it actually produced, folded together. Every live card renders this
+   * instead of `health.status === 'connected'`.
+   */
+  const stateFor = (id: string): IntegrationState => {
+    const session = sessionFor(id)
+    return deriveIntegrationState({
+      health: session?.health,
+      discovery: session?.discovery,
+      devices: devices.filter((d) => d.connectorId === id),
+    })
+  }
+  const devicesOf = (id: string) => devices.filter((d) => d.connectorId === id)
+
+  /** Every camera in the twin, from any source — the shortcut's precondition. */
+  const cameras = useMemo(() => cameraDevices(devices), [devices])
+
+  async function recheck(id: string) {
+    setBusy(id)
+    try { await manager.refreshConnector(id) } finally { setBusy(null) }
+  }
   const activeSources = new Set(devices.map((d) => d.connectorId)).size
   // "Alle verbinden" spans the demos AND every ecosystem — the whole catalog.
   const allTotal = CATALOG.length + ECO_ENTRIES.length
@@ -1340,6 +1464,21 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
           {can('voice-control') && (
             <VoiceControl devices={devices} onRun={(cmds) => cmds.forEach((c) => void manager.command(c))} />
           )}
+          {/*
+            The camera shortcut. Rendered strictly from the twin: it appears
+            only when a device with a real `Camera` capability exists, and
+            disappears with the last one. No brand is consulted.
+          */}
+          {cameras.length > 0 && (
+            <button
+              onClick={() => setCameraPanel({})}
+              className="btn btn-sm btn-outline inline-flex items-center gap-1.5"
+              title={`${cameras.length} ${cameras.length === 1 ? 'Kamera' : 'Kameras'} im Twin`}
+            >
+              <Video size={14} /> Kameras
+              <span className="text-[10px] text-[color:var(--muted)]">{cameras.length}</span>
+            </button>
+          )}
           <button onClick={() => setWizardOpen(true)} className="btn btn-sm btn-primary inline-flex items-center gap-1.5">
             <Sparkles size={14} /> Gerät verbinden
           </button>
@@ -1347,6 +1486,14 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       {wizardOpen && <ConnectDeviceWizard roomOptions={roomOptions} onClose={() => setWizardOpen(false)} />}
+      {cameraPanel && (
+        <CameraPanel
+          devices={devices}
+          initialDeviceId={cameraPanel.deviceId}
+          onPtz={onDevicePtz}
+          onClose={() => setCameraPanel(null)}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto px-6 py-7">
         <div className="max-w-5xl mx-auto flex flex-col gap-6">
@@ -1457,14 +1604,34 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
             <div className="mt-3 pt-3 border-t border-[color:var(--border)] space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)] mb-2">Echte Verbindung · schaltet physisch</div>
               <RealHaCard session={sessionFor(LIVE_HA_ID)} busy={busy === LIVE_HA_ID} onConnect={connectLiveHa} onDisconnect={disconnectLiveHa} />
-              <RealTuyaCard session={sessionFor(LIVE_TUYA_ID)} busy={busy === LIVE_TUYA_ID} onConnect={connectLiveTuya} onDisconnect={disconnectLiveTuya} />
-              <RealOnvifCard session={sessionFor(LIVE_ONVIF_ID)} busy={busy === LIVE_ONVIF_ID} onConnect={connectLiveOnvif} onDisconnect={disconnectLiveOnvif} />
+              <RealTuyaCard
+                session={sessionFor(LIVE_TUYA_ID)}
+                state={stateFor(LIVE_TUYA_ID)}
+                busy={busy === LIVE_TUYA_ID}
+                onConnect={connectLiveTuya}
+                onDisconnect={disconnectLiveTuya}
+                onRecheck={() => void recheck(LIVE_TUYA_ID)}
+              />
+              <RealOnvifCard
+                session={sessionFor(LIVE_ONVIF_ID)}
+                state={stateFor(LIVE_ONVIF_ID)}
+                cameras={cameraDevices(devicesOf(LIVE_ONVIF_ID))}
+                busy={busy === LIVE_ONVIF_ID}
+                onConnect={connectLiveOnvif}
+                onDisconnect={disconnectLiveOnvif}
+                onRecheck={() => void recheck(LIVE_ONVIF_ID)}
+                onOpenCamera={(deviceId) => setCameraPanel({ deviceId })}
+              />
               <CloudBrandsCard
                 sessions={{ govee: sessionFor(LIVE_GOVEE_ID), switchbot: sessionFor(LIVE_SB_ID) }}
+                states={{ govee: stateFor(LIVE_GOVEE_ID), switchbot: stateFor(LIVE_SB_ID) }}
                 busy={busy}
                 onConnect={connectCloud}
                 onDisconnect={disconnectCloud}
+                onRecheck={(vendor) => void recheck(vendor === 'govee' ? LIVE_GOVEE_ID : LIVE_SB_ID)}
               />
+              {/* The recorded chain behind whatever the cards above report. */}
+              <ConnectorDiagnostics />
             </div>
           </section>
 
