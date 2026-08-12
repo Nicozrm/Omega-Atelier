@@ -316,8 +316,17 @@ export function PostFX({
             blurSharpness={12}
             blurKernelSize={1}
             rayStep={0.4}
-            intensity={0.8}
-            maxRoughness={0.5}
+            intensity={0.55}
+            /**
+             * The cutoff above which a surface gets no screen-space reflection.
+             *
+             * At 0.5 this covered most of the outdoor world — asphalt, pavers,
+             * roof tiles and brick all sat below it once their roughness bands
+             * were still open at the glossy end, so the whole street mirrored
+             * the houses and read as wet. 0.25 keeps SSR where reflections
+             * physically are: glass, water, polished metal, the solar panels.
+             */
+            maxRoughness={0.25}
             ENABLE_JITTERING={false}
             jitter={0.1}
             jitterSpread={0.15}
@@ -328,7 +337,10 @@ export function PostFX({
             maxDepth={1}
             thickness={8}
             ior={1.45}
-            STRETCH_MISSED_RAYS
+            // STRETCH_MISSED_RAYS is deliberately absent: a ray that leaves the
+            // screen gets smeared along its last direction, which is what draws
+            // the vertical streaks under anything reflective. Letting the
+            // reflection end is both cheaper and more honest than inventing it.
             USE_MRT
             USE_NORMALMAP
             USE_ROUGHNESSMAP

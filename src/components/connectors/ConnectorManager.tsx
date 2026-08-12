@@ -421,10 +421,21 @@ function RealTuyaCard({ session, busy, onConnect, onDisconnect }: {
 }
 
 /**
- * Live Hersteller-Clouds — Govee (API-Key) + SwitchBot (Token + Secret), with an
- * optional relay URL (the vendor clouds send no CORS headers, so a tiny relay
- * forwards the calls — see docs/CONNECTOR_SETUP.md). Reuses main's real cloud
- * clients; credentials stay in this browser. Sits beside HA-Live and Tuya-Live.
+ * Live Hersteller-Clouds — Govee (API-Key) + SwitchBot (Token + Secret).
+ *
+ * The two vendors differ in one way that decides whether they work at all, and
+ * the UI has to say so rather than offer one shared "optional" relay field:
+ *
+ *   Govee      OPTIONS → 200, `access-control-allow-origin` for the app origin.
+ *              Reachable straight from the browser; the relay is optional.
+ *   SwitchBot  OPTIONS → 404 "no Route matched", no CORS header on any response.
+ *              Unreachable from a browser. The relay is *required*.
+ *
+ * Every SwitchBot request carries `Authorization`, which is not a safelisted
+ * header, so a preflight always happens and always fails — dropping the
+ * signature for a plain API key changes nothing.
+ *
+ * Credentials stay in this browser. Sits beside HA-Live and Tuya-Live.
  */
 type CloudVendor = 'govee' | 'switchbot'
 function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
@@ -474,7 +485,9 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
             className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" autoComplete="off" spellCheck={false} />
         </label>
         <label className="block">
-          <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Relay-URL (CORS)</span>
+          <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">
+            Relay-URL <span style={{ color: '#d8635f' }}>· für SwitchBot nötig</span>
+          </span>
           <input value={relay} onChange={(e) => setRelay(e.target.value)} placeholder="https://<ref>.supabase.co/functions/v1/vendor-relay"
             className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" autoComplete="off" spellCheck={false} />
         </label>
@@ -491,10 +504,20 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
       </div>
       <div className="space-y-2 pt-1 border-t border-[color:var(--border)]">
         {vendorRow('govee', 'Govee Cloud', goveeKey.trim().length > 10, sessions.govee)}
-        {vendorRow('switchbot', 'SwitchBot Cloud', sbToken.trim().length > 10 && sbSecret.trim().length > 10, sessions.switchbot)}
+        {vendorRow(
+          'switchbot', 'SwitchBot Cloud',
+          // The relay is part of what makes a SwitchBot connection possible, so
+          // it belongs in the precondition — offering the button without it only
+          // produces a "Load failed" the user cannot act on.
+          sbToken.trim().length > 10 && sbSecret.trim().length > 10 && relay.trim().length > 0,
+          sessions.switchbot,
+        )}
       </div>
       <div className="text-[10px] text-[color:var(--muted)] leading-snug">
-        Zugangsdaten bleiben nur in diesem Browser. Ohne Relay blockiert der Browser die Hersteller-APIs (CORS) — Relay-Funktion liegt im Repo, Anleitung: docs/CONNECTOR_SETUP.md.
+        Zugangsdaten bleiben nur in diesem Browser. Govee antwortet mit CORS-Headern und geht ohne Relay;
+        SwitchBot beantwortet den Preflight nicht und ist aus dem Browser <em>nur</em> über das Relay erreichbar —
+        auch mit reinem API-Key, denn blockiert wird der <code>Authorization</code>-Header, nicht die Signatur.
+        Relay-Funktion liegt im Repo, Anleitung: docs/CONNECTOR_SETUP.md.
       </div>
       {(sessions.govee?.health.status === 'error' || sessions.switchbot?.health.status === 'error') && (
         <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{sessions.govee?.health.message ?? sessions.switchbot?.health.message ?? 'Verbindung fehlgeschlagen'}</div>

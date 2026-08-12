@@ -31,6 +31,7 @@ import {
   brickTextures, boardTextures, roofTextures, asphaltSurface, paverTextures, grassTexture,
   type Surface,
 } from '@/lib/proceduralTextures'
+import { canopyGeometry } from '@/lib/render/canopy'
 import { seasonPalette, snowed, mixHex, type Season } from '@/lib/season'
 import type { DayPhase } from '@/lib/environment'
 import {
@@ -357,6 +358,33 @@ function buildMaterials(world: Neighbourhood, season: Season, daylight: number, 
 /* ────────────────────────────── Mesh vocabulary ─────────────────────── */
 
 /**
+ * Eine Laubmasse.
+ *
+ * Ersetzt das frühere `icosahedronGeometry(r, 1)`: dieselbe Rolle, aber die
+ * Form kommt aus dem gerauschten Pool in `lib/render/canopy`, ist also
+ * ausgefranst statt kugelrund. `r` ist der Radius in Baum-Einheiten, `squash`
+ * staucht die Krone, `seed` wählt eine der acht Formen — aus dem Standort-Hash
+ * des Baumes, damit derselbe Baum nach jedem Neuladen gleich aussieht.
+ */
+function Canopy({ r, squash = [1, 1, 1], seed, position, material }: {
+  r: number
+  squash?: [number, number, number]
+  seed: number
+  position: [number, number, number]
+  material: THREE.Material
+}) {
+  return (
+    <mesh
+      position={position}
+      scale={[squash[0] * r, squash[1] * r, squash[2] * r]}
+      castShadow
+      geometry={canopyGeometry(seed)}
+      material={material}
+    />
+  )
+}
+
+/**
  * A tree. The silhouette is what sells the region — a Mediterranean cypress and
  * a Scandinavian pine must not be the same blob with a different tint — so each
  * canopy kind gets its own construction.
@@ -402,24 +430,24 @@ function tree(key: string, kind: TreeKind, at: Vec2, scale: number, mats: MatBag
       return (
         <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean]}>
           <mesh position={[0, 0.5 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.09 * s, 0.13 * s, 1.0 * s, 6]} /></mesh>
-          <mesh position={[0, 1.55 * s, 0]} castShadow material={fol(1)}><coneGeometry args={[1.0 * s, 1.7 * s, 8]} /></mesh>
-          <mesh position={[0, 2.6 * s, 0]} castShadow material={fol(0)}><coneGeometry args={[0.76 * s, 1.5 * s, 8]} /></mesh>
-          <mesh position={[0, 3.45 * s, 0]} castShadow material={fol(1)}><coneGeometry args={[0.5 * s, 1.15 * s, 8]} /></mesh>
+          <mesh position={[0, 1.55 * s, 0]} castShadow material={fol(1)}><coneGeometry args={[1.0 * s, 1.7 * s, 11]} /></mesh>
+          <mesh position={[0, 2.6 * s, 0]} castShadow material={fol(0)}><coneGeometry args={[0.76 * s, 1.5 * s, 11]} /></mesh>
+          <mesh position={[0, 3.45 * s, 0]} castShadow material={fol(1)}><coneGeometry args={[0.5 * s, 1.15 * s, 11]} /></mesh>
         </group>
       )
     case 'cypress':
       return (
         <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean * 0.4]}>
           <mesh position={[0, 0.3 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.08 * s, 0.11 * s, 0.6 * s, 6]} /></mesh>
-          <mesh position={[0, 2.4 * s, 0]} castShadow material={fol(0)}><coneGeometry args={[0.42 * s, 4.0 * s, 8]} /></mesh>
+          <mesh position={[0, 2.4 * s, 0]} castShadow material={fol(0)}><coneGeometry args={[0.42 * s, 4.0 * s, 11]} /></mesh>
         </group>
       )
     case 'olive':
       return (
         <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean]}>
           <mesh position={[0, 0.62 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.13 * s, 0.2 * s, 1.25 * s, 7]} /></mesh>
-          <mesh position={[0.2 * s, 1.5 * s, 0]} scale={[1.25, 0.66, 1.2]} castShadow material={fol(3)}><icosahedronGeometry args={[0.9 * s, 1]} /></mesh>
-          <mesh position={[-0.45 * s, 1.25 * s, 0.2 * s]} scale={[1.1, 0.6, 1.1]} castShadow material={fol(2)}><icosahedronGeometry args={[0.62 * s, 1]} /></mesh>
+          <Canopy position={[0.2 * s, 1.5 * s, 0]} squash={[1.25, 0.66, 1.2]} r={0.9 * s} seed={h(41) * 97} material={fol(3)} />
+          <Canopy position={[-0.45 * s, 1.25 * s, 0.2 * s]} squash={[1.1, 0.6, 1.1]} r={0.62 * s} seed={h(43) * 97} material={fol(2)} />
         </group>
       )
     case 'palm': {
@@ -448,8 +476,8 @@ function tree(key: string, kind: TreeKind, at: Vec2, scale: number, mats: MatBag
       return (
         <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean * 1.4]}>
           <mesh position={[0, 1.15 * s, 0]} castShadow material={m.trim}><cylinderGeometry args={[0.07 * s, 0.1 * s, 2.3 * s, 7]} /></mesh>
-          <mesh position={[0, 2.7 * s, 0]} scale={[0.86, 1.15, 0.86]} castShadow material={fol(3)}><icosahedronGeometry args={[0.86 * s, 1]} /></mesh>
-          <mesh position={[0.34 * s, 2.2 * s, 0.2 * s]} scale={[0.8, 1, 0.8]} castShadow material={fol(2)}><icosahedronGeometry args={[0.5 * s, 1]} /></mesh>
+          <Canopy position={[0, 2.7 * s, 0]} squash={[0.86, 1.15, 0.86]} r={0.86 * s} seed={h(47) * 97} material={fol(3)} />
+          <Canopy position={[0.34 * s, 2.2 * s, 0.2 * s]} squash={[0.8, 1, 0.8]} r={0.5 * s} seed={h(53) * 97} material={fol(2)} />
         </group>
       )
     default:
@@ -457,10 +485,10 @@ function tree(key: string, kind: TreeKind, at: Vec2, scale: number, mats: MatBag
         <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean]}>
           <mesh position={[0, 0.85 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.08 * s, 0.12 * s, 1.7 * s, 7]} /></mesh>
           <mesh position={[0.32 * s, 1.4 * s, 0]} rotation={[0, 0, -0.65]} castShadow material={m.trunk}><cylinderGeometry args={[0.035 * s, 0.055 * s, 0.75 * s, 5]} /></mesh>
-          <mesh position={[0, 2.2 * s, 0]} scale={[1, 0.86, 1]} castShadow material={fol(0)}><icosahedronGeometry args={[1.02 * s, 1]} /></mesh>
-          <mesh position={[0.64 * s, 1.9 * s, 0.2 * s]} scale={[1, 0.8, 1]} castShadow material={fol(1)}><icosahedronGeometry args={[0.6 * s, 1]} /></mesh>
-          <mesh position={[-0.52 * s, 1.75 * s, -0.28 * s]} scale={[1, 0.78, 1]} castShadow material={fol(2)}><icosahedronGeometry args={[0.55 * s, 1]} /></mesh>
-          <mesh position={[-0.12 * s, 2.85 * s, 0.3 * s]} castShadow material={fol(1)}><icosahedronGeometry args={[0.48 * s, 1]} /></mesh>
+          <Canopy position={[0, 2.2 * s, 0]} squash={[1, 0.86, 1]} r={1.02 * s} seed={h(59) * 97} material={fol(0)} />
+          <Canopy position={[0.64 * s, 1.9 * s, 0.2 * s]} squash={[1, 0.8, 1]} r={0.6 * s} seed={h(61) * 97} material={fol(1)} />
+          <Canopy position={[-0.52 * s, 1.75 * s, -0.28 * s]} squash={[1, 0.78, 1]} r={0.55 * s} seed={h(67) * 97} material={fol(2)} />
+          <Canopy position={[-0.12 * s, 2.85 * s, 0.3 * s]} r={0.48 * s} seed={h(71) * 97} material={fol(1)} />
         </group>
       )
   }
