@@ -40,6 +40,24 @@ Einrichtung auf der Tuya IoT Platform:
    Sauger erscheinen mit Start/Stopp/Zur-Basis, Lichter/Steckdosen mit
    An-Aus/Dimmen/Verbrauch.
 
+**Welchen Endpunkt OMEGA abfragt.** Mit eingetragener UID
+`GET /v1.0/users/{uid}/devices` — genau die Geräte dieses App-Accounts. Ohne
+UID `GET /v1.0/iot-01/associated-users/devices`, also alle dem Cloud-Projekt
+zugeordneten Geräte (seitenweise). Liefert das nichts und hat der Token-Grant
+eine UID mitgeschickt, wird diese einmal als Rückfallebene versucht, bevor das
+Konto als leer gemeldet wird.
+
+Das ist der Grund, warum Tuya sich früher erfolgreich anmeldete und trotzdem
+keine Geräte zeigte: ohne UID fragte der Connector `GET /v1.0/devices` ab, und
+das ist keine Kontoauflistung — Tuya verlangt dort `device_ids` bzw. `schema`.
+Da das UID-Feld als optional ausgewiesen ist, war das für ein frisches Projekt
+der Normalfall.
+
+**Geräte ohne bekannte Datenpunkte.** Geräte, deren DP-Codes OMEGA (noch) nicht
+kennt, werden nicht mehr verworfen, sondern ohne Bedienelemente angezeigt und in
+der Karte gezählt. Vorher verschwanden sie stillschweigend — eine erfolgreiche
+Erkennung konnte so als leere Liste enden.
+
 **Die Relay-URL ist für Tuya Pflicht**, dieselbe Function wie bei SwitchBot.
 Grund ist nicht die Signatur, sondern CORS: jede Anfrage trägt `client_id`,
 `sign`, `t`, `sign_method`, `nonce` und `access_token`, keiner davon ist ein
@@ -111,7 +129,7 @@ OMEGA_ONVIF_BRIDGE_TOKEN="change-this" node server.mjs
 
 Standard-Bridge: `http://127.0.0.1:8787`.
 
-In OMEGA → Connectors → Echte Verbindung → ONVIF Kamera:
+In OMEGA → Connectors → Echte Verbindung → „Arenti & ONVIF Kameras":
 
 - Bridge-URL
 - Kamera-IP
@@ -120,6 +138,13 @@ In OMEGA → Connectors → Echte Verbindung → ONVIF Kamera:
 - ONVIF-Passwort
 
 Das Kamera-Passwort wird vom UI nicht in `localStorage` gespeichert.
+
+**Nach der Anmeldung.** Die Karte listet die tatsächlich erkannten Kameras
+(Name, Auflösung, Erreichbarkeit, PTZ) und bietet pro Kamera „Kamera öffnen".
+Zusätzlich erscheint im Kopf des Digital Twin der Knopf **„Kameras"** — aber nur,
+solange mindestens ein Gerät im Twin wirklich eine `Camera`-Capability meldet.
+Wird keine Kamera gefunden, sagt die Karte das und bietet „Erneut prüfen" an,
+statt nur „verbunden" anzuzeigen.
 
 Der Connector unterstützt:
 

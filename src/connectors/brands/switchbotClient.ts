@@ -29,8 +29,12 @@
 
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
+import { trace, traceError } from '../diagnostics'
 
 const SB_BASE = 'https://api.switch-bot.com'
+
+/** Trace/diagnostics key for this vendor. */
+const TRACE = 'switchbot'
 
 /**
  * Status poll interval, ms. SwitchBot allows 10 000 calls/day per token and has
@@ -180,6 +184,64 @@ function transportError(e: unknown, relayed: boolean): Error {
   return e instanceof Error ? e : new Error('SwitchBot-Anfrage fehlgeschlagen')
 }
 
+/**
+ * What a non-2xx answer actually said.
+ *
+ * The old code turned every failing status into the same sentence — "Token/
+ * Secret/Relay prüfen" — which is wrong more often than it is right, and sends
+ * the user to inspect credentials that are usually fine. Three of the four
+ * common causes are not credentials at all:
+ *
+ *   401 + a Supabase gateway body  the relay was deployed *without*
+ *                                  `--no-verify-jwt`, so the call never left
+ *                                  Supabase and SwitchBot never saw it
+ *   404 `unknown vendor`           the relay URL is missing `/vendor-relay`
+ *   502 `upstream unreachable`     the relay reached out and SwitchBot did not
+ *                                  answer — with the relay's own detail text
+ *
+ * The body is parsed rather than guessed at, so the message names the layer
+ * that actually refused.
+ */
+export function switchbotHttpError(status: number, body: unknown): string {
+  const record = body && typeof body === 'object' ? body as Record<string, unknown> : undefined
+  const relayError = typeof record?.error === 'string' ? record.error : undefined
+  const detail = typeof record?.detail === 'string' ? record.detail : undefined
+
+  if (relayError === 'upstream unreachable') {
+    return `Das Relay erreicht die SwitchBot-Cloud nicht${detail ? ` (${detail})` : ''}`
+  }
+  if (relayError === 'unknown vendor') {
+    return 'Die Relay-URL zeigt nicht auf die Relay-Funktion — sie muss auf '
+      + '/functions/v1/vendor-relay enden (ohne Vendor-Segment).'
+  }
+  if (status === 401 || status === 403) {
+    // Supabase answers a JWT-gated function with its own envelope; SwitchBot's
+    // own rejections arrive as HTTP 200 with statusCode 401 in the body, never
+    // as a bare HTTP 401. So an HTTP 401 here is almost always the gateway.
+    const gateway = typeof record?.message === 'string' ? record.message : undefined
+    if (gateway && /jwt|authorization/i.test(gateway)) {
+      return 'Das Relay verlangt einen Supabase-JWT — die Function muss mit '
+        + '`--no-verify-jwt` deployt werden, sonst erreicht keine Anfrage SwitchBot.'
+    }
+    return `Relay oder Gateway lehnt die Anfrage ab (${status})${gateway ? `: ${gateway}` : ''}`
+  }
+  if (status === 404) {
+    return 'Relay-Route nicht gefunden (404) — Relay-URL prüfen und ob die Function deployt ist'
+  }
+  return `SwitchBot-Anfrage fehlgeschlagen (HTTP ${status})${relayError ? `: ${relayError}` : ''}`
+}
+
+/** Read a failed response's body without letting a parse error mask the status. */
+async function errorBody(res: Response): Promise<unknown> {
+  try {
+    const text = await res.text()
+    if (!text) return undefined
+    try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
+  } catch {
+    return undefined
+  }
+}
+
 export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient {
   const base = (opts.baseUrl?.replace(/\/+$/, '') || SB_BASE)
   const relayed = !!opts.baseUrl
@@ -226,21 +288,46 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
 
   const list = async (): Promise<Device[]> => {
     let res: Response
+    trace(TRACE, 'request', 'Geräteliste angefragt', { relayed, path: '/v1.1/devices' })
     try {
       res = await doFetch(`${base}/v1.1/devices`, { headers: await authedHeaders() })
     } catch (e) {
-      throw transportError(e, relayed)
+      const err = transportError(e, relayed)
+      traceError(TRACE, 'request', err.message, { relayed })
+      throw err
     }
-    if (!res.ok) throw new Error(`SwitchBot-API ${res.status} — Token/Secret/Relay prüfen`)
+    if (!res.ok) {
+      const reason = switchbotHttpError(res.status, await errorBody(res))
+      traceError(TRACE, 'request', reason, { status: res.status, relayed })
+      throw new Error(reason)
+    }
 
     // Throws with SwitchBot's own reason when the envelope says "no", even
     // though the HTTP layer said 200.
-    const raw = parseSwitchBotDevices((await res.json()) as SbEnvelope)
+    const envelope = (await res.json()) as SbEnvelope
+    let raw: SbDevice[]
+    try {
+      raw = parseSwitchBotDevices(envelope)
+    } catch (e) {
+      traceError(TRACE, 'parse', e instanceof Error ? e.message : 'Antwort abgelehnt', {
+        statusCode: envelope?.statusCode ?? -1,
+      })
+      throw e
+    }
+    trace(TRACE, 'parse', 'SwitchBot-Envelope gelesen', {
+      statusCode: envelope?.statusCode ?? 100,
+      physical: envelope?.body?.deviceList?.length ?? 0,
+      infrared: envelope?.body?.infraredRemoteList?.length ?? 0,
+    })
     for (const d of raw) known.add(d.deviceId)
 
     // IR remotes are write-only — SwitchBot has no `/status` for them, and
     // asking burns a call per device against the 10 000/day budget.
     const states = await Promise.all(raw.map((d) => (d.infrared ? Promise.resolve(null) : readStatus(d.deviceId))))
+    trace(TRACE, 'normalize', 'Geräte in neutrale Domain übersetzt', {
+      devices: raw.length,
+      withLiveStatus: states.filter((s) => s !== null).length,
+    })
 
     return raw.map((d, i) => {
       const { category, caps } = switchbotCapsFor(d.deviceType ?? d.remoteType ?? '')
@@ -291,6 +378,7 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
      */
     probe: async () => {
       const devices = await listShared()
+      trace(TRACE, 'auth', 'Signatur akzeptiert, Konto gelesen', { devices: devices.length })
       if (devices.length === 0) {
         return {
           message: 'Verbunden, aber das SwitchBot-Konto liefert keine Geräte — '
@@ -310,7 +398,12 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
       } catch (e) {
         throw transportError(e, relayed)
       }
-      if (!res.ok) throw new Error(`SwitchBot-Steuerung fehlgeschlagen (${res.status})`)
+      if (!res.ok) {
+        const reason = switchbotHttpError(res.status, await errorBody(res))
+        traceError(TRACE, 'command', reason, { status: res.status })
+        throw new Error(reason)
+      }
+      trace(TRACE, 'command', 'Befehl angenommen', { capability: cmd.capability })
     },
 
     /** Same reasoning as Govee: no push channel, so the live path is a poll. */

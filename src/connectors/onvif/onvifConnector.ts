@@ -17,6 +17,7 @@ import type {
 import type { OnvifCameraConfig, OnvifTransport } from './transport'
 import { mapOnvifCamera } from './mapping'
 import { registerOnvifTransport, unregisterOnvifTransport } from './registry'
+import { trace, traceError } from '../diagnostics'
 
 export interface OnvifConnectorOptions {
   id?: string
@@ -67,6 +68,11 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
     const infos = await transport.list()
     const devices = infos.map((info) => mapOnvifCamera(info, id))
     lastSync = new Date().toISOString()
+    trace(id, 'normalize', 'Kameras der Bridge gelesen', {
+      cameras: devices.length,
+      online: infos.filter((info) => info.connected).length,
+      withStream: infos.filter((info) => info.stream).length,
+    })
 
     for (const d of devices) {
       const sig = JSON.stringify([d.capabilities, d.health, d.metadata])
@@ -100,11 +106,18 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
     async connect(): Promise<void> {
       setStatus('connecting')
       try {
-        for (const config of configured.values()) await transport.connect(config)
+        for (const config of configured.values()) {
+          await transport.connect(config)
+          // The credential check for a camera *is* the ONVIF handshake, so this
+          // is the step that proves user and password.
+          trace(id, 'auth', 'Kamera angemeldet', { camera: config.id, port: config.port ?? 80 })
+        }
         await snapshot()
         setStatus('connected')
       } catch (error) {
-        setStatus('error', error instanceof Error ? error.message : 'ONVIF-Verbindung fehlgeschlagen')
+        const reason = error instanceof Error ? error.message : 'ONVIF-Verbindung fehlgeschlagen'
+        traceError(id, 'auth', reason, { cameras: configured.size })
+        setStatus('error', reason)
         throw error
       }
     },
@@ -121,7 +134,9 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
     },
 
     async discover(): Promise<Device[]> {
-      return snapshot()
+      const devices = await snapshot()
+      trace(id, 'store', 'Kameras an den Twin übergeben', { count: devices.length })
+      return devices
     },
 
     async synchronize(): Promise<Device[]> {
