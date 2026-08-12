@@ -7,6 +7,7 @@ import { CommandPalette } from '@/components/ui/CommandPalette'
 import { KeyboardHelp } from '@/components/ui/KeyboardHelp'
 import { RouteFallback } from '@/components/ui/RouteFallback'
 import { ensureAuthInit } from '@/store/useAuthStore'
+import { useTwinPersistence } from '@/twin/useTwinPersistence'
 import { useUIStore } from '@/store/useUIStore'
 import { useTier } from '@/hooks/useTier'
 import { AmbientScene } from '@/components/ui/AmbientScene'
@@ -54,6 +55,10 @@ function RouteAmbient() {
  */
 export default function App() {
   useEffect(() => { ensureAuthInit() }, [])
+  // Connected devices belong to the account, not to the tab. Mounted here
+  // because the floorplan, the inspector and the 3D view all read the twin —
+  // not only the connector overlay.
+  useTwinPersistence()
   const { can } = useTier()
   // Image Blaster is a Max feature. Gated here, at the single place it mounts,
   // rather than at each of the buttons that can set the flag.

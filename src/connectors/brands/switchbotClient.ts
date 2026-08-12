@@ -62,6 +62,50 @@ interface SbDevice {
   deviceName: string
   deviceType?: string
   remoteType?: string
+  /** True for entries from `infraredRemoteList` — they have no `/status`. */
+  infrared?: boolean
+}
+
+/** SwitchBot's envelope around every answer. */
+interface SbEnvelope {
+  statusCode?: number
+  message?: string
+  body?: {
+    deviceList?: SbDevice[]
+    infraredRemoteList?: SbDevice[]
+  }
+}
+
+/** What SwitchBot's numeric status codes mean where it matters to a user. */
+function switchbotStatusMessage(code: number, message?: string): string {
+  if (code === 401 || code === 403) {
+    return 'SwitchBot lehnt die Anmeldung ab — Token und Secret prüfen. '
+      + '(Die Signatur enthält einen Zeitstempel: eine stark falsch gehende Systemuhr führt zum selben Fehler.)'
+  }
+  if (code === 190) return 'SwitchBot meldet einen internen Fehler (190) — später erneut versuchen'
+  return `SwitchBot-API meldet Status ${code}${message ? `: ${message}` : ''}`
+}
+
+/**
+ * Unwrap a `/v1.1/devices` answer.
+ *
+ * The bug this exists for: SwitchBot answers **HTTP 200** even when it rejects
+ * the credentials, and puts the real outcome in `statusCode` with an empty
+ * `body`. Reading `body.deviceList` straight off that produced an empty array,
+ * so the connector connected successfully and showed no devices — no error
+ * anywhere, and nothing to act on.
+ *
+ * The second half: an account whose devices are IR remotes behind a Hub has
+ * them in `infraredRemoteList`, not `deviceList`. Those were dropped entirely.
+ */
+export function parseSwitchBotDevices(json: SbEnvelope): SbDevice[] {
+  const code = json?.statusCode
+  if (typeof code === 'number' && code !== 100) {
+    throw new Error(switchbotStatusMessage(code, json.message))
+  }
+  const physical = json?.body?.deviceList ?? []
+  const infrared = (json?.body?.infraredRemoteList ?? []).map((d) => ({ ...d, infrared: true }))
+  return [...physical, ...infrared]
 }
 
 export function switchbotCapsFor(type: string): { category: Device['category']; caps: Capability[] } {
@@ -188,11 +232,15 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
       throw transportError(e, relayed)
     }
     if (!res.ok) throw new Error(`SwitchBot-API ${res.status} — Token/Secret/Relay prüfen`)
-    const json = (await res.json()) as { body?: { deviceList?: SbDevice[] } }
-    const raw = json.body?.deviceList ?? []
+
+    // Throws with SwitchBot's own reason when the envelope says "no", even
+    // though the HTTP layer said 200.
+    const raw = parseSwitchBotDevices((await res.json()) as SbEnvelope)
     for (const d of raw) known.add(d.deviceId)
 
-    const states = await Promise.all(raw.map((d) => readStatus(d.deviceId)))
+    // IR remotes are write-only — SwitchBot has no `/status` for them, and
+    // asking burns a call per device against the 10 000/day budget.
+    const states = await Promise.all(raw.map((d) => (d.infrared ? Promise.resolve(null) : readStatus(d.deviceId))))
 
     return raw.map((d, i) => {
       const { category, caps } = switchbotCapsFor(d.deviceType ?? d.remoteType ?? '')
@@ -205,15 +253,52 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
         name: d.deviceName || d.deviceId,
         category,
         capabilities,
-        metadata: { model: d.deviceType ?? 'SwitchBot' },
+        metadata: {
+          model: d.deviceType ?? d.remoteType ?? 'SwitchBot',
+          ...(d.infrared ? { infrared: 'true' } : {}),
+        },
         health: { reachability: 'online' as const, lastSeen: new Date().toISOString() },
       }
     })
   }
 
+  /**
+   * `connect()` probes and the runtime then discovers, back to back. Without
+   * this, that is two full listings plus two status calls per device before a
+   * single card appears — against a 10 000 calls/day budget.
+   */
+  let inFlight: Promise<Device[]> | undefined
+  const listOnce = (): Promise<Device[]> => {
+    if (inFlight) return inFlight
+    inFlight = list().finally(() => { inFlight = undefined })
+    return inFlight
+  }
+  let recent: { at: number; devices: Device[] } | undefined
+  const listShared = async (): Promise<Device[]> => {
+    if (recent && Date.now() - recent.at < 2000) return recent.devices
+    const devices = await listOnce()
+    recent = { at: Date.now(), devices }
+    return devices
+  }
+
   return {
-    list,
-    probe: async () => { await list() },
+    list: listShared,
+
+    /**
+     * Report an empty account as a *note*, not as silence. "Verbunden" with
+     * zero devices and no explanation was the confusing half of the original
+     * bug; the credentials case now throws above, and this covers the rest.
+     */
+    probe: async () => {
+      const devices = await listShared()
+      if (devices.length === 0) {
+        return {
+          message: 'Verbunden, aber das SwitchBot-Konto liefert keine Geräte — '
+            + 'in der SwitchBot-App prüfen, ob der Cloud-Dienst für die Geräte aktiviert ist.',
+        }
+      }
+      return undefined
+    },
 
     control: async (cmd) => {
       const body = { ...switchbotCommand(cmd), commandType: 'command' }

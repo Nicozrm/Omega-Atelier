@@ -23,7 +23,8 @@ import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import { createHomeAssistantConnector, SimulatedHaTransport, WebSocketHaTransport, haWebsocketUrl } from '@/connectors/homeAssistant'
 import { createMqttConnector, SimulatedMqttBroker } from '@/connectors/mqtt'
 import { createTuyaConnector, HttpTuyaTransport, type TuyaRegion } from '@/connectors/tuya'
-import { createOnvifConnector, HttpOnvifTransport, type OnvifCameraConfig } from '@/connectors/onvif'
+import { createOnvifConnector, HttpOnvifTransport, onvifBridgeBaseUrl, type OnvifCameraConfig } from '@/connectors/onvif'
+import { CameraLiveView } from './CameraLiveView'
 import { createBrandConnector, createGoveeClient, createSwitchBotClient } from '@/connectors/brands'
 import { ECOSYSTEM_SPECS, createEcosystemConnector, type EcosystemIcon } from '@/connectors/ecosystem'
 
@@ -72,7 +73,9 @@ function loadOnvifConfig(): OnvifLiveConfig {
     if (raw) {
       const p = JSON.parse(raw) as Partial<OnvifLiveConfig>
       return {
-        bridgeUrl: p.bridgeUrl ?? 'http://127.0.0.1:8787',
+        // Normalised on read as well as on write: a value stored by an earlier
+        // build may still be a full API URL like `…/cameras/connect`.
+        bridgeUrl: onvifBridgeBaseUrl(p.bridgeUrl ?? '') || 'http://127.0.0.1:8787',
         bridgeToken: p.bridgeToken ?? '',
         cameraId: p.cameraId ?? 'arenti-outdoor',
         cameraName: p.cameraName ?? 'Arenti Außenkamera',
@@ -96,9 +99,12 @@ function loadOnvifConfig(): OnvifLiveConfig {
 }
 function saveOnvifConfig(c: OnvifLiveConfig) {
   try {
-    // Never persist the ONVIF camera password in localStorage.
+    // Never persist the ONVIF camera password in localStorage. The bridge URL
+    // is stored as a base URL — the connector appends its own routes, and a
+    // stored `http://127.0.0.1:8787/cameras/connect` would make every call
+    // land on `…/cameras/connect/cameras/connect`.
     const { password: _password, ...safe } = c
-    localStorage.setItem(ONVIF_CONFIG_KEY, JSON.stringify(safe))
+    localStorage.setItem(ONVIF_CONFIG_KEY, JSON.stringify({ ...safe, bridgeUrl: onvifBridgeBaseUrl(c.bridgeUrl) }))
   } catch { /* ignore */ }
 }
 
@@ -397,7 +403,15 @@ function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggl
         <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full border shrink-0" style={{ borderColor: src.color, color: src.color }}>{src.short}</span>
       </div>
       <div className="flex flex-wrap gap-1.5">{device.capabilities.map((c, i) => <CapChip key={i} cap={c} />)}</div>
-      {device.category === 'camera' && device.metadata?.ptz === 'true' && (
+      {/*
+        A connected ONVIF camera used to show a "Live" chip and a row of arrows
+        over an empty card. The viewer carries the picture and the PTZ pad
+        together, and decides for itself whether either is actually available.
+      */}
+      {device.category === 'camera' && device.metadata?.onvif === 'true' && (
+        <CameraLiveView device={device} onPtz={onPtz} />
+      )}
+      {device.category === 'camera' && device.metadata?.onvif !== 'true' && device.metadata?.ptz === 'true' && (
         <div className="mt-2.5 flex items-center gap-1">
           <button onClick={() => onPtz(device, -0.5, 0)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera links"><ChevronLeft size={14} /></button>
           <button onClick={() => onPtz(device, 0, 0.5)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera hoch"><ChevronUp size={14} /></button>
@@ -708,6 +722,17 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
       {(sessions.govee?.health.status === 'error' || sessions.switchbot?.health.status === 'error') && (
         <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{sessions.govee?.health.message ?? sessions.switchbot?.health.message ?? 'Verbindung fehlgeschlagen'}</div>
       )}
+      {/* A connection that succeeds but yields nothing has to say so — that
+          silence ("verbunden", zero devices) is what made this hard to debug. */}
+      {(['govee', 'switchbot'] as const).map((vendor) => {
+        const session = sessions[vendor]
+        if (session?.health.status !== 'connected' || !session.health.message) return null
+        return (
+          <div key={vendor} className="flex items-start gap-1.5 text-[11px] text-[#e0a23c]">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />{session.health.message}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -757,7 +782,9 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
           <div className="grid grid-cols-2 gap-2">
             <label className="block col-span-2">
               <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Bridge-URL</span>
-              <input value={bridgeUrl} onChange={(e) => setBridgeUrl(e.target.value)} placeholder="http://127.0.0.1:8787" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+              {/* Normalised on blur so the field shows the base URL the
+                  connector will actually build its routes on. */}
+              <input value={bridgeUrl} onChange={(e) => setBridgeUrl(e.target.value)} onBlur={(e) => setBridgeUrl(onvifBridgeBaseUrl(e.target.value))} placeholder="http://127.0.0.1:8787" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
             </label>
             <label className="block">
               <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Kamera-IP</span>
@@ -784,7 +811,7 @@ function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
             <span className="text-[10px] text-[color:var(--muted)] leading-tight">Kamera-Passwort wird nicht im Browser gespeichert. Die Bridge spricht ONVIF im LAN.</span>
             <button
               onClick={() => onConnect({
-                bridgeUrl: bridgeUrl.trim(), bridgeToken: bridgeToken.trim(),
+                bridgeUrl: onvifBridgeBaseUrl(bridgeUrl), bridgeToken: bridgeToken.trim(),
                 cameraId: cameraId.trim() || 'onvif-camera', cameraName: cameraName.trim() || 'ONVIF Kamera',
                 host: host.trim(), port: Number(port) || 8000, username: username.trim(), password,
               })}
@@ -973,7 +1000,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
               <div className="grid grid-cols-2 gap-2">
                 <label className="block col-span-2">
                   <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">ONVIF-Bridge</span>
-                  <input value={onvif.bridgeUrl} onChange={(e) => setOnvif({ ...onvif, bridgeUrl: e.target.value })} placeholder="http://127.0.0.1:8787" className="input mt-1 !py-1.5 text-[12px]" />
+                  <input value={onvif.bridgeUrl} onChange={(e) => setOnvif({ ...onvif, bridgeUrl: e.target.value })} onBlur={(e) => setOnvif({ ...onvif, bridgeUrl: onvifBridgeBaseUrl(e.target.value) })} placeholder="http://127.0.0.1:8787" className="input mt-1 !py-1.5 text-[12px]" />
                 </label>
                 <label className="block">
                   <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Kamera-IP</span>
@@ -1084,6 +1111,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
   const [bindings, setBindings] = useState<Record<string, string>>(manager.view().bindings)
   const [activeScene, setActiveScene] = useState<string | undefined>(manager.view().activeScene)
   const [commands, setCommands] = useState<Record<string, CommandPhase>>(manager.view().commands)
+  const [savedConnectors, setSavedConnectors] = useState(manager.view().savedConnectors)
   const [busy, setBusy] = useState<string | null>(null)
   const [flashId, setFlashId] = useState<string | null>(null)
   const [view, setView] = useState<'grundriss' | 'geraete'>('grundriss')
@@ -1103,6 +1131,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
       setBindings(v.bindings)
       setActiveScene(v.activeScene)
       setCommands(v.commands)
+      setSavedConnectors(v.savedConnectors)
       if (changed) setFlashId(changed)
     })
     return () => unsub()
@@ -1152,6 +1181,24 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
       const active = [...CATALOG, ...ECO_ENTRIES].filter((e) => manager.isActive(e.id))
       for (const e of active) await manager.removeConnector(e.id)
     } finally { setAllBusy(false) }
+  }
+
+  /**
+   * Re-connect a source remembered from an earlier session.
+   *
+   * Only sources that need no credentials can come back on their own — the
+   * simulated ecosystems and the demos. A live cloud or an ONVIF camera needs
+   * its secret again, and Omega deliberately never stored it, so those are
+   * pointed at their card instead of being silently retried.
+   */
+  const restorableFor = (saved: { id: string; kind: string }): CatalogEntry | undefined =>
+    CATALOG.find((e) => e.id === saved.id) ?? ECO_ENTRIES.find((e) => e.id === saved.kind || e.id === saved.id)
+
+  async function reconnectSaved(saved: { id: string; kind: string }) {
+    const entry = restorableFor(saved)
+    if (!entry) return
+    setBusy(saved.id)
+    try { await manager.addConnector(entry) } finally { setBusy(null) }
   }
 
   async function connectLiveHa(cfg: HaLiveConfig) {
@@ -1325,6 +1372,41 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
                 })}
               </div>
             </div>
+            {savedConnectors.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-[color:var(--border)]">
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)] mb-2">
+                  Aus der letzten Sitzung · Geräte und Raumzuordnung sind gespeichert
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {savedConnectors.map((saved) => {
+                    const restorable = !!restorableFor(saved)
+                    return (
+                      <div key={saved.id} className="flex items-center gap-2 rounded-md border border-dashed border-[color:var(--border)] bg-[color:var(--bg)] px-2.5 py-1.5">
+                        <span className="text-[12px]">{saved.label}</span>
+                        {restorable ? (
+                          <button
+                            onClick={() => void reconnectSaved(saved)}
+                            disabled={busy === saved.id}
+                            className="btn btn-sm btn-outline inline-flex items-center gap-1 text-[10px]"
+                          >
+                            {busy === saved.id ? <Loader2 size={11} className="animate-spin" /> : <Plug size={11} />} Verbinden
+                          </button>
+                        ) : (
+                          // No credential was ever stored, so there is nothing
+                          // to retry with — the card below is the way back.
+                          <span className="text-[10px] text-[color:var(--muted)]">Zugangsdaten erneut eingeben</span>
+                        )}
+                        <button
+                          onClick={() => manager.forgetSavedConnector(saved.id)}
+                          className="btn btn-sm btn-ghost btn-icon"
+                          aria-label={`${saved.label} vergessen`}
+                        ><X size={12} /></button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             <div className="mt-3 pt-3 border-t border-[color:var(--border)] space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)] mb-2">Echte Verbindung · schaltet physisch</div>
               <RealHaCard session={sessionFor(LIVE_HA_ID)} busy={busy === LIVE_HA_ID} onConnect={connectLiveHa} onDisconnect={disconnectLiveHa} />

@@ -16,6 +16,7 @@ import type {
 } from '@/domain'
 import type { OnvifCameraConfig, OnvifTransport } from './transport'
 import { mapOnvifCamera } from './mapping'
+import { registerOnvifTransport, unregisterOnvifTransport } from './registry'
 
 export interface OnvifConnectorOptions {
   id?: string
@@ -41,6 +42,11 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
   const pollMs = opts.pollMs ?? 5000
   const transport = opts.transport
   const configured = new Map((opts.cameras ?? []).map((c) => [c.id, c]))
+
+  // The live viewer needs *this* bridge (and its token) to fetch snapshot
+  // bytes and MJPEG tickets. The Device stays neutral; the widget looks the
+  // transport up by connector id instead.
+  registerOnvifTransport(id, transport)
 
   let status: ConnectorStatus = 'disconnected'
   let message: string | undefined
@@ -70,6 +76,8 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
           deviceId: d.id,
           capabilities: d.capabilities,
           health: d.health,
+          // Carries the PTZ verdict, which the bridge revises as it learns.
+          metadata: d.metadata,
         })
       }
     }
@@ -108,6 +116,7 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
         try { await transport.disconnect(config.id) } catch { /* best effort */ }
       }
       signatures.clear()
+      unregisterOnvifTransport(id)
       setStatus('disconnected')
     },
 
@@ -132,30 +141,50 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
       if (command.capability !== 'Camera') return
 
       const action = String(command.payload.action ?? '') as CameraAction
-      switch (action) {
-        case 'ptz': {
-          await transport.move(command.deviceId, {
-            x: clampVelocity(num(command.payload.x)),
-            y: clampVelocity(num(command.payload.y)),
-            zoom: clampVelocity(num(command.payload.zoom)),
-            timeoutMs: Math.max(0, num(command.payload.timeoutMs, 500)),
+      try {
+        switch (action) {
+          case 'ptz': {
+            await transport.move(command.deviceId, {
+              x: clampVelocity(num(command.payload.x)),
+              y: clampVelocity(num(command.payload.y)),
+              zoom: clampVelocity(num(command.payload.zoom)),
+              timeoutMs: Math.max(0, num(command.payload.timeoutMs, 500)),
+            })
+            break
+          }
+          case 'stop':
+            await transport.stop(command.deviceId)
+            break
+          case 'gotoPreset': {
+            const token = String(command.payload.token ?? '')
+            if (!token) throw new Error('ONVIF preset token fehlt')
+            await transport.gotoPreset(command.deviceId, token)
+            break
+          }
+          case 'home':
+            await transport.home(command.deviceId)
+            break
+          default:
+            throw new Error(`Unbekannter ONVIF-Kamerabefehl: ${action || '(leer)'}`)
+        }
+      } catch (error) {
+        /*
+         * A rejected move is also an answer: the bridge has just learned that
+         * ContinuousMove is not implemented, and the device metadata now says
+         * so. Re-reading it here means the controls disappear on the failed
+         * attempt rather than one poll interval later.
+         */
+        try {
+          const info = await transport.get(command.deviceId)
+          const device = mapOnvifCamera(info, id)
+          onUpdate?.({
+            deviceId: command.deviceId,
+            capabilities: device.capabilities,
+            health: device.health,
+            metadata: device.metadata,
           })
-          break
-        }
-        case 'stop':
-          await transport.stop(command.deviceId)
-          break
-        case 'gotoPreset': {
-          const token = String(command.payload.token ?? '')
-          if (!token) throw new Error('ONVIF preset token fehlt')
-          await transport.gotoPreset(command.deviceId, token)
-          break
-        }
-        case 'home':
-          await transport.home(command.deviceId)
-          break
-        default:
-          throw new Error(`Unbekannter ONVIF-Kamerabefehl: ${action || '(leer)'}`)
+        } catch { /* the original failure is the one worth reporting */ }
+        throw error
       }
 
       // PTZ movement does not necessarily change the neutral Camera capability.
@@ -163,10 +192,12 @@ export function createOnvifConnector(opts: OnvifConnectorOptions): Connector {
       // confirmation mechanism can acknowledge the physical command without
       // adding ONVIF-specific state to the domain.
       const info = await transport.get(command.deviceId)
+      const device = mapOnvifCamera(info, id)
       onUpdate?.({
         deviceId: command.deviceId,
-        capabilities: mapOnvifCamera(info, id).capabilities,
-        health: mapOnvifCamera(info, id).health,
+        capabilities: device.capabilities,
+        health: device.health,
+        metadata: device.metadata,
       })
     },
 

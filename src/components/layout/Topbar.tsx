@@ -8,6 +8,7 @@ import { usePlanStore } from '@/store/usePlanStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useUIStore } from '@/store/useUIStore'
 import { supabaseReady } from '@/lib/supabase'
+import { flushTwinState } from '@/twin/useTwinPersistence'
 import { useEffect, useState } from 'react'
 import { OmegaMark } from './OmegaMark'
 import { PlanBadge } from './PlanBadge'
@@ -50,6 +51,10 @@ export function Topbar({ showBack, planRowId, onOpenExport, onOpenShare, onOpenD
   const reloadFromCloud = usePlanStore((s) => s.reloadFromCloud)
 
   const handleSave = async () => {
+    // One explicit save covers both halves of the project: the plan document
+    // and the connected devices. The twin otherwise writes on its own slow
+    // schedule; this is the "now" path.
+    void flushTwinState()
     const result = await saveToCloud(planRowId)
     if (result && typeof result === 'object' && 'conflict' in result) {
       pushToast({

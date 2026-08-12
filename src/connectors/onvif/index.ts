@@ -15,7 +15,13 @@ export type {
   OnvifCameraInfo,
   OnvifPtzCommand,
   OnvifPtzStatus,
+  OnvifPtzSupport,
   OnvifPreset,
+  OnvifStreamInfo,
+  OnvifStreamTicket,
 } from './transport'
+export { onvifBridgeBaseUrl } from './url'
 export { SimulatedOnvifTransport } from './simulatedTransport'
-export { mapOnvifCamera } from './mapping'
+export type { SimulatedOnvifOptions } from './simulatedTransport'
+export { mapOnvifCamera, ptzSupportOf, bestProfileLabel } from './mapping'
+export { getOnvifTransport, registerOnvifTransport, unregisterOnvifTransport } from './registry'

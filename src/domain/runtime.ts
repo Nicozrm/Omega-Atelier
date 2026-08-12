@@ -81,6 +81,9 @@ export class DigitalTwinRuntime {
       telemetry: update.telemetry
         ? { ...current.telemetry, ...update.telemetry }
         : current.telemetry,
+      metadata: update.metadata
+        ? { ...current.metadata, ...update.metadata }
+        : current.metadata,
     }
     this.devices.set(next.id, next)
     this.emit()
