@@ -1250,6 +1250,17 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
         }
       }
 
+      // Before the first click there is no preview line to publish a hint from,
+      // yet that is exactly the click that decides whether the wall joins or
+      // misses: the start point. So resolve it on hover too.
+      if (
+        !snapHint.current && mouseRef.current &&
+        (tool === 'wall' || tool === 'door' || tool === 'window' ||
+         tool === 'terrace' || tool === 'measure')
+      ) {
+        snapHint.current = snapDraw(mouseRef.current)
+      }
+
       // Snap feedback — the guides that explain where the point went.
       //
       // Drawn last so nothing occludes it, and deliberately quiet: a hairline
