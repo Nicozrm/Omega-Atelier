@@ -29,6 +29,7 @@
 
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
+import { errorBody, vendorHttpError } from './vendorErrors'
 import { trace, traceError } from '../diagnostics'
 
 const SB_BASE = 'https://api.switch-bot.com'
@@ -187,59 +188,12 @@ function transportError(e: unknown, relayed: boolean): Error {
 /**
  * What a non-2xx answer actually said.
  *
- * The old code turned every failing status into the same sentence — "Token/
- * Secret/Relay prüfen" — which is wrong more often than it is right, and sends
- * the user to inspect credentials that are usually fine. Three of the four
- * common causes are not credentials at all:
- *
- *   401 + a Supabase gateway body  the relay was deployed *without*
- *                                  `--no-verify-jwt`, so the call never left
- *                                  Supabase and SwitchBot never saw it
- *   404 `unknown vendor`           the relay URL is missing `/vendor-relay`
- *   502 `upstream unreachable`     the relay reached out and SwitchBot did not
- *                                  answer — with the relay's own detail text
- *
- * The body is parsed rather than guessed at, so the message names the layer
- * that actually refused.
+ * Govee has the identical problem, so the diagnosis lives in `vendorErrors` and
+ * both clients share it — see that module for why each status means what it
+ * means. This wrapper only fixes the vendor name.
  */
 export function switchbotHttpError(status: number, body: unknown): string {
-  const record = body && typeof body === 'object' ? body as Record<string, unknown> : undefined
-  const relayError = typeof record?.error === 'string' ? record.error : undefined
-  const detail = typeof record?.detail === 'string' ? record.detail : undefined
-
-  if (relayError === 'upstream unreachable') {
-    return `Das Relay erreicht die SwitchBot-Cloud nicht${detail ? ` (${detail})` : ''}`
-  }
-  if (relayError === 'unknown vendor') {
-    return 'Die Relay-URL zeigt nicht auf die Relay-Funktion — sie muss auf '
-      + '/functions/v1/vendor-relay enden (ohne Vendor-Segment).'
-  }
-  if (status === 401 || status === 403) {
-    // Supabase answers a JWT-gated function with its own envelope; SwitchBot's
-    // own rejections arrive as HTTP 200 with statusCode 401 in the body, never
-    // as a bare HTTP 401. So an HTTP 401 here is almost always the gateway.
-    const gateway = typeof record?.message === 'string' ? record.message : undefined
-    if (gateway && /jwt|authorization/i.test(gateway)) {
-      return 'Das Relay verlangt einen Supabase-JWT — die Function muss mit '
-        + '`--no-verify-jwt` deployt werden, sonst erreicht keine Anfrage SwitchBot.'
-    }
-    return `Relay oder Gateway lehnt die Anfrage ab (${status})${gateway ? `: ${gateway}` : ''}`
-  }
-  if (status === 404) {
-    return 'Relay-Route nicht gefunden (404) — Relay-URL prüfen und ob die Function deployt ist'
-  }
-  return `SwitchBot-Anfrage fehlgeschlagen (HTTP ${status})${relayError ? `: ${relayError}` : ''}`
-}
-
-/** Read a failed response's body without letting a parse error mask the status. */
-async function errorBody(res: Response): Promise<unknown> {
-  try {
-    const text = await res.text()
-    if (!text) return undefined
-    try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
-  } catch {
-    return undefined
-  }
+  return vendorHttpError('SwitchBot', status, body)
 }
 
 export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient {
