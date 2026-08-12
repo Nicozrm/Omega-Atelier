@@ -119,6 +119,25 @@ export function texRnd(seed: number) { let a = seed >>> 0; return () => { a = (a
  * Ohne ihn bleibt selbst eine gute Farbtextur eine bemalte Ebene, egal wie
  * gut das Licht ist.
  *
+ * **Aber der Unterschied muss im richtigen Band liegen.** Die Spanne war
+ * anfangs zu weit nach unten offen — `lo: 0.55` beim Dach, `0.58` beim
+ * Asphalt, `0.62` beim Klinker. `lo` ist das *glänzende* Ende: ein Dachziegel
+ * mit roughness 0.55 ist eine Keramikglasur, ein Asphalt mit 0.58 ist nasser
+ * Asphalt. Unter einem hellen Himmel spiegelt beides die Umgebung, und die
+ * ganze Straße sieht aus, als hätte es gerade geregnet.
+ *
+ * Die Bänder liegen jetzt dort, wo die Materialien wirklich liegen — trocken:
+ *
+ *   | Fläche              | Band        | wovon                            |
+ *   | Klinker             | 0.80 – 0.97 | gebrannter Ziegel → Mörtelfuge   |
+ *   | Holzschalung        | 0.80 – 0.98 | gestrichenes Brett → Verwitterung|
+ *   | Dachziegel          | 0.76 – 0.96 | Wölbung → Mulde mit Feuchte      |
+ *   | Asphalt             | 0.78 – 1.00 | polierte Fahrspur → Rand         |
+ *   | Betonpflaster       | 0.82 – 1.00 | abgelaufener Stein → Fuge        |
+ *
+ * Die Spanne bleibt breit genug (0.16 – 0.22), das Relief also weiter lesbar;
+ * verschoben ist nur, wo sie sitzt.
+ *
  * **Zweitens: `bumpMap` ist die schwächere Technik.** three leitet daraus im
  * Fragment-Shader über Bildschirmableitungen (`dFdx`/`dFdy`) eine Normale ab.
  * Das ist billig, aber es rauscht bei flachem Blickwinkel — und flach ist
@@ -310,7 +329,7 @@ export function brickTextures(): Surface {
   // Klinker: die Mörtelfuge ist stumpf (0.96), der gebrannte Stein deutlich
   // glasiger (0.62). Genau dieser Sprung an jeder Fugenkante ist das, was eine
   // Backsteinwand als Backstein lesbar macht.
-  _brickTex = surfaceOf(cv, bv, { lo: 0.62, hi: 0.96, seed: 7, patches: 0.20 }, 2.4)
+  _brickTex = surfaceOf(cv, bv, { lo: 0.80, hi: 0.97, seed: 7, patches: 0.20 }, 2.4)
   return _brickTex
 }
 
@@ -349,7 +368,7 @@ export function boardTextures(): Surface {
   }
   // Holzverschalung: die lasierte Brettfläche zieht noch etwas Glanz (0.72),
   // die Nut dazwischen ist roh und stumpf (0.98).
-  _boardTex = surfaceOf(cv, bv, { lo: 0.72, hi: 0.98, seed: 13, patches: 0.14 }, 1.8)
+  _boardTex = surfaceOf(cv, bv, { lo: 0.80, hi: 0.98, seed: 13, patches: 0.14 }, 1.8)
   return _boardTex
 }
 
@@ -410,7 +429,7 @@ export function roofTextures(): Surface {
   // Dachziegel: die Wölbung wird vom Regen blank gewaschen (0.55), in der
   // Mulde zwischen den Kursen sitzen Moos und Schmutz (0.95). Die Flecken sind
   // hier am stärksten — kein Dach altert gleichmässig.
-  _roofTex = surfaceOf(cv, bv, { lo: 0.55, hi: 0.95, seed: 23, patches: 0.26 }, 2.6)
+  _roofTex = surfaceOf(cv, bv, { lo: 0.76, hi: 0.96, seed: 23, patches: 0.26 }, 2.6)
   return _roofTex
 }
 
@@ -459,7 +478,7 @@ export function asphaltSurface(): Surface {
     bx.fillRect(0, (cxr - 0.12) * H, W, 0.24 * H)
   }
   // `lo` gilt für die hellen (erhabenen/polierten) Stellen — die Fahrspur.
-  _asphaltTex = surfaceOf(cv, bv, { lo: 0.58, hi: 0.98, seed: 41, patches: 0.22 }, 1.4)
+  _asphaltTex = surfaceOf(cv, bv, { lo: 0.78, hi: 1.0, seed: 41, patches: 0.22 }, 1.4)
   return _asphaltTex
 }
 
@@ -488,7 +507,7 @@ export function paverTextures(): Surface {
   }
   // Betonstein: die begangene Fläche ist von Schuhsohlen poliert (0.68), der
   // Fugensand daneben bleibt vollständig stumpf (1.0).
-  _paverTex = surfaceOf(cv, bv, { lo: 0.68, hi: 1.0, seed: 59, patches: 0.16 }, 2.0)
+  _paverTex = surfaceOf(cv, bv, { lo: 0.82, hi: 1.0, seed: 59, patches: 0.16 }, 2.0)
   return _paverTex
 }
 

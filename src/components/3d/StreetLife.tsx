@@ -61,10 +61,28 @@ export function StreetLife({ world, phase, daylightScale, rich }: Props) {
     const S = (c: string, rough = 0.6, metal = 0.2) =>
       new THREE.MeshStandardMaterial({ color: dim(c), roughness: rough, metalness: metal })
 
-    const bodies = BODY_COLORS.map((c) => S(c, 0.35, 0.5))
+    /*
+     * Autolack ist zweischichtig — dieselbe Korrektur wie in `Neighbourhood3D`.
+     *
+     * Vorher `roughness 0.35, metalness 0.5`: ein halb metallischer Körper.
+     * Metallizität ist in der Realität binär, eine Fläche ist Leiter oder
+     * nicht; Zwischenwerte gibt es nur als Übergang in einer Textur. Ein Auto
+     * bei 0.5 ist deshalb kein lackiertes Blech, sondern poliertes Chrom mit
+     * Farbstich — und in einer Wohnstraße stehen davon zwanzig.
+     *
+     * Richtig ist eine pigmentierte, diffuse Basis (metalness 0) unter einem
+     * klaren Decklack, der spiegelt: `clearcoat`. Die Spiegelung sitzt dann in
+     * der Schicht darüber statt in der Farbe.
+     */
+    const bodies = BODY_COLORS.map((c) => new THREE.MeshPhysicalMaterial({
+      color: dim(c), roughness: 0.45, metalness: 0,
+      clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.2,
+    }))
     const clothes = CLOTHES.map((c) => S(c, 0.85, 0))
-    const glass = new THREE.MeshStandardMaterial({ color: dim('#12151b'), roughness: 0.12, metalness: 0.3 })
-    const tyre = S('#111214', 0.8, 0)
+    // Autoglas ist ein Dielektrikum: metalness 0. Der Wert 0.3 hat die Scheibe
+    // wie getöntes Metall spiegeln lassen.
+    const glass = new THREE.MeshStandardMaterial({ color: dim('#12151b'), roughness: 0.1, metalness: 0 })
+    const tyre = S('#0f1012', 0.95, 0)
     const rim = S('#8b9096', 0.4, 0.7)
     const skin = S('#c9a184', 0.9, 0)
     const dog = S('#6b5340', 0.9, 0)

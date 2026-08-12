@@ -124,6 +124,8 @@ interface MatCache {
   // Furniture / device materials
   woodOak:    THREE.Material
   woodWalnut: THREE.Material
+  /** Weathered outdoor decking — the terrace, which must not be lacquered. */
+  deckWeathered: THREE.Material
   fabric:     THREE.Material
   fabricGray: THREE.Material
   fabricBlue: THREE.Material
@@ -296,6 +298,30 @@ function buildMaterials(): MatCache {
       metalness: 0.05,
       clearcoat: 0.3,
       clearcoatRoughness: 0.35,
+    }),
+    /**
+     * Terrassendiele — draußen, und deshalb ein eigenes Material.
+     *
+     * Die Terrasse lief vorher auf `woodWalnut` + `woodOak`, also auf
+     * *Möbelholz*: geölt, `clearcoat` 0.25–0.3, `roughness` 0.5. Drinnen ist
+     * das richtig — Möbel sind gepflegt. Draußen ist eine große waagerechte
+     * Fläche mit Decklack unter einem hellen Himmel aber ein Spiegel, und
+     * genau das war auf den Screenshots zu sehen: die Terrasse warf das Haus
+     * zurück, als stünde sie unter Wasser.
+     *
+     * Echte Terrassendielen sind unbehandelt oder nur geölt und vergrauen in
+     * einer Saison. Kein Decklack, keine Metallizität, hohe Rauheit — und ein
+     * kühler, entsättigter Ton, weil UV das Holz ausbleicht.
+     */
+    deckWeathered: new THREE.MeshStandardMaterial({
+      map: makeTex(T.woodOakC, [3, 1]),
+      normalMap: makeTex(T.woodOakN, [3, 1], false),
+      ...rough(T.woodOakR, [3, 1]),
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      color: '#8e8377',
+      roughness: 0.92,
+      metalness: 0,
+      envMapIntensity: 0.75,
     }),
     // Dark-stained walnut — near-black dining table / statement furniture.
     // Same grain, deep espresso tint under a satin lacquer.
@@ -593,6 +619,7 @@ const MAT = {
   wood:       () => ensureMat().woodOak,
   woodOak:    () => ensureMat().woodOak,
   woodWalnut: () => ensureMat().woodWalnut,
+  deckWeathered: () => ensureMat().deckWeathered,
   fabric:     () => ensureMat().fabric,
   fabricGray: () => ensureMat().fabricGray,
   fabricBlue: () => ensureMat().fabricBlue,
@@ -6084,22 +6111,23 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
     <>
       {slabs.map((slab) => (slab.outdoor ? (
         <group key={`room-${slab.id}`}>
-          {/* Deck slab — extruded wood */}
+          {/* Deck slab + top board — both weathered decking, not the indoor
+              furniture woods this used to borrow. See `MAT.deckWeathered`. */}
           <mesh
             position={[0, 0.0, 0]}
             rotation={[Math.PI / 2, 0, 0]}
             receiveShadow
             castShadow
-            material={MAT.woodWalnut() as THREE.Material}
+            material={MAT.deckWeathered() as THREE.Material}
           >
             <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
           </mesh>
-          {/* Top surface board (oak) sitting flush on the deck for plank detail */}
+          {/* Top surface board sitting flush on the deck for plank detail */}
           <mesh
             position={[0, M(6) + 0.001, 0]}
             rotation={[Math.PI / 2, 0, 0]}
             receiveShadow
-            material={MAT.woodOak() as THREE.Material}
+            material={MAT.deckWeathered() as THREE.Material}
           >
             <shapeGeometry args={[slab.shape]} />
           </mesh>
