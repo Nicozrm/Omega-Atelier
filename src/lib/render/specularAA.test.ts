@@ -162,6 +162,16 @@ describe('enableSpecularAA', () => {
     expect(depth).toBe(0)
   })
 
+  it('reaches every PBR material in the scene through one chunk', () => {
+    // Load-bearing assumption behind patching a single chunk: three compiles
+    // MeshStandardMaterial and MeshPhysicalMaterial from the *same* fragment
+    // shader, so both pick up the filter. If a three release ever splits them,
+    // half the scene (walls, rugs, steel — everything on Standard) would go
+    // back to sparkling, silently. This is the tripwire for that.
+    expect(THREE.ShaderLib.standard.fragmentShader).toBe(THREE.ShaderLib.physical.fragmentShader)
+    expect(THREE.ShaderLib.standard.fragmentShader).toContain('#include <lights_physical_fragment>')
+  })
+
   it('declines to patch a chunk it does not recognise', () => {
     THREE.ShaderChunk.lights_physical_fragment = 'PhysicalMaterial material;\nmaterial.roughness = roughnessFactor;'
     expect(enableSpecularAA()).toBe(false)
