@@ -72,12 +72,24 @@ export function ShareDialog({ open, onClose, planRowId }: Props) {
   const invite = async () => {
     if (!inviteEmail || !planRowId) return
     setLoading(true)
-    // Find profile by email
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email, display_name')
-      .eq('email', inviteEmail.toLowerCase().trim())
-      .maybeSingle()
+    const address = inviteEmail.toLowerCase().trim()
+    /*
+     * Über `find_user_by_email` statt über ein SELECT auf `profiles`.
+     *
+     * Für die Suche nach E-Mail müsste die Profiltabelle für jeden angemeldeten
+     * Nutzer lesbar sein — und damit auch `select email from profiles`, also
+     * die Adressen aller Nutzer auf einen Griff. Die Funktion beantwortet
+     * stattdessen genau diese eine Frage und gibt keine E-Mail zurück; der
+     * Aufrufer kennt sie ohnehin, er hat sie gerade eingetippt.
+     */
+    const { data: found, error: lookupError } = await supabase
+      .rpc('find_user_by_email', { p_email: address })
+    if (lookupError) {
+      pushToast({ kind: 'error', title: 'Fehler', description: lookupError.message })
+      setLoading(false)
+      return
+    }
+    const profile = (found as Array<{ id: string; display_name?: string }> | null)?.[0]
     if (!profile) {
       pushToast({ kind: 'error', title: 'Nicht gefunden', description: 'Kein Benutzer mit dieser E-Mail.' })
       setLoading(false)
@@ -89,12 +101,14 @@ export function ShareDialog({ open, onClose, planRowId }: Props) {
     if (error) {
       pushToast({ kind: 'error', title: 'Fehler', description: error.message })
     } else {
-      pushToast({ kind: 'success', title: 'Eingeladen', description: profile.email ?? '' })
+      // Die eingetippte Adresse, nicht eine aus der Datenbank gelesene — die
+      // Funktion gibt bewusst keine zurück.
+      pushToast({ kind: 'success', title: 'Eingeladen', description: address })
       setCollabs((prev) => {
         const other = prev.filter((c) => c.user_id !== profile.id)
         return [...other, {
           user_id: profile.id, role: inviteRole,
-          email: profile.email, display_name: profile.display_name,
+          email: address, display_name: profile.display_name,
         }]
       })
       setInviteEmail('')

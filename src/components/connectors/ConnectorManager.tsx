@@ -6,7 +6,7 @@ import {
   Lightbulb, Speaker, Bot, ArrowRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ZoomIn, ZoomOut, Check, Sparkles, Cloud,
 } from 'lucide-react'
 import { kelvinToHex } from '@/lib/lighting'
-import { findCapability, type Capability, type Device } from '@/domain'
+import { findCapability, type Capability, type Device, type DeviceCommand } from '@/domain'
 import { usePlanStore } from '@/store/usePlanStore'
 import { twinManager, commandKey, type TwinSession, type ConnectorDescriptor, type CommandPhase } from '@/twin/twinManager'
 import { useFailureHaptics } from '@/hooks/useFailureHaptics'
@@ -277,10 +277,107 @@ function RoomSelect({ device, rooms, currentRoomId, onAssign, onClear }: {
   )
 }
 
-function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggle, onPtz, onAssign, onClear }: {
+/**
+ * Die stufenlosen Fähigkeiten eines Live-Geräts: Helligkeit, Farbe,
+ * Farbtemperatur.
+ *
+ * Bis hierher konnte die App an einem echten Gerät **nur schalten**. Die
+ * Marken-Clients konnten längst mehr — Govee bildet `brightness`, `colorRgb`
+ * und `colorTemperatureK` ab, die Domäne kennt die Capabilities, die Chips
+ * unter dem Gerätenamen zeigten sie sogar an — aber der einzige Kommandopfad
+ * war `onToggle`, und der kennt `OnOff` und `Lock`. Eine Lampe liess sich also
+ * ein- und ausschalten, und das war alles, was je bei ihr ankam.
+ *
+ * Gerendert wird strikt nach `access`: was der Connector als `read` meldet,
+ * wird angezeigt, aber nicht bedienbar gemacht.
+ */
+function LiveCapabilityControls({ device, onCommand }: {
+  device: Device
+  onCommand: (cmd: DeviceCommand) => void
+}) {
+  const brightness = findCapability(device.capabilities, 'Brightness')
+  const colour = findCapability(device.capabilities, 'Color')
+  const temp = findCapability(device.capabilities, 'ColorTemperature')
+
+  const writable = (c: { access?: string } | undefined) => c?.access === 'readWrite'
+  if (!writable(brightness) && !writable(colour) && !writable(temp)) return null
+
+  return (
+    <div className="mt-2.5 flex flex-col gap-2 pt-2 border-t border-[color:var(--border)]">
+      {writable(brightness) && brightness && (
+        <label className="flex items-center gap-2">
+          <Sun size={12} className="text-[color:var(--muted)] shrink-0" />
+          <input
+            type="range" min={0} max={100} step={1} defaultValue={brightness.percent}
+            aria-label={`Helligkeit ${device.name}`}
+            /*
+             * `onChange` würde beim Ziehen pro Pixel ein Kommando senden und das
+             * Tageslimit der Hersteller-Cloud in Sekunden aufbrauchen (Govee:
+             * 10 000 Aufrufe/Tag). `onPointerUp`/`onKeyUp` sendet einmal, wenn
+             * der Nutzer den Wert festgelegt hat. Deshalb auch `defaultValue`:
+             * der Regler gehört während des Ziehens dem Browser, danach dem
+             * Gerätezustand.
+             */
+            onPointerUp={(e) => onCommand({
+              deviceId: device.id, capability: 'Brightness',
+              payload: { percent: Number((e.target as HTMLInputElement).value) },
+            })}
+            onKeyUp={(e) => onCommand({
+              deviceId: device.id, capability: 'Brightness',
+              payload: { percent: Number((e.target as HTMLInputElement).value) },
+            })}
+            className="flex-1 accent-[color:var(--accent)] cursor-pointer"
+          />
+          <span className="text-[10px] tabular-nums w-9 text-right text-[color:var(--muted)]">{brightness.percent}%</span>
+        </label>
+      )}
+
+      {writable(temp) && temp && (
+        <label className="flex items-center gap-2">
+          <Thermometer size={12} className="text-[color:var(--muted)] shrink-0" />
+          <input
+            type="range" min={temp.minKelvin} max={temp.maxKelvin} step={50} defaultValue={temp.kelvin}
+            aria-label={`Farbtemperatur ${device.name}`}
+            onPointerUp={(e) => onCommand({
+              deviceId: device.id, capability: 'ColorTemperature',
+              payload: { kelvin: Number((e.target as HTMLInputElement).value) },
+            })}
+            onKeyUp={(e) => onCommand({
+              deviceId: device.id, capability: 'ColorTemperature',
+              payload: { kelvin: Number((e.target as HTMLInputElement).value) },
+            })}
+            className="flex-1 accent-[color:var(--accent)] cursor-pointer"
+          />
+          <span className="text-[10px] tabular-nums w-11 text-right text-[color:var(--muted)]">{temp.kelvin}K</span>
+        </label>
+      )}
+
+      {writable(colour) && colour && (
+        <label className="flex items-center gap-2">
+          <Palette size={12} className="text-[color:var(--muted)] shrink-0" />
+          <input
+            type="color" defaultValue={colour.hex}
+            aria-label={`Farbe ${device.name}`}
+            // `onBlur` statt `onChange`: der native Farbwähler feuert `change`
+            // fortlaufend, solange das Fenster offen ist.
+            onBlur={(e) => onCommand({
+              deviceId: device.id, capability: 'Color',
+              payload: { hex: e.target.value },
+            })}
+            className="h-6 w-10 cursor-pointer rounded border border-[color:var(--border)] bg-transparent p-0"
+          />
+          <span className="text-[10px] tabular-nums text-[color:var(--muted)]">{colour.hex}</span>
+        </label>
+      )}
+    </div>
+  )
+}
+
+function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggle, onCommand, onPtz, onAssign, onClear }: {
   device: Device; flash: boolean; commandPhase?: CommandPhase
   rooms: { id: string; name: string }[]; currentRoomId?: string
   onToggle: (d: Device) => void
+  onCommand: (cmd: DeviceCommand) => void
   onPtz: (d: Device, x: number, y: number, zoom?: number) => void
   onAssign: (roomId: string) => void; onClear: () => void
 }) {
@@ -310,6 +407,7 @@ function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggl
           <button onClick={() => onPtz(device, 0, 0, 0)} className="btn btn-sm btn-ghost text-[10px]" aria-label="Kamera stoppen">Stop</button>
         </div>
       )}
+      <LiveCapabilityControls device={device} onCommand={onCommand} />
       <div className="mt-2.5 flex items-center justify-between gap-2">
         {(writableOnOff || writableLock) ? (
           <button onClick={() => onToggle(device)} className={`spring-press text-[11px] px-2.5 py-1 rounded-md border border-[color:var(--border)] hover:border-[color:var(--accent)] transition-colors ${phaseClass}`}>
@@ -1112,6 +1210,11 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
     }, { timeoutMs: 2500 })
   }
 
+  /** Ein stufenloses Kommando (Helligkeit, Farbe, Farbtemperatur) an das Gerät. */
+  function onDeviceCommand(cmd: DeviceCommand) {
+    void manager.command(cmd)
+  }
+
   function onDeviceToggle(d: Device) {
     const lock = findCapability(d.capabilities, 'Lock')
     if (lock?.access === 'readWrite') { void manager.command({ deviceId: d.id, capability: 'Lock', payload: { locked: !lock.locked } }); return }
@@ -1304,7 +1407,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
                       <div key={room.id}>
                         <div className="flex items-center gap-2 mb-2"><h3 className="text-[13px] font-semibold">{room.name}</h3><span className="text-[11px] text-[color:var(--muted)]">{rd.length}</span></div>
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
-                          {rd.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={binding.roomOf.get(d.id)} onToggle={onDeviceToggle} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
+                          {rd.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={binding.roomOf.get(d.id)} onToggle={onDeviceToggle} onCommand={onDeviceCommand} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
                         </div>
                       </div>
                     )
@@ -1313,7 +1416,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
                     <div>
                       <div className="flex items-center gap-2 mb-2"><h3 className="text-[13px] font-semibold text-[color:var(--muted)]">Nicht zugeordnet</h3><span className="text-[11px] text-[color:var(--muted)]">{binding.unassigned.length}</span></div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
-                        {binding.unassigned.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={undefined} onToggle={onDeviceToggle} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
+                        {binding.unassigned.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={undefined} onToggle={onDeviceToggle} onCommand={onDeviceCommand} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
                       </div>
                     </div>
                   )}

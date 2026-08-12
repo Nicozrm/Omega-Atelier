@@ -122,7 +122,7 @@ export class HttpOverpassTransport implements OverpassTransport {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             // Ohne aussagekräftigen Agent antwortet Overpass mit 406.
-            'User-Agent': 'OmegaAtelier/2.0 (+https://omega-atelier.vercel.app)',
+            'User-Agent': 'OmegaAtelier/2.0 (+https://nicozrm.github.io/Omega-Atelier)',
           },
           body: new URLSearchParams({ data: ql }),
           // Frist UND Aufrufer-Abbruch — nie das eine statt des anderen.

@@ -17,7 +17,13 @@ interface AuthState {
   init: () => Promise<void>
   signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>
   signUpWithPassword: (email: string, password: string, name?: string) => Promise<{ error?: string }>
-  signInWithOAuth: (provider: 'google' | 'apple') => Promise<void>
+  /**
+   * Google ist der einzige OAuth-Anbieter — der Typ hält das fest, statt es
+   * dem Aufrufer zu überlassen. Ein Anbieter, der in Supabase nicht
+   * eingerichtet ist, führt sonst zu einem Redirect ins Leere statt zu einem
+   * Übersetzungsfehler.
+   */
+  signInWithOAuth: (provider: 'google') => Promise<void>
   signOut: () => Promise<void>
 }
 
