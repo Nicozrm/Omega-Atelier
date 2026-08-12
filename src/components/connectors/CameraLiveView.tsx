@@ -25,7 +25,10 @@ import {
 } from 'lucide-react'
 import type { Device } from '@/domain'
 import { getOnvifTransport, type OnvifPreset, type OnvifStreamInfo } from '@/connectors/onvif'
-import { degradeLiveView, liveViewMessage, type LiveViewState } from '@/connectors/onvif/liveView'
+import type { OnvifBridgeHealth } from '@/connectors/onvif/transport'
+import {
+  bridgeCanSnapshot, degradeLiveView, diagnoseStreamFailure, liveViewMessage, type LiveViewState,
+} from '@/connectors/onvif/liveView'
 import { startWhep, type WhepSession } from '@/connectors/onvif/whep'
 
 /** How often the snapshot fallback refreshes. Slow on purpose — it is a fallback. */
@@ -54,6 +57,8 @@ export function CameraLiveView({ device, onPtz }: CameraLiveViewProps) {
   const [presets, setPresets] = useState<OnvifPreset[]>([])
   const [statusText, setStatusText] = useState<string | undefined>()
   const [attempt, setAttempt] = useState(0)
+  /** Null until asked; `false` once the bridge proved it has no snapshot route. */
+  const [health, setHealth] = useState<OnvifBridgeHealth | null | undefined>(undefined)
 
   const ptzSupport = device.metadata?.ptzSupport ?? (device.metadata?.ptz === 'true' ? 'unknown' : 'unavailable')
   const showPtz = ptzSupport !== 'unavailable'
@@ -76,9 +81,21 @@ export function CameraLiveView({ device, onPtz }: CameraLiveViewProps) {
         setInfo(next)
         setView({ mode: next.mode, reason: next.reason })
       })
-      .catch((e: unknown) => {
+      .catch(async (e: unknown) => {
         if (cancelled) return
-        setView({ mode: 'none', reason: e instanceof Error ? e.message : 'Bridge nicht erreichbar' })
+        /*
+         * Ask the bridge what it is before blaming it. The common failure here
+         * is a bridge process left running from an older checkout: it serves
+         * `/cameras` fine — the camera connects, resolution and PTZ appear —
+         * and 404s on `/stream` with its own German error text, which said
+         * nothing about the actual fix being to restart it.
+         */
+        const status = (e as { status?: number })?.status
+        const message = e instanceof Error ? e.message : 'Bridge nicht erreichbar'
+        const reported = (await transport.health?.()) ?? null
+        if (cancelled) return
+        setHealth(reported)
+        setView({ mode: 'none', reason: diagnoseStreamFailure({ message, status }, reported) })
         setPhase('failed')
       })
     return () => { cancelled = true }
@@ -259,7 +276,10 @@ export function CameraLiveView({ device, onPtz }: CameraLiveViewProps) {
               <div className="text-[10px] leading-snug text-white/55">{view.reason ?? error}</div>
             )}
             <div className="mt-1 flex items-center gap-1.5">
-              {(info?.snapshot ?? true) && (
+              {/* Only when the bridge can actually serve a still. Offering it on
+                  a build without the route is a second dead end from the same
+                  cause — and the reason above already names that cause. */}
+              {(health === undefined ? (info?.snapshot ?? true) : bridgeCanSnapshot(health)) && (
                 <button
                   onClick={() => { void loadSnapshot().then((ok) => setPhase(ok ? 'live' : 'failed')) }}
                   className="btn btn-sm btn-outline inline-flex items-center gap-1.5"

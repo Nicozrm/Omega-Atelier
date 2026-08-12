@@ -237,6 +237,17 @@ export async function fetchSnapshot(uri, { username, password, fetchImpl = fetch
 const STREAM_TICKET_TTL_MS = 120_000
 
 /**
+ * Bridge protocol version, reported by `/health`.
+ *
+ * Bumped when routes are added or their shapes change, so the app can tell a
+ * bridge that is missing a route from a bridge that is broken. `2` is the first
+ * build with the live-view routes (`/stream`, `/stream/ticket`,
+ * `/stream.mjpeg`, `/snapshot`); anything older answers `/health` without a
+ * `version` field at all, which is exactly how the app recognises it.
+ */
+export const BRIDGE_VERSION = 2
+
+/**
  * Build a bridge instance.
  *
  * Everything the outside world touches is injectable, which is what makes the
@@ -495,10 +506,28 @@ export function createBridge(options = {}) {
           status: 200,
           json: {
             ok: true,
+            version: BRIDGE_VERSION,
             cameras: cameras.size,
             ffmpeg: await hasFfmpeg(),
             webrtc: Boolean(whepTemplate),
             auth: Boolean(token),
+            /*
+             * What this build can actually do.
+             *
+             * The bridge is a long-lived process started by hand, so a running
+             * one is routinely older than the app talking to it. Without this,
+             * the app's only signal was a bare 404 carrying the bridge's own
+             * "ONVIF-Route nicht gefunden" — which it printed over the video
+             * area, where it tells the user nothing about the fact that their
+             * bridge simply predates the streaming routes and needs restarting.
+             */
+            features: {
+              stream: true,
+              snapshot: true,
+              mjpeg: true,
+              ptz: true,
+              ticket: true,
+            },
           },
         }
       }

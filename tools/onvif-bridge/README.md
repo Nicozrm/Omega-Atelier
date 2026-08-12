@@ -16,6 +16,24 @@ npm install
 OMEGA_ONVIF_BRIDGE_TOKEN="change-this" node server.mjs
 ```
 
+**The bridge is a long-lived process, so keep it in step with the app.** It is
+started by hand and left running, which means a bridge from an older checkout
+happily serves `/cameras` — the camera connects, its resolution and PTZ appear —
+and then 404s on the routes it does not have yet. In the app that surfaces as
+
+> Live-Stream nicht verfügbar — ONVIF-Route nicht gefunden
+
+After pulling, restart it. `GET /health` reports what a running bridge can do:
+
+```bash
+curl -s http://127.0.0.1:8787/health
+# {"ok":true,"version":2,"features":{"stream":true,"snapshot":true,…}}
+```
+
+A response without `version`/`features` is a build from before the live-view
+routes; the app detects exactly that and says so instead of printing the raw
+404.
+
 Windows PowerShell:
 
 ```powershell

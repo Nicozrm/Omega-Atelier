@@ -90,8 +90,43 @@ export interface OnvifStreamTicket {
   expiresInMs: number
 }
 
+/**
+ * What a bridge says about itself.
+ *
+ * The bridge is a long-lived process the user starts by hand, so a running one
+ * is routinely older than the app talking to it. `version`/`features` are how
+ * the app tells "this bridge cannot do that" apart from "this bridge is
+ * broken" — a build older than the live-view routes answers `/health` with
+ * neither field, and that absence is the signal.
+ */
+export interface OnvifBridgeHealth {
+  ok?: boolean
+  version?: number
+  cameras?: number
+  ffmpeg?: boolean
+  webrtc?: boolean
+  auth?: boolean
+  features?: {
+    stream?: boolean
+    snapshot?: boolean
+    mjpeg?: boolean
+    ptz?: boolean
+    ticket?: boolean
+  }
+}
+
+/** An error from the bridge that kept its HTTP status. */
+export class OnvifBridgeError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+    this.name = 'OnvifBridgeError'
+  }
+}
+
 export interface OnvifTransport {
   connect(config: OnvifCameraConfig): Promise<OnvifCameraInfo>
+  /** What the bridge is and what it can do. Never throws — returns null instead. */
+  health?(): Promise<OnvifBridgeHealth | null>
   disconnect(id: string): Promise<void>
   list(): Promise<OnvifCameraInfo[]>
   get(id: string): Promise<OnvifCameraInfo>
@@ -157,10 +192,23 @@ export class HttpOnvifTransport implements OnvifTransport {
         body && typeof body === 'object' && 'error' in body
           ? String((body as { error: unknown }).error)
           : `ONVIF bridge HTTP ${response.status}`
-      throw new Error(message)
+      // The status is kept: a 404 on a route the bridge simply does not have is
+      // a different problem from a 409 or a 502, and only the status can tell
+      // them apart once the bridge's own German error text is in hand.
+      throw new OnvifBridgeError(message, response.status)
     }
 
     return body as T
+  }
+
+  async health(): Promise<OnvifBridgeHealth | null> {
+    try {
+      return await this.request<OnvifBridgeHealth>('/health')
+    } catch {
+      // A bridge that cannot answer its own health check tells us nothing; the
+      // original failure is the one worth reporting.
+      return null
+    }
   }
 
   async connect(config: OnvifCameraConfig): Promise<OnvifCameraInfo> {

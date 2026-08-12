@@ -8,7 +8,7 @@
  * ladder is an explicit "not available" — not an empty <video>.
  */
 
-import type { OnvifStreamInfo } from './transport'
+import type { OnvifBridgeHealth, OnvifStreamInfo } from './transport'
 
 export type LiveViewMode = OnvifStreamInfo['mode']
 
@@ -38,6 +38,57 @@ export function degradeLiveView(current: LiveViewMode, info: OnvifStreamInfo, re
     return { mode: 'none', reason }
   }
   return { mode: 'none', reason }
+}
+
+/** How to restart the bridge — quoted verbatim in the message. */
+const RESTART_HINT = 'cd tools/onvif-bridge && npm install && node server.mjs'
+
+/**
+ * Why the stream descriptor could not be fetched, in terms the user can act on.
+ *
+ * The case worth naming: the bridge is a process started by hand and left
+ * running, so it is routinely older than the app. A build predating the
+ * live-view routes still answers `/cameras` perfectly — the camera connects,
+ * its profiles and resolution appear, PTZ works — and then 404s on `/stream`
+ * with its own "ONVIF-Route nicht gefunden". Printed raw over the video area,
+ * that tells the user nothing at all, and certainly not that the fix is to
+ * restart the bridge.
+ *
+ * `health` is what settles it: a current bridge reports `features.stream`, an
+ * old one answers `/health` with no `version` and no `features` at all.
+ */
+export function diagnoseStreamFailure(
+  error: { message: string; status?: number },
+  health: OnvifBridgeHealth | null,
+): string {
+  const outdated = health !== null && health.features?.stream !== true
+
+  if (error.status === 404 && outdated) {
+    return 'Die ONVIF-Bridge läuft in einer älteren Version als die App und kennt die '
+      + `Stream-Route noch nicht. Bridge neu starten: ${RESTART_HINT}`
+  }
+  if (error.status === 404) {
+    return `Die Bridge kennt diese Route nicht (${error.message}). `
+      + `Läuft dort eine aktuelle Version? ${RESTART_HINT}`
+  }
+  if (error.status === 401 || error.status === 403) {
+    return 'Die Bridge lehnt die Anmeldung ab — Bridge-Token in der Karte und in '
+      + 'OMEGA_ONVIF_BRIDGE_TOKEN müssen übereinstimmen.'
+  }
+  if (health === null) {
+    return `Die Bridge antwortet nicht (${error.message}) — läuft sie noch, und stimmt die Bridge-URL?`
+  }
+  return error.message
+}
+
+/**
+ * Can this bridge deliver a still image?
+ *
+ * Offering "Snapshot laden" on a bridge whose `/snapshot` route does not exist
+ * produces a second dead end from the same cause.
+ */
+export function bridgeCanSnapshot(health: OnvifBridgeHealth | null): boolean {
+  return health?.features?.snapshot === true
 }
 
 /** The line under the picture — or instead of it. */
