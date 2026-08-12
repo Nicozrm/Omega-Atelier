@@ -69,16 +69,21 @@ export interface RenderProfile {
    * wall maps are 256², so a 4 m wall carries about 1.3 texels per centimetre
    * and dissolves as soon as you stand next to it.
    *
-   * It is also the most expensive lever, quadratically so. Measured across the
-   * 54 maps in the bundle (30 authored at 256², 24 at 512², mipmaps included):
+   * It is also the most expensive lever, quadratically so. Measured across both
+   * generated libraries — the 54 interior maps in `lib/textures` (30 authored
+   * at 256², 24 at 512²) and the outdoor surfaces in `lib/proceduralTextures`
+   * (brick, board, roof, asphalt, pavers, lawn), mipmaps included:
    *
-   *   | scale · cap  | VRAM   | profiles              |
-   *   | 1× · 512     |  42 MB | performance, balanced |
-   *   | 2× · 512     |  72 MB | high                  |
-   *   | 2× · 1024    | 168 MB | ultra                 |
+   *   | scale · cap  | interior | outdoor | total  | profiles              |
+   *   | 1× · 512     |    42 MB |   24 MB |  66 MB | performance, balanced |
+   *   | 2× · 512     |    72 MB |   33 MB | 105 MB | high                  |
+   *   | 2× · 1024    |   168 MB |   81 MB | 249 MB | ultra                 |
    *
    * Generation cost scales the same way — paid once behind the loading spinner,
-   * then cached in IndexedDB.
+   * then cached in IndexedDB (interior only; the outdoor set is cheap enough to
+   * rebuild). The night-city backdrop is exempt: at 2048×512 it is already the
+   * largest texture in the app and it is seen through a window from across a
+   * room, so more pixels buy nothing.
    *
    * Integer only: 256 and 512 are powers of two and mipmap cleanly, and so is
    * everything they reach by doubling.

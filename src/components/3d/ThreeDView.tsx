@@ -61,6 +61,7 @@ import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
+import { resetProceduralTextures } from '@/lib/proceduralTextures'
 import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
@@ -552,6 +553,9 @@ function resetMaterialCaches(): void {
   // materials around the old canvases would leave a switch to a higher profile
   // looking identical until the next page load.
   resetTextureBundle()
+  // Same for the outdoor library: brick, roofs, asphalt and lawn read their
+  // anisotropy and resolution once, at creation, and are cached module-wide.
+  resetProceduralTextures()
 }
 
 /** Floor variants the UI can switch between. */
