@@ -60,7 +60,7 @@ import { BlasterAsset3D } from './BlasterAsset3D'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
-import { getTextures, getTexturesAsync, makeTex, type TextureBundle } from '@/lib/textures'
+import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
 import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
@@ -547,6 +547,11 @@ function resetMaterialCaches(): void {
   for (const m of SLOT_MAT_CACHE.values()) m.dispose()
   SLOT_MAT_CACHE.clear()
   disposeGlassMaterials()
+  // The maps themselves are generated at a profile-dependent resolution, so
+  // they are as profile-bound as the materials that sample them. Rebuilding
+  // materials around the old canvases would leave a switch to a higher profile
+  // looking identical until the next page load.
+  resetTextureBundle()
 }
 
 /** Floor variants the UI can switch between. */
