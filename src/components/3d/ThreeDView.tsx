@@ -65,6 +65,7 @@ import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
 import { resetProceduralTextures } from '@/lib/proceduralTextures'
+import { canopyGeometry } from '@/lib/render/canopy'
 import {
   X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
   ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture,
@@ -5373,30 +5374,33 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
     // trees read as the same lollipop.
     const tree = (key: string, x: number, z: number, s: number, kind: number) => {
       const sway = (Math.abs(Math.sin(x * 12.9898 + z * 78.233)) % 1) * 0.08 - 0.04
+      // Kronenform aus dem Standort, nicht aus einem Zähler: derselbe Baum
+      // sieht nach jedem Neuaufbau der Szene gleich aus, der Nachbar anders.
+      const seedAt = Math.floor(Math.abs(x * 31.7 + z * 17.3) * 13)
       return (
         <group key={key} position={[x, -0.13, z]} rotation={[0, x + z, sway]}>
           {kind === 1 ? (
             <>
               <mesh position={[0, 0.5 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.09 * s, 0.13 * s, 1.0 * s, 6]} /></mesh>
-              <mesh position={[0, 1.55 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[1.0 * s, 1.7 * s, 8]} /></mesh>
-              <mesh position={[0, 2.6 * s, 0]} castShadow material={m.foliageA}><coneGeometry args={[0.76 * s, 1.5 * s, 8]} /></mesh>
-              <mesh position={[0, 3.45 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[0.5 * s, 1.15 * s, 8]} /></mesh>
+              <mesh position={[0, 1.55 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[1.0 * s, 1.7 * s, 11]} /></mesh>
+              <mesh position={[0, 2.6 * s, 0]} castShadow material={m.foliageA}><coneGeometry args={[0.76 * s, 1.5 * s, 11]} /></mesh>
+              <mesh position={[0, 3.45 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[0.5 * s, 1.15 * s, 11]} /></mesh>
             </>
           ) : (
             <>
               <mesh position={[0, 0.85 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.08 * s, 0.12 * s, 1.7 * s, 7]} /></mesh>
               <mesh position={[0.32 * s, 1.4 * s, 0]} rotation={[0, 0, -0.65]} castShadow material={m.trunk}><cylinderGeometry args={[0.035 * s, 0.055 * s, 0.75 * s, 5]} /></mesh>
-              <mesh position={[0, 2.2 * s, 0]} scale={[1, 0.86, 1]} castShadow material={kind === 0 ? m.foliageA : m.foliageC}><icosahedronGeometry args={[1.02 * s, 1]} /></mesh>
-              <mesh position={[0.64 * s, 1.9 * s, 0.2 * s]} scale={[1, 0.8, 1]} castShadow material={m.foliageB}><icosahedronGeometry args={[0.6 * s, 1]} /></mesh>
-              <mesh position={[-0.52 * s, 1.75 * s, -0.28 * s]} scale={[1, 0.78, 1]} castShadow material={kind === 2 ? m.foliageD : m.foliageC}><icosahedronGeometry args={[0.55 * s, 1]} /></mesh>
-              <mesh position={[-0.12 * s, 2.85 * s, 0.3 * s]} castShadow material={m.foliageB}><icosahedronGeometry args={[0.48 * s, 1]} /></mesh>
+              <mesh position={[0, 2.2 * s, 0]} scale={[1.02 * s, 0.88 * s, 1.02 * s]} castShadow geometry={canopyGeometry(seedAt + 1)} material={kind === 0 ? m.foliageA : m.foliageC} />
+              <mesh position={[0.64 * s, 1.9 * s, 0.2 * s]} scale={[0.6 * s, 0.48 * s, 0.6 * s]} castShadow geometry={canopyGeometry(seedAt + 3)} material={m.foliageB} />
+              <mesh position={[-0.52 * s, 1.75 * s, -0.28 * s]} scale={[0.55 * s, 0.43 * s, 0.55 * s]} castShadow geometry={canopyGeometry(seedAt + 5)} material={kind === 2 ? m.foliageD : m.foliageC} />
+              <mesh position={[-0.12 * s, 2.85 * s, 0.3 * s]} scale={0.48 * s} castShadow geometry={canopyGeometry(seedAt + 7)} material={m.foliageB} />
             </>
           )}
         </group>
       )
     }
     const bush = (key: string, x: number, z: number, s: number, mat: THREE.Material) => (
-      <mesh key={key} position={[x, -0.13 + 0.3 * s, z]} scale={[1, 0.72, 1]} castShadow material={mat}><icosahedronGeometry args={[0.45 * s, 1]} /></mesh>
+      <mesh key={key} position={[x, -0.13 + 0.3 * s, z]} scale={[0.45 * s, 0.32 * s, 0.45 * s]} castShadow geometry={canopyGeometry(x * 31 + z * 17)} material={mat} />
     )
 
     // Driveway cars — rounded body + glass cabin + light strips + rims.
@@ -5538,7 +5542,7 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
           parts.push(
             <group key="pot" position={[-0.95, 0, dz + faceZ * 0.5]}>
               <mesh position={[0, 0.22, 0]} castShadow material={m.pot}><cylinderGeometry args={[0.2, 0.16, 0.44, 8]} /></mesh>
-              <mesh position={[0, 0.56, 0]} castShadow material={m.hedgeTop}><icosahedronGeometry args={[0.26, 1]} /></mesh>
+              <mesh position={[0, 0.56, 0]} scale={0.26} castShadow geometry={canopyGeometry(5)} material={m.hedgeTop} />
             </group>,
           )
         }
