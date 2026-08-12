@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { X, Play, Pause, Home, Trash2, Battery, Clock, Ruler, Loader2, MapPin } from 'lucide-react'
 import { usePlanStore } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
+import { activeProfile } from '@/lib/render/quality'
 import {
   bbox, polygonArea, pathLength, pointInPolygon, buildRoute, flattenRoute, resample,
   type Pt, type RouteSegment,
@@ -298,6 +299,9 @@ export function VacuumRobotView({ onClose }: { onClose: () => void }) {
 
   const cx = M(extent.width) / 2, cz = M(extent.height) / 2
   const span = Math.max(M(extent.width), M(extent.height))
+  // This view is a single storey seen from above, so it can live one step below
+  // the plan view's budget — but the *ceiling* still has to be the profile's.
+  const vacuumShadowMap = Math.min(2048, activeProfile().shadowMapSize)
 
   function start() {
     if ((mode === 'raum' || mode === 'zone') && !selectedRoom) { useUIStore.getState().pushToast({ kind: 'info', title: 'Raum wählen', description: 'Tippe unten einen Raum an.' }); return }
@@ -359,7 +363,10 @@ export function VacuumRobotView({ onClose }: { onClose: () => void }) {
           <directionalLight
             position={[cx + span * 0.5, span * 1.4, cz + span * 0.2]}
             intensity={1.1} castShadow
-            shadow-mapSize-width={2048} shadow-mapSize-height={2048}
+            // Same budget source as the main 3D view: a flat 2048 here meant a
+            // phone opening the robot map paid a 2048² depth pass for a scene
+            // it can barely afford to shade.
+            shadow-mapSize-width={vacuumShadowMap} shadow-mapSize-height={vacuumShadowMap}
             shadow-camera-near={0.5} shadow-camera-far={span * 4}
             shadow-camera-left={-span} shadow-camera-right={span}
             shadow-camera-top={span} shadow-camera-bottom={-span}

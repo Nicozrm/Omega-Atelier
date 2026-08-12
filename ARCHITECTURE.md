@@ -213,6 +213,25 @@ liegt in `lib/render/` und ist damit unter Vitest testbar, ohne WebGL.
    1024…4096), und der Licht-Pool an `lightBudgetForTier()` (8/4/2 statt
    `maxDynamicLights` 24/16/10/6). Beide lesen jetzt das Profil.
 
+   Jede dieser Abweichungen hatte dieselbe Gestalt: **eine Zahl, die am
+   Aufrufort selbstverständlich richtig wirkt**, direkt in den Renderer
+   geschrieben. Keine war falsch auf der Maschine, auf der sie entstand; alle
+   waren falsch auf den anderen drei Stufen — und im Review ist das kaum zu
+   sehen. Deshalb steht das Muster jetzt nicht nur hier, sondern in
+   `render/profileConformance.test.ts`: ein literales Sampling-Budget irgendwo
+   unter `src/` lässt den Test scheitern. Er fand beim ersten Lauf sofort zwei
+   weitere Fälle (Anisotropie 16 in der Aussenwelt, eine 2048er Shadow-Map in
+   der Roboteransicht). Ausnahmen sind erlaubt, aber sie stehen begründet in der
+   Allow-Liste, und ein dritter Test prüft, dass jede Ausnahme noch gebraucht
+   wird.
+
+   Dieselbe Falle nochmal, eine Ebene tiefer: Texturen lesen ihr Budget
+   **einmal beim Erzeugen** und liegen dann im Cache. Wer ein neues
+   profilabhängiges Feld einführt, muss den zugehörigen Cache in
+   `resetMaterialCaches()` mit verwerfen (`resetTextureBundle`,
+   `resetProceduralTextures`) — sonst wirkt der Qualitätswechsel bis zum
+   nächsten Reload gar nicht.
+
 5. **Shader-Patches sind eng, geschützt und idempotent.** `pcssShadows` und
    `specularAA` schreiben prozessglobale `THREE.ShaderChunk`s um. Der Vertrag ist
    in beiden gleich: exakte Anker (auf Eindeutigkeit geprüft), Abbruch statt
