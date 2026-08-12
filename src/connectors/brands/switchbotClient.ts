@@ -30,6 +30,7 @@
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
 import { errorBody, vendorHttpError } from './vendorErrors'
+import { isRelayHealthResponse, RELAY_HEALTH_MESSAGE } from '../relayUrl'
 import { trace, traceError } from '../diagnostics'
 
 const SB_BASE = 'https://api.switch-bot.com'
@@ -104,6 +105,9 @@ function switchbotStatusMessage(code: number, message?: string): string {
  * them in `infraredRemoteList`, not `deviceList`. Those were dropped entirely.
  */
 export function parseSwitchBotDevices(json: SbEnvelope): SbDevice[] {
+  // Arrives as HTTP 200 with valid JSON and no `statusCode`, so the check below
+  // waves it through and the empty `body` reads as an empty account.
+  if (isRelayHealthResponse(json)) throw new Error(RELAY_HEALTH_MESSAGE)
   const code = json?.statusCode
   if (typeof code === 'number' && code !== 100) {
     throw new Error(switchbotStatusMessage(code, json.message))

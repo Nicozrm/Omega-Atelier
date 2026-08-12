@@ -23,6 +23,7 @@ import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import { createHomeAssistantConnector, SimulatedHaTransport, WebSocketHaTransport, haWebsocketUrl } from '@/connectors/homeAssistant'
 import { createMqttConnector, SimulatedMqttBroker } from '@/connectors/mqtt'
 import { createTuyaConnector, HttpTuyaTransport, relayBaseUrl, tuyaRelayUrl, type TuyaRegion } from '@/connectors/tuya'
+import { vendorRelayUrl } from '@/connectors/relayUrl'
 import { createOnvifConnector, HttpOnvifTransport, onvifBridgeBaseUrl, type OnvifCameraConfig } from '@/connectors/onvif'
 import { CameraLiveView } from './CameraLiveView'
 import { CameraPanel, cameraDevices } from './CameraPanel'
@@ -129,8 +130,14 @@ function saveOnvifConfig(c: OnvifLiveConfig) {
 const LIVE_GOVEE_ID = 'govee-live'
 const LIVE_SB_ID = 'switchbot-live'
 const CLOUD_CONFIG_KEY = 'omega:brand-cloud-config'
+/*
+ * Normalised, not concatenated. Appending `/govee` to a raw pasted string put
+ * the vendor segment inside any query string the URL still carried, so the
+ * relay received a bare `/vendor-relay` and answered its health self-test with
+ * HTTP 200 — which both clients then read as "connected, zero devices".
+ */
 const relayBase = (relay: string, vendor: 'govee' | 'switchbot'): string | undefined =>
-  relay ? `${relay.replace(/\/+$/, '')}/${vendor}` : undefined
+  vendorRelayUrl(relay, vendor)
 interface BrandCloudConfig { goveeKey: string; sbToken: string; sbSecret: string; relay: string }
 function loadCloudConfig(): BrandCloudConfig {
   try {
@@ -764,7 +771,7 @@ function CloudBrandsCard({ sessions, states, busy, onConnect, onDisconnect, onRe
           <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">
             Relay-URL <span style={{ color: '#d8635f' }}>· für SwitchBot nötig</span>
           </span>
-          <input value={relay} onChange={(e) => setRelay(e.target.value)} placeholder="https://<ref>.supabase.co/functions/v1/vendor-relay"
+          <input value={relay} onChange={(e) => setRelay(e.target.value)} onBlur={(e) => setRelay(relayBaseUrl(e.target.value))} placeholder="https://<ref>.supabase.co/functions/v1/vendor-relay"
             className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" autoComplete="off" spellCheck={false} />
         </label>
         <label className="block">
