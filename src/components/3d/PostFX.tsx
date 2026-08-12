@@ -8,6 +8,7 @@ import {
 } from '@react-three/postprocessing'
 import { ToneMappingMode, type DepthOfFieldEffect } from 'postprocessing'
 import { activeProfile, sharpenForResolve } from '@/lib/render/quality'
+import { adaptExposure } from '@/lib/render/exposure'
 import { bokehForDistance, focalLengthForDistance } from '@/lib/render/dof'
 import { filmLutData } from '@/lib/render/grade'
 import { cameraFocus } from './cameraFocusBus'
@@ -104,6 +105,27 @@ function FocusPuller({ walkMode }: { walkMode: boolean }) {
     }
   })
   return <DepthOfField ref={fx} target={[0, 1, 0]} focalLength={0.08} bokehScale={1.2} height={480} />
+}
+
+/**
+ * Eases the tone map's exposure toward its target instead of cutting to it.
+ *
+ * Exposure is a function of the world (see `lib/render/exposure`), and the
+ * world changes continuously while the time slider is dragged — several stops
+ * in a second. Setting `toneMappingExposure` straight from React would strobe
+ * through those stops; damping it turns the same change into what a camera
+ * adapting to a new light level looks like.
+ *
+ * Rides the frame loop for the same reason `ResolveTracker` does: this has to
+ * update at frame rate, and a React render per frame would cost more than the
+ * effect it drives.
+ */
+function ExposureAdapter({ target }: { target: number }) {
+  const gl = useThree((s) => s.gl)
+  useFrame((_, dt) => {
+    gl.toneMappingExposure = adaptExposure(gl.toneMappingExposure, target, dt)
+  })
+  return null
 }
 
 /**
@@ -275,7 +297,14 @@ export function PostFX({
 
   // Exposure still lives on the renderer — `ToneMappingEffect` reads
   // `toneMappingExposure` from it, so this is the one knob both paths share.
-  useEffect(() => { gl.toneMappingExposure = exposure }, [gl, exposure])
+  // Seeded here, then eased every frame by `ExposureAdapter`; the seed matters
+  // because the first frame must not be photographed at the previous scene's
+  // exposure.
+  useEffect(() => {
+    if (!Number.isFinite(gl.toneMappingExposure) || gl.toneMappingExposure <= 0) {
+      gl.toneMappingExposure = exposure
+    }
+  }, [gl, exposure])
 
   if (disabled) return null
 
@@ -401,6 +430,7 @@ export function PostFX({
           attached to its group. Its frame callback runs at the default
           priority, i.e. before the composer's own render. */}
       <ResolveTracker sharpen={sharpenRef} grain={grainRef} />
+      <ExposureAdapter target={exposure} />
     </RenderFXBoundary>
   )
 }

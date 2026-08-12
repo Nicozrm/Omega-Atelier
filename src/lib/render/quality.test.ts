@@ -106,6 +106,25 @@ describe('RENDER_PROFILES', () => {
       expect(hi.iblSize).toBeGreaterThanOrEqual(lo.iblSize)
       expect(hi.maxDynamicLights).toBeGreaterThanOrEqual(lo.maxDynamicLights)
       expect(hi.anisotropy).toBeGreaterThanOrEqual(lo.anisotropy)
+      expect(hi.shadowCastingLights).toBeGreaterThanOrEqual(lo.shadowCastingLights)
+      expect(hi.pointShadowMapSize).toBeGreaterThanOrEqual(lo.pointShadowMapSize)
+    }
+  })
+
+  it('lets interior lamps cast shadows only where there is budget for it', () => {
+    // A lamp-lit room with no shadow under the chair is the loudest "this is a
+    // render" tell an interior has — but a cube map per light is not free, so
+    // the lower two profiles keep the previous behaviour (sun shadows + AO).
+    expect(RENDER_PROFILES.performance.shadowCastingLights).toBe(0)
+    expect(RENDER_PROFILES.balanced.shadowCastingLights).toBe(0)
+    expect(RENDER_PROFILES.high.shadowCastingLights).toBeGreaterThan(0)
+    expect(RENDER_PROFILES.ultra.shadowCastingLights)
+      .toBeGreaterThan(RENDER_PROFILES.high.shadowCastingLights)
+  })
+
+  it('never asks more lamps to cast than the pool can hold', () => {
+    for (const p of Object.values(RENDER_PROFILES)) {
+      expect(p.shadowCastingLights).toBeLessThanOrEqual(p.maxDynamicLights)
     }
   })
 
