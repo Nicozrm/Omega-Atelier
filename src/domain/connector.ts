@@ -38,6 +38,14 @@ export interface DeviceUpdate {
   health?: Partial<DeviceHealth>
   battery?: DeviceBattery
   telemetry?: DeviceTelemetry
+  /**
+   * Opaque metadata to merge, key by key. Metadata used to be frozen at
+   * adoption time, which is wrong for anything a connector *learns* rather than
+   * reads once — a camera whose PTZ verdict only settles after the first real
+   * move, for instance. Still opaque: the core merges the strings and
+   * interprets none of them.
+   */
+  metadata?: Record<string, string>
 }
 
 /** A command the runtime sends toward a device capability (neutral data). */

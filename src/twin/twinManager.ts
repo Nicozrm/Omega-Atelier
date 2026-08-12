@@ -18,6 +18,10 @@ import {
   type Capability, type CapabilityKind, type Connector, type ConnectorHealth,
   type Device, type DeviceCommand, type Unsubscribe,
 } from '@/domain'
+import {
+  restoredDevices, TWIN_STATE_VERSION,
+  type SavedConnector, type TwinPersistedState,
+} from './twinPersistence'
 
 export interface TwinSession {
   /** Connector id (= `connector.info.id`). */
@@ -49,6 +53,12 @@ export interface TwinView {
   commands: Record<string, CommandPhase>
   /** Last applied scene key (opaque to the manager). */
   activeScene?: string
+  /**
+   * Sources that were connected in an earlier session and are not live now.
+   * Credentials are never stored, so a live source needs reconnecting by hand;
+   * this is what lets the UI offer that instead of forgetting it happened.
+   */
+  savedConnectors: SavedConnector[]
 }
 
 export interface ConnectorDescriptor {
@@ -85,6 +95,7 @@ export class TwinManager {
   private pending = new Map<string, PendingCommand>()
   private activeScene: string | undefined
   private listeners = new Set<Listener>()
+  private savedConnectors: SavedConnector[] = []
 
   constructor() {
     // One subscription point: device changes AND connector-status changes both
@@ -103,7 +114,57 @@ export class TwinManager {
       bindings: Object.fromEntries(this.bindings),
       commands: Object.fromEntries([...this.pending].map(([k, p]) => [k, p.phase])),
       activeScene: this.activeScene,
+      savedConnectors: this.savedConnectors.filter((c) => !this.connectors.has(c.id)),
     }
+  }
+
+  /**
+   * A snapshot worth keeping: which devices exist, what they are, where they
+   * live, and which sources produced them. No capability *values* are treated
+   * as meaningful here — see `persistableSignature` for why that matters.
+   */
+  serializeState(): TwinPersistedState {
+    const live = [...this.sessions.values()].map((s) => ({ id: s.id, kind: s.kind, label: s.label }))
+    const liveIds = new Set(live.map((c) => c.id))
+    return {
+      version: TWIN_STATE_VERSION,
+      savedAt: new Date().toISOString(),
+      bindings: Object.fromEntries(this.bindings),
+      // Sources remembered from an earlier session stay remembered until the
+      // user removes them; a reload must not quietly shorten the list.
+      connectors: [...live, ...this.savedConnectors.filter((c) => !liveIds.has(c.id))],
+      devices: this.runtime.listDevices(),
+    }
+  }
+
+  /**
+   * Bring a stored twin back. Devices return as `unknown` reachability: nothing
+   * has spoken to them since the last session, and a green dot on a lamp that
+   * was unplugged yesterday is a lie the UI should not tell.
+   *
+   * A connector that is already live wins — restoring must never overwrite a
+   * device that a running connector is currently reporting.
+   */
+  restoreState(state: TwinPersistedState): void {
+    for (const device of restoredDevices(state)) {
+      if (this.connectors.has(device.connectorId)) continue
+      if (this.runtime.getDevice(device.id)) continue
+      this.runtime.upsertDevice(device)
+    }
+    for (const [deviceId, roomId] of Object.entries(state.bindings)) {
+      if (!this.bindings.has(deviceId)) this.bindings.set(deviceId, roomId)
+    }
+    this.savedConnectors = state.connectors
+    this.emit()
+  }
+
+  /** Forget a source the user no longer wants offered, and its devices with it. */
+  forgetSavedConnector(id: string): void {
+    this.savedConnectors = this.savedConnectors.filter((c) => c.id !== id)
+    for (const device of this.runtime.listDevices()) {
+      if (device.connectorId === id) this.runtime.removeDevice(device.id)
+    }
+    this.emit()
   }
 
   subscribe(listener: Listener): Unsubscribe {
@@ -143,6 +204,8 @@ export class TwinManager {
     await this.runtime.removeConnector(id)
     this.connectors.delete(id)
     this.sessions.delete(id)
+    // Disconnecting is deliberate: it should not come back on the next reload.
+    this.savedConnectors = this.savedConnectors.filter((c) => c.id !== id)
     this.emit()
   }
 
