@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlanStore } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
+import { useTier } from '@/hooks/useTier'
 import type { Floor, Point, RemoteCursor, Tool, WallSubtype } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
@@ -98,6 +99,11 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
   const timeOfDay = useUIStore((s) => s.timeOfDay)
   const timeRef = useRef(timeOfDay)
   timeRef.current = timeOfDay
+  // Sonnenstudie is a Pro feature. Read through a ref for the same reason the
+  // clock is: the draw loop runs outside React and must not re-subscribe.
+  const canSunStudy = useTier().can('sun-study')
+  const sunStudyRef = useRef(canSunStudy)
+  sunStudyRef.current = canSunStudy
 
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [wallStart, setWallStart] = useState<Point | null>(null)
@@ -517,8 +523,9 @@ export function OmegaFloorCanvas({ cursors, publishCursor }: OmegaFloorCanvasPro
       // the floor — starting past the sill's shadow, lengthening and warming
       // as the sun sinks. Runs on the day-cycle clock when it's active, on
       // the real current time otherwise, so the plan always carries the sun
-      // your flat has right now.
-      {
+      // your flat has right now. Pro and above; a Free plan keeps the plain
+      // daylight wash drawn above.
+      if (sunStudyRef.current) {
         const nowDate = new Date()
         const dayOfYear = Math.floor((nowDate.getTime() - new Date(nowDate.getFullYear(), 0, 0).getTime()) / 86400000)
         const sunHour = tod ?? nowDate.getHours() + nowDate.getMinutes() / 60
