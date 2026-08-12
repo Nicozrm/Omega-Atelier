@@ -79,3 +79,50 @@ Relay-URL für die App:
 - API-Keys/Token/Secret bleiben **nur im Browser** (localStorage) und gehen
   ausschließlich an die jeweilige Hersteller-API (durch dein eigenes Relay).
 - Das Relay lässt nur die von Govee/SwitchBot benötigten Header durch.
+
+
+## 4. ONVIF / PTZ-Kameras — Arenti und andere ONVIF-Geräte
+
+OMEGA enthält einen generischen ONVIF-Connector. Er ist nicht an Arenti gekoppelt:
+Kamera-Discovery/Media/PTZ werden über ONVIF angesprochen, während die Domain nur
+die neutrale `Camera`-Capability sieht.
+
+Wichtig: Der Browser spricht ONVIF nicht direkt. Dafür läuft ein kleiner lokaler
+Bridge-Prozess auf einem Rechner im selben LAN wie die Kamera:
+
+```bash
+cd tools/onvif-bridge
+npm install
+OMEGA_ONVIF_BRIDGE_TOKEN="change-this" node server.mjs
+```
+
+Standard-Bridge: `http://127.0.0.1:8787`.
+
+In OMEGA → Connectors → Echte Verbindung → ONVIF Kamera:
+
+- Bridge-URL
+- Kamera-IP
+- ONVIF-Port
+- ONVIF-Benutzer
+- ONVIF-Passwort
+
+Das Kamera-Passwort wird vom UI nicht in `localStorage` gespeichert.
+
+Der Connector unterstützt:
+
+- ONVIF-Geräteinitialisierung
+- Media-Profile
+- von ONVIF gelieferte RTSP-URI
+- Snapshot-Fähigkeit
+- PTZ ContinuousMove
+- PTZ Stop
+- PTZ Status
+- Presets
+- GotoPreset
+- Home Position
+
+PTZ wird als neutraler `Camera`-Command an den bestehenden Twin geroutet;
+der Core benötigt dadurch keine Hersteller-/ONVIF-Sonderlogik.
+
+Für den Arenti-Test wird als Startwert `192.168.0.107` und Benutzer `admin`
+verwendet. Den tatsächlichen ONVIF-Port bitte aus der Kamera-App übernehmen.

@@ -3,7 +3,7 @@ import {
   X, Server, Radio, Power, Lock, Thermometer, Droplets, Activity, Zap, Video,
   Blinds, Sun, Palette, Loader2, CheckCircle2, AlertCircle, Plug, Unplug, Home,
   Sunrise, Clapperboard, Moon, Coffee, LogOut, PartyPopper, AlertTriangle, Gauge,
-  Lightbulb, Speaker, Bot, ArrowRight, ChevronLeft, Check, Sparkles, Cloud,
+  Lightbulb, Speaker, Bot, ArrowRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ZoomIn, ZoomOut, Check, Sparkles, Cloud,
 } from 'lucide-react'
 import { kelvinToHex } from '@/lib/lighting'
 import { findCapability, type Capability, type Device } from '@/domain'
@@ -22,6 +22,7 @@ import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import { createHomeAssistantConnector, SimulatedHaTransport, WebSocketHaTransport, haWebsocketUrl } from '@/connectors/homeAssistant'
 import { createMqttConnector, SimulatedMqttBroker } from '@/connectors/mqtt'
 import { createTuyaConnector, HttpTuyaTransport, type TuyaRegion } from '@/connectors/tuya'
+import { createOnvifConnector, HttpOnvifTransport, type OnvifCameraConfig } from '@/connectors/onvif'
 import { createBrandConnector, createGoveeClient, createSwitchBotClient } from '@/connectors/brands'
 import { ECOSYSTEM_SPECS, createEcosystemConnector, type EcosystemIcon } from '@/connectors/ecosystem'
 
@@ -30,7 +31,9 @@ const LIVE_HA_ID = 'home-assistant-live'
 const HA_CONFIG_KEY = 'omega:ha-live-config'
 /** Id of the real (live) Tuya Cloud connector. */
 const LIVE_TUYA_ID = 'tuya-cloud-live'
+const LIVE_ONVIF_ID = 'onvif-live'
 const TUYA_CONFIG_KEY = 'omega:tuya-live-config'
+const ONVIF_CONFIG_KEY = 'omega:onvif-live-config'
 
 interface HaLiveConfig { url: string; token: string }
 function loadHaConfig(): HaLiveConfig {
@@ -51,6 +54,52 @@ function loadTuyaConfig(): TuyaLiveConfig {
   return { region: 'eu', clientId: '', secret: '', uid: '' }
 }
 function saveTuyaConfig(c: TuyaLiveConfig) { try { localStorage.setItem(TUYA_CONFIG_KEY, JSON.stringify(c)) } catch { /* ignore */ } }
+
+interface OnvifLiveConfig {
+  bridgeUrl: string
+  bridgeToken: string
+  cameraId: string
+  cameraName: string
+  host: string
+  port: number
+  username: string
+  password: string
+}
+function loadOnvifConfig(): OnvifLiveConfig {
+  try {
+    const raw = localStorage.getItem(ONVIF_CONFIG_KEY)
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<OnvifLiveConfig>
+      return {
+        bridgeUrl: p.bridgeUrl ?? 'http://127.0.0.1:8787',
+        bridgeToken: p.bridgeToken ?? '',
+        cameraId: p.cameraId ?? 'arenti-outdoor',
+        cameraName: p.cameraName ?? 'Arenti Außenkamera',
+        host: p.host ?? '192.168.0.107',
+        port: Number(p.port ?? 8000),
+        username: p.username ?? 'admin',
+        password: '',
+      }
+    }
+  } catch { /* ignore */ }
+  return {
+    bridgeUrl: 'http://127.0.0.1:8787',
+    bridgeToken: '',
+    cameraId: 'arenti-outdoor',
+    cameraName: 'Arenti Außenkamera',
+    host: '192.168.0.107',
+    port: 8000,
+    username: 'admin',
+    password: '',
+  }
+}
+function saveOnvifConfig(c: OnvifLiveConfig) {
+  try {
+    // Never persist the ONVIF camera password in localStorage.
+    const { password: _password, ...safe } = c
+    localStorage.setItem(ONVIF_CONFIG_KEY, JSON.stringify(safe))
+  } catch { /* ignore */ }
+}
 
 /** Live brand-cloud connectors (Govee + SwitchBot) — main's real cloud clients,
  *  surfaced here so they run alongside the 30 ecosystems. Vendor clouds send no
@@ -139,10 +188,35 @@ function makeLiveTuyaDescriptor(cfg: TuyaLiveConfig): ConnectorDescriptor {
   }
 }
 
+
+/** Build the browser-side ONVIF connector. The bridge performs the actual LAN/SOAP work. */
+function makeLiveOnvifDescriptor(cfg: OnvifLiveConfig): ConnectorDescriptor {
+  const camera: OnvifCameraConfig = {
+    id: cfg.cameraId.trim() || 'onvif-camera',
+    name: cfg.cameraName.trim() || 'ONVIF Kamera',
+    host: cfg.host.trim(),
+    port: cfg.port,
+    username: cfg.username.trim(),
+    password: cfg.password,
+  }
+  return {
+    label: cfg.cameraName.trim() || 'ONVIF Kamera',
+    kind: 'onvif',
+    make: () => createOnvifConnector({
+      id: LIVE_ONVIF_ID,
+      label: cfg.cameraName.trim() || 'ONVIF Kamera',
+      transport: new HttpOnvifTransport(cfg.bridgeUrl.trim(), cfg.bridgeToken.trim() || undefined),
+      cameras: [camera],
+      pollMs: 5000,
+    }),
+  }
+}
+
 const SOURCE: Record<string, { short: string; color: string }> = {
   'home-assistant': { short: 'HA', color: '#C7A24E' },
   [LIVE_HA_ID]: { short: 'HA Live', color: '#41bd84' },
   [LIVE_TUYA_ID]: { short: 'Tuya Live', color: '#ff5b00' },
+  [LIVE_ONVIF_ID]: { short: 'ONVIF Live', color: '#8f7cff' },
   [LIVE_GOVEE_ID]: { short: 'Govee Live', color: '#4a9dff' },
   [LIVE_SB_ID]: { short: 'SwitchBot Live', color: '#e05a4e' },
   mqtt: { short: 'MQTT', color: '#16a766' },
@@ -203,10 +277,12 @@ function RoomSelect({ device, rooms, currentRoomId, onAssign, onClear }: {
   )
 }
 
-function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggle, onAssign, onClear }: {
+function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggle, onPtz, onAssign, onClear }: {
   device: Device; flash: boolean; commandPhase?: CommandPhase
   rooms: { id: string; name: string }[]; currentRoomId?: string
-  onToggle: (d: Device) => void; onAssign: (roomId: string) => void; onClear: () => void
+  onToggle: (d: Device) => void
+  onPtz: (d: Device, x: number, y: number, zoom?: number) => void
+  onAssign: (roomId: string) => void; onClear: () => void
 }) {
   const src = SOURCE[device.connectorId] ?? { short: device.connectorId, color: 'var(--muted)' }
   const onoff = findCapability(device.capabilities, 'OnOff')
@@ -223,6 +299,17 @@ function DeviceCard({ device, flash, commandPhase, rooms, currentRoomId, onToggl
         <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full border shrink-0" style={{ borderColor: src.color, color: src.color }}>{src.short}</span>
       </div>
       <div className="flex flex-wrap gap-1.5">{device.capabilities.map((c, i) => <CapChip key={i} cap={c} />)}</div>
+      {device.category === 'camera' && device.metadata?.ptz === 'true' && (
+        <div className="mt-2.5 flex items-center gap-1">
+          <button onClick={() => onPtz(device, -0.5, 0)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera links"><ChevronLeft size={14} /></button>
+          <button onClick={() => onPtz(device, 0, 0.5)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera hoch"><ChevronUp size={14} /></button>
+          <button onClick={() => onPtz(device, 0, -0.5)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera runter"><ChevronDown size={14} /></button>
+          <button onClick={() => onPtz(device, 0.5, 0)} className="btn btn-sm btn-ghost btn-icon" aria-label="Kamera rechts"><ChevronRight size={14} /></button>
+          <button onClick={() => onPtz(device, 0, 0, -0.5)} className="btn btn-sm btn-ghost btn-icon" aria-label="Zoom heraus"><ZoomOut size={14} /></button>
+          <button onClick={() => onPtz(device, 0, 0, 0.5)} className="btn btn-sm btn-ghost btn-icon" aria-label="Zoom hinein"><ZoomIn size={14} /></button>
+          <button onClick={() => onPtz(device, 0, 0, 0)} className="btn btn-sm btn-ghost text-[10px]" aria-label="Kamera stoppen">Stop</button>
+        </div>
+      )}
       <div className="mt-2.5 flex items-center justify-between gap-2">
         {(writableOnOff || writableLock) ? (
           <button onClick={() => onToggle(device)} className={`spring-press text-[11px] px-2.5 py-1 rounded-md border border-[color:var(--border)] hover:border-[color:var(--accent)] transition-colors ${phaseClass}`}>
@@ -526,7 +613,112 @@ function CloudBrandsCard({ sessions, busy, onConnect, onDisconnect }: {
   )
 }
 
-type WizardSource = 'ha-live' | 'tuya-live' | 'sim'
+/**
+ * Live ONVIF connection. Credentials are sent only to the configured local
+ * bridge; the camera password is intentionally not persisted by the UI.
+ */
+function RealOnvifCard({ session, busy, onConnect, onDisconnect }: {
+  session?: TwinSession
+  busy: boolean
+  onConnect: (cfg: OnvifLiveConfig) => void
+  onDisconnect: () => void
+}) {
+  const saved = useMemo(() => loadOnvifConfig(), [])
+  const [bridgeUrl, setBridgeUrl] = useState(saved.bridgeUrl)
+  const [bridgeToken, setBridgeToken] = useState(saved.bridgeToken)
+  const [cameraId, setCameraId] = useState(saved.cameraId)
+  const [cameraName, setCameraName] = useState(saved.cameraName)
+  const [host, setHost] = useState(saved.host)
+  const [port, setPort] = useState(String(saved.port))
+  const [username, setUsername] = useState(saved.username)
+  const [password, setPassword] = useState(saved.password)
+  const connected = session?.health.status === 'connected'
+  const active = !!session && session.health.status !== 'disconnected'
+  const canConnect = bridgeUrl.trim().length > 8 && host.trim().length > 6 && username.trim().length > 0 && password.length > 0
+
+  return (
+    <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--bg)] p-3.5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'color-mix(in srgb, #8f7cff 16%, transparent)', color: '#8f7cff' }}><Video size={16} /></span>
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium truncate">ONVIF Kamera <span className="text-[10px] uppercase tracking-wide ml-1" style={{ color: '#8f7cff' }}>Live</span></div>
+            <StatusDot session={session} />
+          </div>
+        </div>
+        {active && (
+          <button onClick={onDisconnect} disabled={busy} className="btn btn-sm btn-ghost inline-flex items-center gap-1.5 shrink-0">
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <Unplug size={13} />} Trennen
+          </button>
+        )}
+      </div>
+
+      {!connected && (
+        <div className="space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Bridge-URL</span>
+              <input value={bridgeUrl} onChange={(e) => setBridgeUrl(e.target.value)} placeholder="http://127.0.0.1:8787" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Kamera-IP</span>
+              <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="192.168.0.107" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">ONVIF-Port</span>
+              <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" placeholder="8000" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Benutzer</span>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" autoComplete="username" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">ONVIF-Passwort</span>
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" placeholder="Passwort" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block col-span-2">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Bridge-Token (optional, empfohlen)</span>
+              <input value={bridgeToken} onChange={(e) => setBridgeToken(e.target.value)} type="password" placeholder="OMEGA_ONVIF_BRIDGE_TOKEN" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <span className="text-[10px] text-[color:var(--muted)] leading-tight">Kamera-Passwort wird nicht im Browser gespeichert. Die Bridge spricht ONVIF im LAN.</span>
+            <button
+              onClick={() => onConnect({
+                bridgeUrl: bridgeUrl.trim(), bridgeToken: bridgeToken.trim(),
+                cameraId: cameraId.trim() || 'onvif-camera', cameraName: cameraName.trim() || 'ONVIF Kamera',
+                host: host.trim(), port: Number(port) || 8000, username: username.trim(), password,
+              })}
+              disabled={!canConnect || busy}
+              className="btn btn-sm btn-primary inline-flex items-center gap-1.5 shrink-0"
+            >
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Plug size={13} />} Verbinden
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Kamera-ID</span>
+              <input value={cameraId} onChange={(e) => setCameraId(e.target.value)} placeholder="arenti-outdoor" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Name</span>
+              <input value={cameraName} onChange={(e) => setCameraName(e.target.value)} placeholder="Arenti Außenkamera" className="mt-1 w-full text-[12px] px-2.5 py-1.5 rounded-md bg-[color:var(--surface-2)] border border-[color:var(--border)] outline-none focus:border-[color:var(--accent)]" />
+            </label>
+          </div>
+          {session?.health.status === 'error' && (
+            <div className="flex items-start gap-1.5 text-[11px] text-[#d8635f]"><AlertCircle size={12} className="mt-0.5 shrink-0" />{session.health.message ?? 'ONVIF-Verbindung fehlgeschlagen'}</div>
+          )}
+        </div>
+      )}
+
+      {connected && (
+        <div className="flex items-center gap-1.5 text-[11px] text-[#3fb27f]"><CheckCircle2 size={12} /> ONVIF live verbunden — PTZ-Befehle gehen direkt an die Kamera.</div>
+      )}
+    </div>
+  )
+}
+
+type WizardSource = 'ha-live' | 'tuya-live' | 'onvif-live' | 'sim'
 
 /**
  * ConnectDeviceWizard — the unified "Gerät verbinden" flow.
@@ -546,6 +738,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
   const [simId, setSimId] = useState<string>(ECOSYSTEM_SPECS[0]?.id ?? '')
   const [ha, setHa] = useState<HaLiveConfig>(loadHaConfig)
   const [tuya, setTuya] = useState<TuyaLiveConfig>(loadTuyaConfig)
+  const [onvif, setOnvif] = useState<OnvifLiveConfig>(loadOnvifConfig)
   const [connectorId, setConnectorId] = useState<string | null>(null)
   const [devices, setDevices] = useState<Device[]>([])
   const [bindings, setBindings] = useState<Record<string, string>>({})
@@ -566,6 +759,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
   const build = (): { descriptor: ConnectorDescriptor; id: string } | null => {
     if (source === 'ha-live') { saveHaConfig(ha); return { descriptor: makeLiveHaDescriptor(ha), id: LIVE_HA_ID } }
     if (source === 'tuya-live') { saveTuyaConfig(tuya); return { descriptor: makeLiveTuyaDescriptor(tuya), id: LIVE_TUYA_ID } }
+    if (source === 'onvif-live') { saveOnvifConfig(onvif); return { descriptor: makeLiveOnvifDescriptor(onvif), id: LIVE_ONVIF_ID } }
     const spec = ECOSYSTEM_SPECS.find((s) => s.id === simId)
     if (!spec) return null
     return { descriptor: { label: spec.label, kind: spec.id, make: () => createEcosystemConnector(spec) }, id: spec.id }
@@ -584,7 +778,9 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
     ? ha.url.trim().length > 3 && ha.token.trim().length > 20
     : source === 'tuya-live'
       ? tuya.clientId.trim().length > 8 && tuya.secret.trim().length > 8
-      : !!simId
+      : source === 'onvif-live'
+        ? onvif.bridgeUrl.trim().length > 8 && onvif.host.trim().length > 6 && onvif.username.trim().length > 0 && onvif.password.length > 0
+        : !!simId
 
   const STEP_LABELS = ['Quelle', 'Zugang', 'Verbinden', 'Räume']
 
@@ -619,6 +815,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
               {([
                 { k: 'ha-live', label: 'Home Assistant', sub: 'Echte Verbindung · WebSocket + Token', color: '#41bd84', icon: Server },
                 { k: 'tuya-live', label: 'Tuya Cloud', sub: 'Echte Verbindung · signierte OpenAPI', color: '#ff5b00', icon: Plug },
+                { k: 'onvif-live', label: 'ONVIF Kamera', sub: 'Echte Verbindung · LAN + PTZ', color: '#8f7cff', icon: Video },
                 { k: 'sim', label: 'Simuliertes Ökosystem', sub: '30 Marken · sofort, ohne Zugangsdaten', color: 'var(--accent)', icon: Sparkles },
               ] as const).map((o) => (
                 <button
@@ -672,6 +869,38 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
               <p className="text-[11px] text-[color:var(--muted)]">Jede Anfrage wird HMAC-SHA256-signiert. Nur lokal gespeichert.</p>
             </div>
           )}
+          {step === 1 && source === 'onvif-live' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block col-span-2">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">ONVIF-Bridge</span>
+                  <input value={onvif.bridgeUrl} onChange={(e) => setOnvif({ ...onvif, bridgeUrl: e.target.value })} placeholder="http://127.0.0.1:8787" className="input mt-1 !py-1.5 text-[12px]" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Kamera-IP</span>
+                  <input value={onvif.host} onChange={(e) => setOnvif({ ...onvif, host: e.target.value })} placeholder="192.168.0.107" className="input mt-1 !py-1.5 text-[12px]" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">ONVIF-Port</span>
+                  <input value={String(onvif.port)} onChange={(e) => setOnvif({ ...onvif, port: Number(e.target.value) || 8000 })} inputMode="numeric" placeholder="8000" className="input mt-1 !py-1.5 text-[12px]" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Benutzer</span>
+                  <input value={onvif.username} onChange={(e) => setOnvif({ ...onvif, username: e.target.value })} placeholder="admin" className="input mt-1 !py-1.5 text-[12px]" autoComplete="username" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Passwort</span>
+                  <input value={onvif.password} onChange={(e) => setOnvif({ ...onvif, password: e.target.value })} type="password" placeholder="ONVIF-Passwort" className="input mt-1 !py-1.5 text-[12px]" autoComplete="current-password" />
+                </label>
+                <label className="block col-span-2">
+                  <span className="text-[10px] uppercase tracking-wider text-[color:var(--muted)]">Bridge-Token (optional)</span>
+                  <input value={onvif.bridgeToken} onChange={(e) => setOnvif({ ...onvif, bridgeToken: e.target.value })} type="password" placeholder="OMEGA_ONVIF_BRIDGE_TOKEN" className="input mt-1 !py-1.5 text-[12px]" />
+                </label>
+              </div>
+              <p className="text-[11px] text-[color:var(--muted)]">Die Bridge spricht ONVIF direkt im LAN. Das Kamera-Passwort wird nicht in localStorage geschrieben. PTZ wird über den neutralen Camera-Command an den bestehenden Twin geroutet.</p>
+            </div>
+          )}
+
           {step === 1 && source === 'sim' && (
             <div className="space-y-3">
               <label className="block">
@@ -845,6 +1074,16 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
     try { await manager.removeConnector(LIVE_TUYA_ID) } finally { setBusy(null) }
   }
 
+  async function connectLiveOnvif(cfg: OnvifLiveConfig) {
+    saveOnvifConfig(cfg)
+    setBusy(LIVE_ONVIF_ID)
+    try { await manager.addConnector(makeLiveOnvifDescriptor(cfg)) } finally { setBusy(null) }
+  }
+  async function disconnectLiveOnvif() {
+    setBusy(LIVE_ONVIF_ID)
+    try { await manager.removeConnector(LIVE_ONVIF_ID) } finally { setBusy(null) }
+  }
+
   async function connectCloud(vendor: CloudVendor, cfg: BrandCloudConfig) {
     saveCloudConfig(cfg)
     setBusy(vendor)
@@ -860,6 +1099,17 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
   async function disconnectCloud(vendor: CloudVendor) {
     setBusy(vendor)
     try { await manager.removeConnector(vendor === 'govee' ? LIVE_GOVEE_ID : LIVE_SB_ID) } finally { setBusy(null) }
+  }
+
+  function onDevicePtz(d: Device, x: number, y: number, zoom = 0) {
+    const action = x === 0 && y === 0 && zoom === 0 ? 'stop' : 'ptz'
+    void manager.command({
+      deviceId: d.id,
+      capability: 'Camera',
+      payload: action === 'stop'
+        ? { action: 'stop' }
+        : { action, x, y, zoom, timeoutMs: 500 },
+    }, { timeoutMs: 2500 })
   }
 
   function onDeviceToggle(d: Device) {
@@ -972,6 +1222,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
               <div className="text-[10px] uppercase tracking-wider text-[color:var(--muted)] mb-2">Echte Verbindung · schaltet physisch</div>
               <RealHaCard session={sessionFor(LIVE_HA_ID)} busy={busy === LIVE_HA_ID} onConnect={connectLiveHa} onDisconnect={disconnectLiveHa} />
               <RealTuyaCard session={sessionFor(LIVE_TUYA_ID)} busy={busy === LIVE_TUYA_ID} onConnect={connectLiveTuya} onDisconnect={disconnectLiveTuya} />
+              <RealOnvifCard session={sessionFor(LIVE_ONVIF_ID)} busy={busy === LIVE_ONVIF_ID} onConnect={connectLiveOnvif} onDisconnect={disconnectLiveOnvif} />
               <CloudBrandsCard
                 sessions={{ govee: sessionFor(LIVE_GOVEE_ID), switchbot: sessionFor(LIVE_SB_ID) }}
                 busy={busy}
@@ -1053,7 +1304,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
                       <div key={room.id}>
                         <div className="flex items-center gap-2 mb-2"><h3 className="text-[13px] font-semibold">{room.name}</h3><span className="text-[11px] text-[color:var(--muted)]">{rd.length}</span></div>
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
-                          {rd.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={binding.roomOf.get(d.id)} onToggle={onDeviceToggle} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
+                          {rd.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={binding.roomOf.get(d.id)} onToggle={onDeviceToggle} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
                         </div>
                       </div>
                     )
@@ -1062,7 +1313,7 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
                     <div>
                       <div className="flex items-center gap-2 mb-2"><h3 className="text-[13px] font-semibold text-[color:var(--muted)]">Nicht zugeordnet</h3><span className="text-[11px] text-[color:var(--muted)]">{binding.unassigned.length}</span></div>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger">
-                        {binding.unassigned.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={undefined} onToggle={onDeviceToggle} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
+                        {binding.unassigned.map((d) => <DeviceCard key={d.id} device={d} flash={flashId === d.id} commandPhase={phaseFor(d)} rooms={roomOptions} currentRoomId={undefined} onToggle={onDeviceToggle} onPtz={onDevicePtz} onAssign={(rid) => manager.setBinding(d.id, rid)} onClear={() => manager.clearBinding(d.id)} />)}
                       </div>
                     </div>
                   )}
