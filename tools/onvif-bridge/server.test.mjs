@@ -10,7 +10,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   createBridge, sanitizeUri, withRtspCredentials, isUnsupportedOperation,
-  pickStreamMode, whepUrlFor, digestAuthHeader, fetchSnapshot,
+  pickStreamMode, whepUrlFor, digestAuthHeader, fetchSnapshot, BRIDGE_VERSION,
 } from './server.mjs'
 
 const PASSWORD = 'sup3r-s3cret-onvif'
@@ -129,6 +129,35 @@ describe('bridge — authentication', () => {
   it('runs open when no token is configured', async () => {
     const { bridge } = makeBridge()
     expect((await bridge.dispatch({ method: 'GET', pathname: '/health' })).status).toBe(200)
+  })
+
+  /**
+   * The bridge is started by hand and left running, so a live one is routinely
+   * older than the app talking to it. A build predating the live-view routes
+   * serves `/cameras` perfectly — the camera connects, profiles and PTZ appear
+   * — and 404s on `/stream` with its own "ONVIF-Route nicht gefunden", which
+   * the app then printed raw over the video area. `version`/`features` are how
+   * the app tells that apart from a broken bridge and can say "restart it".
+   */
+  it('declares its version and the routes it serves', async () => {
+    const { bridge } = makeBridge()
+    const res = await bridge.dispatch({ method: 'GET', pathname: '/health' })
+    expect(res.json.version).toBe(BRIDGE_VERSION)
+    expect(res.json.features).toMatchObject({
+      stream: true, snapshot: true, mjpeg: true, ptz: true, ticket: true,
+    })
+  })
+
+  it('serves every route it advertises', async () => {
+    // The contract the app relies on: a feature flag must not outlive its route.
+    const { bridge } = makeBridge()
+    await connect(bridge)
+    const stream = await bridge.dispatch({ method: 'GET', pathname: `/cameras/${CONFIG.id}/stream` })
+    expect(stream.status).not.toBe(404)
+    const ticket = await bridge.dispatch({
+      method: 'POST', pathname: `/cameras/${CONFIG.id}/stream/ticket`,
+    })
+    expect(ticket.status).not.toBe(404)
   })
 })
 
