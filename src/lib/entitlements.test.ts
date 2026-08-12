@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { hasFeature, resolveTier, storeTier, PLANS, FEATURE_TIER, DEV_EMAILS, isAdmin, tierLabel, ADMIN_EMAILS } from './entitlements'
+import { hasFeature, resolveTier, storePlanInterest, readPlanInterest, PLANS, FEATURE_TIER, DEV_EMAILS, isAdmin, tierLabel, ADMIN_EMAILS } from './entitlements'
 
 beforeEach(() => localStorage.clear())
 
@@ -23,21 +23,54 @@ describe('hasFeature', () => {
 })
 
 describe('resolveTier', () => {
-  it('defaults to free', () => {
+  it('gives everyone free', () => {
     expect(resolveTier(null)).toBe('free')
+    expect(resolveTier('someone@example.com')).toBe('free')
+    expect(resolveTier('')).toBe('free')
   })
-  it('reads a stored choice', () => {
-    storeTier('pro')
-    expect(resolveTier(null)).toBe('pro')
-  })
-  it('developers always resolve to max, regardless of the stored plan', () => {
-    storeTier('free')
+
+  it('gives the product owner max, in any casing', () => {
     expect(resolveTier(DEV_EMAILS[0])).toBe('max')
     expect(resolveTier(DEV_EMAILS[0].toUpperCase())).toBe('max')
   })
-  it('ignores garbage in storage', () => {
+
+  it('cannot be raised by anything the client can write', () => {
+    // The whole point. This used to be the subscription: clicking the Max card
+    // wrote `max` to localStorage and the app unlocked the Max feature set —
+    // and one console line did the same without ever seeing the pricing page.
+    for (const forged of ['max', 'pro', 'platinum', '{"tier":"max"}']) {
+      localStorage.setItem('omega.tier', forged)
+      expect(resolveTier(null)).toBe('free')
+      expect(resolveTier('someone@example.com')).toBe('free')
+    }
+  })
+
+  it('is not lowered for the owner by a stored choice either', () => {
+    storePlanInterest('free')
+    expect(resolveTier(DEV_EMAILS[0])).toBe('max')
+  })
+
+  it('leaves no paid feature reachable without the owner account', () => {
+    // The gate as the app actually asks it, not just the tier string.
+    const tier = resolveTier('someone@example.com')
+    const paid = (Object.keys(FEATURE_TIER) as (keyof typeof FEATURE_TIER)[])
+      .filter((f) => FEATURE_TIER[f] !== 'free')
+    expect(paid.length).toBeGreaterThan(0)
+    for (const f of paid) expect(hasFeature(tier, f)).toBe(false)
+  })
+})
+
+describe('plan interest', () => {
+  it('remembers what was clicked without granting it', () => {
+    storePlanInterest('max')
+    expect(readPlanInterest()).toBe('max')
+    expect(resolveTier('someone@example.com')).toBe('free')
+  })
+
+  it('reports nothing when the visitor never chose, or chose nonsense', () => {
+    expect(readPlanInterest()).toBeNull()
     localStorage.setItem('omega.tier', 'platinum')
-    expect(resolveTier(null)).toBe('free')
+    expect(readPlanInterest()).toBeNull()
   })
 })
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTier } from '@/hooks/useTier'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
@@ -56,6 +57,7 @@ import { MobilePlacement } from '@/components/editor/MobilePlacement'
 export function EditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { can } = useTier()
   useGlobalHotkeys()
 
   const doc = usePlanStore((s) => s.doc)
@@ -192,8 +194,8 @@ export function EditorPage() {
         onOpenExport={() => setExportOpen(true)}
         onOpenShare={() => setShareOpen(true)}
         onOpenDevices={() => setDevicesOpen(true)}
-        onOpenConnectors={() => setConnectorsOpen(true)}
-        onOpenVacuum={() => setVacuumOpen(true)}
+        onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
+        onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
       />
 
       {/* Toolbar — responsive, not overlapping */}
@@ -306,8 +308,12 @@ export function EditorPage() {
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {shareOpen && <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} planRowId={planRowId} />}
         {devicesOpen && <DeviceInspector onClose={() => setDevicesOpen(false)} />}
-        {connectorsOpen && <ConnectorManager onClose={() => setConnectorsOpen(false)} />}
-        {vacuumOpen && (
+        {/* Gated at the mount as well as at the opener: the opener is the
+            courteous path (it explains itself by going to the pricing page),
+            this is the one that actually holds if some other route ever sets
+            the flag. */}
+        {connectorsOpen && can('live-connectors') && <ConnectorManager onClose={() => setConnectorsOpen(false)} />}
+        {vacuumOpen && can('robot-map') && (
           <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0c0d10]"><div className="w-12 h-12 rounded-full border-2 border-[color:var(--border)] border-t-[color:var(--accent)] animate-spin" /></div>}>
             <VacuumRobotView onClose={() => setVacuumOpen(false)} />
           </Suspense>

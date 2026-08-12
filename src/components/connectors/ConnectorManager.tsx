@@ -11,6 +11,7 @@ import { usePlanStore } from '@/store/usePlanStore'
 import { twinManager, commandKey, type TwinSession, type ConnectorDescriptor, type CommandPhase } from '@/twin/twinManager'
 import { useFailureHaptics } from '@/hooks/useFailureHaptics'
 import { VoiceControl } from './VoiceControl'
+import { useTier } from '@/hooks/useTier'
 import { resolveRoomBinding } from '@/twin/binding'
 import { LiveFloorplan } from './LiveFloorplan'
 import { OMEGA_MODES } from '@/lib/constants'
@@ -1072,6 +1073,7 @@ function ConnectDeviceWizard({ roomOptions, onClose }: {
 }
 
 export function ConnectorManager({ onClose }: { onClose: () => void }) {
+  const { can } = useTier()
   const manager = twinManager()
   const doc = usePlanStore((s) => s.doc)
   const floor = doc ? (doc.floors.find((f) => f.id === doc.activeFloorId) ?? doc.floors[0]) : undefined
@@ -1241,7 +1243,9 @@ export function ConnectorManager({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <VoiceControl devices={devices} onRun={(cmds) => cmds.forEach((c) => void manager.command(c))} />
+          {can('voice-control') && (
+            <VoiceControl devices={devices} onRun={(cmds) => cmds.forEach((c) => void manager.command(c))} />
+          )}
           <button onClick={() => setWizardOpen(true)} className="btn btn-sm btn-primary inline-flex items-center gap-1.5">
             <Sparkles size={14} /> Gerät verbinden
           </button>
