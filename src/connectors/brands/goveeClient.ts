@@ -29,8 +29,13 @@
 
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
+import { errorBody, vendorHttpError } from './vendorErrors'
+import { trace, traceError } from '../diagnostics'
 
 const GOVEE_BASE = 'https://openapi.api.govee.com'
+
+/** Trace/diagnostics key for this vendor. */
+const TRACE = 'govee'
 
 /**
  * How often device state is re-read, in ms.
@@ -184,6 +189,45 @@ export function goveeEchoCapability(cmd: DeviceCommand): Capability | null {
   }
 }
 
+/** Govee's envelope around every answer. */
+interface GoveeEnvelope {
+  code?: number
+  msg?: string
+  message?: string
+  data?: GoveeDevice[]
+}
+
+/**
+ * Unwrap `/router/api/v1/user/devices`.
+ *
+ * The bug this exists for is Govee's half of the shared one: it answers **HTTP
+ * 200** when it rejects the API key and puts the real outcome in `code`, with
+ * no `data`. Reading `json.data ?? []` off that produced an empty array, so the
+ * connector connected successfully and listed nothing — no error anywhere, and
+ * a user staring at a valid-looking key with no way to tell a rejected request
+ * from an account that genuinely has no devices.
+ *
+ * SwitchBot does the same thing with `statusCode`; see `parseSwitchBotDevices`.
+ */
+export function parseGoveeDevices(json: GoveeEnvelope): GoveeDevice[] {
+  const code = json?.code
+  if (typeof code === 'number' && code !== 200 && code !== 0) {
+    const detail = json.msg ?? json.message
+    if (code === 401 || code === 403) {
+      throw new Error(
+        'Govee lehnt den API-Key ab — Key in der Govee-Home-App unter '
+        + '„Über uns → API-Key" neu anfordern.'
+        + (detail ? ` (${detail})` : ''),
+      )
+    }
+    if (code === 429) {
+      throw new Error('Govee drosselt die Anfragen (429) — Tageslimit erreicht, später erneut versuchen')
+    }
+    throw new Error(`Govee-API meldet Code ${code}${detail ? `: ${detail}` : ''}`)
+  }
+  return json?.data ?? []
+}
+
 /** Turn a failed `fetch` into a message that names the actual cause. */
 function transportError(e: unknown): Error {
   if (e instanceof TypeError) {
@@ -235,14 +279,36 @@ export function createGoveeClient(opts: GoveeClientOptions): BrandClient {
 
   const list = async (): Promise<Device[]> => {
     let res: Response
+    trace(TRACE, 'request', 'Geräteliste angefragt', { relayed: !!opts.baseUrl })
     try {
       res = await doFetch(`${base}/router/api/v1/user/devices`, { headers })
     } catch (e) {
-      throw transportError(e)
+      const err = transportError(e)
+      traceError(TRACE, 'request', err.message)
+      throw err
     }
-    if (!res.ok) throw new Error(`Govee-API ${res.status} — API-Key/Relay prüfen`)
-    const json = (await res.json()) as { data?: GoveeDevice[] }
-    const raw = json.data ?? []
+    if (!res.ok) {
+      const reason = vendorHttpError('Govee', res.status, await errorBody(res))
+      traceError(TRACE, 'request', reason, { status: res.status })
+      throw new Error(reason)
+    }
+
+    const envelope = (await res.json()) as GoveeEnvelope
+    let raw: GoveeDevice[]
+    try {
+      // Throws with Govee's own reason when the envelope says "no", even though
+      // the HTTP layer said 200.
+      raw = parseGoveeDevices(envelope)
+    } catch (e) {
+      traceError(TRACE, 'parse', e instanceof Error ? e.message : 'Antwort abgelehnt', {
+        code: envelope?.code ?? -1,
+      })
+      throw e
+    }
+    trace(TRACE, 'parse', 'Govee-Envelope gelesen', {
+      code: envelope?.code ?? 200,
+      devices: raw.length,
+    })
     for (const d of raw) skuOf.set(d.device, d.sku)
 
     // State is read per device and in parallel: serial reads would make the
@@ -269,7 +335,24 @@ export function createGoveeClient(opts: GoveeClientOptions): BrandClient {
 
   return {
     list,
-    probe: async () => { await list() },
+
+    /**
+     * Report an empty account as a *note*, not as silence — the same contract
+     * SwitchBot's probe already had. A rejected key now throws above, so this
+     * message only ever describes an account that really is empty.
+     */
+    probe: async () => {
+      const devices = await list()
+      trace(TRACE, 'auth', 'API-Key akzeptiert, Konto gelesen', { devices: devices.length })
+      if (devices.length === 0) {
+        return {
+          message: 'Verbunden, aber das Govee-Konto liefert keine Geräte — '
+            + 'in der Govee-Home-App prüfen, ob die Geräte dem Konto zugeordnet '
+            + 'und über die Cloud-API freigegeben sind.',
+        }
+      }
+      return undefined
+    },
 
     control: async (cmd) => {
       const sku = skuOf.get(cmd.deviceId)
