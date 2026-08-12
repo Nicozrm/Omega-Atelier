@@ -4270,7 +4270,7 @@ function speakerGrilleTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-  tex.anisotropy = 4
+  tex.anisotropy = activeProfile().anisotropy
   _grilleTex = tex
   return tex
 }
@@ -4332,7 +4332,7 @@ function ensureTileTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTex
     const t = new THREE.CanvasTexture(c)
     if (srgb) t.colorSpace = THREE.SRGBColorSpace
     t.wrapS = t.wrapT = THREE.RepeatWrapping
-    t.anisotropy = 8
+    t.anisotropy = activeProfile().anisotropy
     return t
   }
   _tileTex = mk(cv, true)
@@ -4387,9 +4387,8 @@ function _mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
-  // floors, walls and roofs crisp at grazing angles instead of blurring out.
-  t.anisotropy = 16
+  // Profile-driven, like every other sampling budget — see `lib/render/quality`.
+  t.anisotropy = activeProfile().anisotropy
   return t
 }
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).

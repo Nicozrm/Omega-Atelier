@@ -16,15 +16,23 @@
  */
 
 import * as THREE from 'three'
+import { activeProfile } from '@/lib/render/quality'
 
 export function mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1, 1]): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(cv)
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
-  // floors, walls and roofs crisp at grazing angles instead of blurring out.
-  t.anisotropy = 16
+  // Anisotropic filtering keeps brick, roofs and asphalt crisp at the grazing
+  // angles they are almost always seen under. It is not free: each level
+  // multiplies texture-fetch bandwidth, and these surfaces cover most of the
+  // screen in the dollhouse view.
+  //
+  // This used to ask for a flat 16 — "the GPU's maximum, whatever it is" — on
+  // every device, which is exactly what the render profile exists to prevent.
+  // A phone budgeted for 2 was paying eight times that on the largest surfaces
+  // in the frame.
+  t.anisotropy = activeProfile().anisotropy
   return t
 }
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).
