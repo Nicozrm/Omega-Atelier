@@ -30,6 +30,7 @@
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
 import { errorBody, vendorHttpError } from './vendorErrors'
+import { isRelayHealthResponse, RELAY_HEALTH_MESSAGE } from '../relayUrl'
 import { trace, traceError } from '../diagnostics'
 
 const GOVEE_BASE = 'https://openapi.api.govee.com'
@@ -210,6 +211,9 @@ interface GoveeEnvelope {
  * SwitchBot does the same thing with `statusCode`; see `parseSwitchBotDevices`.
  */
 export function parseGoveeDevices(json: GoveeEnvelope): GoveeDevice[] {
+  // Arrives as HTTP 200 with valid JSON, so every layer below would read it as
+  // a successful request that happened to contain no devices.
+  if (isRelayHealthResponse(json)) throw new Error(RELAY_HEALTH_MESSAGE)
   const code = json?.code
   if (typeof code === 'number' && code !== 200 && code !== 0) {
     const detail = json.msg ?? json.message

@@ -23,33 +23,17 @@
  */
 
 import { TUYA_ENDPOINTS, type TuyaRegion } from './transport'
-
-/** Vendor segments the relay itself understands — stripped if pasted in. */
-const VENDOR_SEGMENT = /\/(?:govee|switchbot|tuya-(?:eu|us|cn|in))\/?$/i
+import { relayBaseUrl } from '../relayUrl'
 
 /**
- * Base URL of the relay deployment, normalised.
+ * Re-exported from `connectors/relayUrl`, where it now lives.
  *
- * Accepts what a user actually pastes: with or without a scheme, with a
- * trailing slash, or with a vendor segment still attached because they copied
- * it out of a working `curl`.
+ * The normalisation was never Tuya-specific — it just happened to be written
+ * here, which is why Govee and SwitchBot went on building their relay URLs by
+ * string concatenation and quietly addressed the relay's health route whenever
+ * the pasted URL carried a query string. All three share it now.
  */
-export function relayBaseUrl(input: string): string {
-  const raw = input.trim()
-  if (!raw) return ''
-  // Relays are hosted, so https is the right default for a bare host.
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
-  let url: URL
-  try {
-    url = new URL(withScheme)
-  } catch {
-    return raw.replace(/\/+$/, '')
-  }
-  url.search = ''
-  url.hash = ''
-  url.pathname = url.pathname.replace(/\/+$/, '').replace(VENDOR_SEGMENT, '')
-  return url.toString().replace(/\/+$/, '')
-}
+export { relayBaseUrl }
 
 /**
  * The base URL the Tuya transport should talk to.

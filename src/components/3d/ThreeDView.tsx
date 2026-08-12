@@ -67,6 +67,7 @@ import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
 import { resetProceduralTextures } from '@/lib/proceduralTextures'
+import { applyPhotoTextures, resetPhotoTextures } from '@/lib/photoTextureLoader'
 import { canopyGeometry } from '@/lib/render/canopy'
 import {
   X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
@@ -577,6 +578,15 @@ function ensureMat(): MatCache {
   if (!_mat) {
     _mat = buildMaterials()
     if (!activeProfile().richMaterials) leanizeForPerf(_mat)
+    /*
+     * The photographic PBR maps in `public/textures/` are swapped onto these
+     * same instances once they decode. Deliberately not awaited: the canvas
+     * materials above are complete and correct on their own, so the first frame
+     * is immediate and the scene works with no files at all — this only ever
+     * improves what is already on screen. A missing or undecodable file leaves
+     * the canvas texture in place.
+     */
+    void applyPhotoTextures(_mat as unknown as Record<string, THREE.Material>)
   }
   return _mat
 }
@@ -606,6 +616,9 @@ function resetMaterialCaches(): void {
   // Same for the outdoor library: brick, roofs, asphalt and lawn read their
   // anisotropy and resolution once, at creation, and are cached module-wide.
   resetProceduralTextures()
+  // And the photographic sets, which bake the profile's anisotropy into every
+  // decoded texture and are skipped entirely below the detail-map threshold.
+  resetPhotoTextures()
 }
 
 /** Floor variants the UI can switch between. */
