@@ -99,7 +99,16 @@ function CapabilityRow({ cap, onChange }: { cap: Capability; onChange: (c: Capab
         <div className="flex items-center gap-3">
           {label}
           <Palette size={13} className="text-[color:var(--muted)]" />
-          <span className="w-5 h-5 rounded border border-[color:var(--border)]" style={{ background: cap.hex }} />
+          {/* Als einzige Fähigkeit hatte Farbe hier nur ein Farbfeld und den
+              Hex-Wert — anzeigend, nicht bedienbar. Schalten, Helligkeit,
+              Farbtemperatur, Schloss und Position hatten alle ein Bedienelement;
+              Farbe war schlicht vergessen worden. */}
+          <input
+            type="color" value={cap.hex}
+            aria-label="Farbe"
+            onChange={(e) => onChange({ ...cap, hex: e.target.value })}
+            className="h-5 w-8 cursor-pointer rounded border border-[color:var(--border)] bg-transparent p-0"
+          />
           <span className="text-[11px] tabular-nums text-[color:var(--muted)]">{cap.hex}</span>
         </div>
       )

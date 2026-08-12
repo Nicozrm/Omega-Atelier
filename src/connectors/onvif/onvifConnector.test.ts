@@ -14,9 +14,15 @@ const config = {
 
 describe('ONVIF connector — lifecycle and PTZ', () => {
   it('connects and discovers a neutral camera', async () => {
+    // `cameras` ist nicht optional-im-Sinne-von-egal: `connect()` läuft über
+    // genau diese Liste und ruft `transport.connect()` pro Eintrag auf. Ohne
+    // sie bleibt die simulierte Kamera auf `connected: false`, und
+    // `streaming` (= connected && stream) ist dann folgerichtig false.
+    // Die übrigen Tests hier übergeben sie; dieser hatte sie vergessen.
     const c = createOnvifConnector({
       id: 'onvif',
       transport: new SimulatedOnvifTransport([config]),
+      cameras: [config],
     })
     await c.connect()
     expect(c.health().status).toBe('connected')

@@ -67,3 +67,17 @@ enabled = true
 client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
 # skip_nonce_check nur beim impliziten Flow; der Default bleibt streng.
+
+# ── Edge Functions ────────────────────────────────────────────────────────
+#
+# `vendor-relay` ist das CORS-Relay für die Hersteller-Clouds. Es MUSS ohne
+# JWT-Prüfung laufen: der Aufruf kommt aus dem Browser mit den Hersteller-
+# Zugangsdaten des Nutzers, nicht mit einem Supabase-Token. Mit der
+# Standardeinstellung (verify_jwt = true) antwortet Supabase auf jede Anfrage
+# mit 401, bevor sie den Hersteller erreicht — im Browser sichtbar nur als
+# „Load failed", also exakt das Symptom, das man ohne Relay auch hätte.
+#
+# Das ist kein Sicherheitsloch: die Function trägt keine eigenen Rechte. Wer
+# sie aufruft, muss seine eigenen Hersteller-Zugangsdaten mitschicken.
+[functions.vendor-relay]
+verify_jwt = false
