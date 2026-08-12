@@ -76,6 +76,7 @@ src/
 ├── hooks/            useHotkeys · useRealtimePlan (Live-Cursor + Doc-Sync).
 ├── lib/              Reine Utilities & Engines: materials · lighting · solar ·
 │                     environment · modeState · planSchema (coerce/parse) ·
+│                     snapEngine (Fangpunkte des 2D-Editors) ·
 │                     supabase · chunkRecovery · utils …
 │                     Darunter `lib/render/` — die renderer-neutrale Hälfte der
 │                     3D-Darstellung (siehe §7). Reine Mathematik & Zuordnungen,
