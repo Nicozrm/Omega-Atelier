@@ -49,6 +49,11 @@ describe('every declared map exists on disk', () => {
     const onDisk: string[] = []
     for (const dir of readdirSync(resolve(ROOT, 'public', 'textures'), { withFileTypes: true })) {
       if (!dir.isDirectory()) continue
+      // `outdoor/` is the Blender-baked library, which owns this same check in
+      // `outdoorTextures.test.ts`. Each table is responsible for its own
+      // directory; sweeping both from here would make either one's additions
+      // fail the other's test.
+      if (dir.name === 'outdoor') continue
       for (const file of readdirSync(resolve(ROOT, 'public', 'textures', dir.name))) {
         onDisk.push(`${dir.name}/${file}`)
       }

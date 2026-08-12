@@ -100,3 +100,59 @@ The shared vocabulary lives in `omega/shapes.py` (`box`, `slab`, `cushion`,
 `omega/materials.py`, which mirrors the app's own material tokens so a generated
 piece sits in the same room as a procedural one without reading as a different
 art style.
+
+## Baking outdoor textures
+
+`bake.py` is the second half of the pipeline: it bakes the outdoor material
+library — roof tiles, klinker, facade render, lawn, asphalt, block paving,
+gravel — to tileable PBR images in `public/textures/outdoor/`.
+
+```bash
+blender --background --python tools/blender/bake.py -- --only lawn
+python3 tools/blender/bake.py --list
+```
+
+Four passes per surface: `diff` (DIFFUSE with only the colour pass, so no light
+is baked in), `nor` (tangent-space NORMAL from the graph's own bump), `rough`
+(straight off the BSDF input) and `bump` (the height field, routed through an
+Emission shader and baked as EMIT — Cycles has no height bake, and the app's
+outdoor materials drive `bumpMap`).
+
+### Seamless by construction
+
+Blender's noise is 3D and does not tile on a plane. The graphs map the UV square
+onto a **flat torus**
+
+```
+(cos 2πu, sin 2πu, cos 2πv)   with W = sin 2πv
+```
+
+and sample *4D* noise there, so opposite edges land on the same point and the
+result is periodic by construction — no offset-and-blend band, no mirrored half.
+`scale` therefore counts **features across one tile**; the helpers divide by 2π
+so the number means what it looks like.
+
+Brick-based surfaces tile natively — but **`rows` must be even**. Running bond
+shifts every other course by half a brick, so with an odd count the top edge
+carries the opposite parity to the bottom edge and the bond breaks at the wrap.
+
+### The bake checks itself
+
+Every pass is measured before it is written:
+
+- **Seam ratio** — the step across the wrap against the 99th percentile of
+  interior steps. A tiling texture scores below 1; the odd-row bug scored 5.03.
+  Recorded per map in `textures.json` and asserted by
+  `src/lib/outdoorTextures.test.ts`.
+- **Constant maps are not written at all.** A 512² JPEG of one number costs
+  bandwidth and a texture unit to say what a scalar says; the value goes in the
+  manifest and the app sets it directly. Lawn and gravel roughness are two.
+
+### How it reaches the screen
+
+`src/lib/proceduralTextures.ts` consults the baked library before drawing. Each
+surface is built once, cached module-wide and cloned per use, so replacing *what
+one surface is* upgrades the plan's own house, the generated neighbourhood and
+the cadastre buildings at once, without a call site changing. Until the images
+arrive the canvas drawing stands, which keeps the first frame immediate and the
+app working offline with no files at all.
