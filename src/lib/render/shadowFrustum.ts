@@ -64,3 +64,49 @@ export function shadowRadius(widthM: number, heightM: number): number {
 export function sunDistance(radius: number): number {
   return radius + 10
 }
+
+/** World size of one shadow texel, in metres. */
+export function shadowTexelSize(radius: number, mapSize: number): number {
+  return (2 * radius) / Math.max(1, mapSize)
+}
+
+/**
+ * Depth and normal bias for the sun's shadow map.
+ *
+ * Both used to be constants — `bias: -0.0002`, `normalBias: 0.02` — and a
+ * constant cannot be right here, because the error they correct is measured in
+ * *texels* and a texel is four times wider on `performance` than on `ultra`.
+ * With the frustum this scene uses (a ~24 m radius around the plan) one texel is
+ * 1.2 cm at 4096² and 4.7 cm at 1024², so the same 2 cm normal offset was under
+ * half a texel on the low profile — shadow acne across every sunlit wall — and
+ * nearly two texels on the high one, which detaches contact shadows from their
+ * casters.
+ *
+ * Deriving both from the texel size fixes both ends at once:
+ *
+ *  - **normalBias** pushes the depth lookup along the surface normal, so it has
+ *    to clear the worst-case lateral error of the PCF kernel. That is on the
+ *    order of one texel; 1.4 gives a margin for the filter width without
+ *    visibly lifting the shadow off the floor.
+ *  - **bias** is a constant depth offset in normalised units over the shadow
+ *    camera's near→far range, which is why it needs that range to be meaningful
+ *    at all. Half a texel of depth is enough once the normal offset carries the
+ *    slope-dependent part.
+ *
+ * Clamped at both ends: a tiny frustum must still bias enough to survive depth
+ * quantisation, and a huge one must not push shadows off their casters.
+ */
+export function shadowBiasFor(radius: number, mapSize: number): {
+  bias: number
+  normalBias: number
+  texelSize: number
+} {
+  const texelSize = shadowTexelSize(radius, mapSize)
+  // Depth range of the shadow camera, matching how `SunLight` sets near/far.
+  const depthRange = 2 * radius + 2
+  return {
+    texelSize,
+    normalBias: Math.max(0.01, Math.min(0.15, texelSize * 1.4)),
+    bias: -Math.max(0.00005, Math.min(0.0015, (texelSize * 0.5) / depthRange)),
+  }
+}

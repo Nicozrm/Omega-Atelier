@@ -48,6 +48,7 @@ import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
 import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
+import { exposureFor } from '@/lib/render/exposure'
 import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
 import { enableSpecularAA } from '@/lib/render/specularAA'
@@ -6877,6 +6878,11 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               sunColor={env.lighting.sun.color}
               span={sceneSpan}
               photoLook={photoLook}
+              // The tone map used to run at a fixed exposure of 1.0 at every
+              // hour, so noon clipped into the roll-off and night fell into the
+              // toe. Exposure now follows the world — partially, so the day
+              // cycle still reads. See `lib/render/exposure`.
+              exposure={exposureFor(env, { walkMode })}
               lite={preview}
             />
           </Canvas>

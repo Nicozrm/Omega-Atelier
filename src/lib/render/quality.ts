@@ -113,6 +113,25 @@ export interface RenderProfile {
   richMaterials: boolean
   /** Ceiling on simultaneously-lit dynamic point lights. */
   maxDynamicLights: number
+  /**
+   * How many of those point lights also cast shadows.
+   *
+   * The interior used to have none: the sun cast every shadow in the scene and
+   * contact darkening came from AO. That is defensible at noon and plainly
+   * wrong after dark, when the sun is gone and the only thing lighting the room
+   * is a lamp that casts nothing — a chair standing in a pool of light with no
+   * shadow under it is the single loudest "this is a render" tell an interior
+   * has.
+   *
+   * The reason it is affordable at all is `ShadowController`: shadow maps are
+   * on manual update, so a cube map costs six passes *when the world changes*,
+   * not six per frame. Kept small regardless, and constant per pool — the
+   * shadow-caster count is a shader define, so a varying one would recompile
+   * every material in the scene.
+   */
+  shadowCastingLights: number
+  /** Cube-map resolution per shadow-casting point light. */
+  pointShadowMapSize: number
   /** Mirror-like planar reflections on polished floors. */
   reflectiveFloor: boolean
 
@@ -187,6 +206,8 @@ const BASE: Omit<RenderProfile, 'id' | 'label' | 'hint'> = {
   anisotropy: 2,
   richMaterials: false,
   maxDynamicLights: 6,
+  shadowCastingLights: 0,
+  pointShadowMapSize: 512,
   reflectiveFloor: false,
   skyQuality: 0,
   godRays: false,
@@ -261,6 +282,8 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     anisotropy: 16,
     richMaterials: true,
     maxDynamicLights: 24,
+    shadowCastingLights: 2,
+    pointShadowMapSize: 1024,
     reflectiveFloor: true,
     skyQuality: 2,
     godRays: true,
@@ -298,6 +321,8 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     anisotropy: 8,
     richMaterials: true,
     maxDynamicLights: 16,
+    shadowCastingLights: 1,
+    pointShadowMapSize: 768,
     reflectiveFloor: true,
     skyQuality: 2,
     godRays: true,
