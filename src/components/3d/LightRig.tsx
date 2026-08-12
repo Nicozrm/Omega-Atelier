@@ -35,8 +35,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlacedDevice, PlacedFurniture, Room, ModeKey } from '@/types'
 import { deriveLightSources, type CategoryLookup } from '@/lib/lighting'
-import { selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
-import { readTier } from '@/lib/render/tier'
+import { selectLights, assignSlots, lightBudgetForProfile, type PointLightSpec } from '@/lib/render/lightBudget'
+import { activeProfile } from '@/lib/render/quality'
 import { twinManager, type TwinView } from '@/twin/twinManager'
 import { resolveRoomBinding, deriveRoomLiveState } from '@/twin/binding'
 import { lightIntensity } from '@/twin/reflection'
@@ -292,8 +292,7 @@ export function LightRig({ rooms, devices, furniture, mode, categoryOf, sizeOf }
   // Pool size changes only when the plan or mode changes — never while orbiting —
   // so shader programs survive interaction. Clamped to the sources that exist so
   // a two-lamp plan does not pay for eight.
-  const tier = readTier()
-  const budget = Math.min(lightBudgetForTier(tier), sources.length)
+  const budget = Math.min(lightBudgetForProfile(activeProfile().maxDynamicLights), sources.length)
 
   const lightRefs = useRef<Array<THREE.PointLight | null>>([])
   const slots = useRef<Slot[]>([])

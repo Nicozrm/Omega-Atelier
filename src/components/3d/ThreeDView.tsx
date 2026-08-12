@@ -47,6 +47,7 @@ import { readTier } from '@/lib/render/tier'
 import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
 import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
+import { enableSpecularAA } from '@/lib/render/specularAA'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, ContactShadows, PointerLockControls, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
@@ -6505,6 +6506,12 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // Profile-gated: PCSS costs roughly twice the shadow taps of plain PCF.
   const profile = activeProfile()
   useMemo(() => (profile.softShadows ? enablePcssShadows() : false), [profile.softShadows])
+  // Normal-variance roughness filtering, installed the same way and for the same
+  // reason (global chunk, must precede the first compile). Deliberately *not*
+  // profile-gated: it costs two derivatives and a square root, and the sparkle
+  // it removes is worst exactly where the budget is smallest — a phone at DPR 1
+  // has no supersampling to average the glitter away. See `specularAA`.
+  useMemo(() => enableSpecularAA(), [])
 
   // Resolution is no longer a fixed cap: `AdaptiveQuality` drops it while the
   // camera moves and supersamples past native once it settles, so the only
