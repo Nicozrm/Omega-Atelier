@@ -63,6 +63,13 @@ import { BlasterAsset3D } from './BlasterAsset3D'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
+import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
+import { resetProceduralTextures } from '@/lib/proceduralTextures'
+import {
+  X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
+  ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture,
+  CloudRain, Snowflake,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
 import { useTier } from '@/hooks/useTier'

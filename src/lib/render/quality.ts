@@ -125,19 +125,48 @@ export interface RenderProfile {
   volumetrics: boolean
 
   // ── Post ──────────────────────────────────────────────────
+  //
+  // Two kinds of knob live here and they scale in *opposite* directions — see
+  // the note above `RENDER_PROFILES`. Simulation (`ao`, `ssr`, `dof`) climbs
+  // with the tier; stylisation (`grain`, `sharpen`, `vignette`,
+  // `chromaticAberration`) falls, because every one of those is a fix for
+  // something a better-resolved frame no longer suffers from.
+  //
+  // Strengths are numbers with 0 meaning off, so a profile turns an effect
+  // down to nothing by the same mechanism it turns it down a little.
+
   /** Ambient occlusion: off · half-res · full-res. */
   ao: 'off' | 'half' | 'full'
+  /**
+   * AO darkening strength.
+   *
+   * Separate from `ao` because the *mode* is a cost decision and the *amount*
+   * is a look decision, and they pull apart at the top: SSR and a 512² IBL
+   * already carry real occlusion into the corners, so the approximation has to
+   * step back or the two stack into a smudge no light transport would produce.
+   */
+  aoIntensity: number
   /** Screen-space reflections (temporally resolved). */
   ssr: boolean
-  bloom: boolean
+  /** Bloom strength, 0 = off. */
+  bloomIntensity: number
   dof: boolean
   /** Film grain amount, 0 = off. */
   grain: number
-  /** Contrast-adaptive sharpening strength, 0 = off. */
+  /**
+   * Contrast-adaptive sharpening strength **at native resolution**, 0 = off.
+   *
+   * Read through `sharpenForResolve` rather than used directly: the value is
+   * what the frame needs when one render pixel lands on one display pixel, and
+   * supersampling removes the need it exists to serve.
+   */
   sharpen: number
   /** Procedural filmic 3D-LUT colour grade. */
   colorGrade: boolean
-  chromaticAberration: boolean
+  /** Vignette darkness at the corners, 0 = off. */
+  vignette: number
+  /** Chromatic-aberration offset in UV units, 0 = off. */
+  chromaticAberration: number
   /** MSAA sample count for the composer's input buffer (0 = off). */
   msaa: number
 }
@@ -163,13 +192,15 @@ const BASE: Omit<RenderProfile, 'id' | 'label' | 'hint'> = {
   godRays: false,
   volumetrics: false,
   ao: 'off',
+  aoIntensity: 0,
   ssr: false,
-  bloom: false,
+  bloomIntensity: 0,
   dof: false,
   grain: 0,
   sharpen: 0,
   colorGrade: false,
-  chromaticAberration: false,
+  vignette: 0.42,
+  chromaticAberration: 0,
   msaa: 0,
 }
 
@@ -178,6 +209,37 @@ const BASE: Omit<RenderProfile, 'id' | 'label' | 'hint'> = {
  * is what a discrete GPU can carry without dropping below a smooth frame,
  * because the expensive parts (supersampling, SSR, full-res AO) only run while
  * the camera is *still* — see `AdaptiveQuality`.
+ *
+ * ## Why the stylistic knobs go *down* as the tier goes up
+ *
+ * The obvious way to build this table is to turn everything up at `ultra`, and
+ * that is what it used to do: grain 0.016 → 0.028, sharpening 0.28 → 0.42,
+ * chromatic aberration off below `high` and on above it. The result was a top
+ * profile that looked *processed* rather than photographed — the effects were
+ * individually right and collectively a filter stack.
+ *
+ * The mistake is treating post-processing as one category. It is two:
+ *
+ *  - **Simulation** — AO, SSR, DOF, IBL, supersampling. These approximate light
+ *    transport the rasteriser cannot do directly. More of them is more physics,
+ *    so they climb with the budget. That part was never wrong.
+ *  - **Compensation** — sharpening, grain, vignetting, chromatic aberration.
+ *    None of these adds information. Sharpening restores acutance lost to the
+ *    resolve; grain dithers banding and gives a flat frame tactility; vignette
+ *    and CA are *lens defects* that read as "a camera took this". Each is a
+ *    remedy for a deficiency — and `ultra` has the least of every deficiency
+ *    they treat.
+ *
+ * Applied at 2.25× supersampling, the remedies become the artefacts. CAS on an
+ * already-oversampled edge re-introduces exactly the ringing the oversampling
+ * paid for. Grain sized in buffer pixels gets *finer* as resolution rises until
+ * it stops reading as silver halide and starts reading as sensor noise. A
+ * corner-fringing lens is not what an architectural photographer brings.
+ *
+ * So the ladder is inverted: `performance` gets the most stylisation because it
+ * has the most to hide, `ultra` gets barely any because it has nothing to hide
+ * and every gram of it costs realism. `sharpen` goes further and is scaled
+ * again at runtime by the live resolve — see `sharpenForResolve`.
  */
 export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
   ultra: {
@@ -204,13 +266,18 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     godRays: true,
     volumetrics: true,
     ao: 'full',
+    aoIntensity: 1.45,
     ssr: true,
-    bloom: true,
+    bloomIntensity: 0.3,
     dof: true,
-    grain: 0.028,
-    sharpen: 0.42,
+    // The floor of the ladder: just enough grain to dither an 8-bit gradient,
+    // a sharpen value that `sharpenForResolve` will take to ~0 once the still
+    // frame reaches its ceiling, and a lens with almost no defects left.
+    grain: 0.008,
+    sharpen: 0.16,
     colorGrade: true,
-    chromaticAberration: true,
+    vignette: 0.22,
+    chromaticAberration: 0.00012,
     msaa: 4,
   },
   high: {
@@ -236,12 +303,14 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     godRays: true,
     volumetrics: true,
     ao: 'half',
-    bloom: true,
+    aoIntensity: 1.8,
+    bloomIntensity: 0.36,
     dof: true,
-    grain: 0.022,
-    sharpen: 0.35,
+    grain: 0.013,
+    sharpen: 0.24,
     colorGrade: true,
-    chromaticAberration: true,
+    vignette: 0.29,
+    chromaticAberration: 0.00018,
     msaa: 4,
   },
   balanced: {
@@ -260,10 +329,12 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     maxDynamicLights: 10,
     skyQuality: 1,
     ao: 'half',
-    bloom: true,
-    grain: 0.016,
-    sharpen: 0.28,
+    aoIntensity: 2.1,
+    bloomIntensity: 0.44,
+    grain: 0.018,
+    sharpen: 0.3,
     colorGrade: true,
+    vignette: 0.35,
     msaa: 2,
   },
   performance: {
@@ -279,12 +350,51 @@ export const RENDER_PROFILES: Record<RenderProfileId, RenderProfile> = {
     anisotropy: 2,
     maxDynamicLights: 6,
     skyQuality: 1,
-    sharpen: 0.2,
+    // Top of the stylisation ladder: nothing here is simulated well enough for
+    // the remedies to get in the way, and at dpr 1.15 the sharpen survives the
+    // resolve scaling nearly intact — which is the point.
+    grain: 0.022,
+    sharpen: 0.34,
+    vignette: 0.42,
     msaa: 2,
   },
 }
 
 export const RENDER_PROFILE_ORDER: RenderProfileId[] = ['performance', 'balanced', 'high', 'ultra']
+
+/** Supersample factor at which sharpening is fully faded out. */
+const SHARPEN_FADE_AT = 1.6
+
+/**
+ * Scale a profile's sharpening down by how much the frame is oversampled.
+ *
+ * Sharpening exists to answer one question — *how much acutance did the resolve
+ * cost me?* — and `AdaptiveQuality` changes that answer several times a second.
+ * A profile value alone therefore cannot be right: the same 0.16 that rescues a
+ * moving frame at dpr 1.25 puts halos on the still frame at dpr 2.25, and the
+ * still frame is the one the user studies.
+ *
+ * The quantity that matters is not the render DPR but the *ratio* to what the
+ * display can actually show. Rendering at 2× on a Retina panel is 1:1 and still
+ * needs its sharpen; rendering at 2× on a 1× panel is genuine 4×-per-pixel
+ * supersampling and needs none. Hence:
+ *
+ *   ss = renderDpr / displayDpr    → 1 at native, >1 when oversampled
+ *
+ * faded linearly to zero at `SHARPEN_FADE_AT`. Undersampling (ss < 1, which is
+ * every profile while the camera moves on a Retina panel) does *not* push the
+ * value above the profile's own: below native resolution the image is missing
+ * detail rather than merely softened, and amplifying a frame that has already
+ * lost the signal only amplifies its aliasing.
+ */
+export function sharpenForResolve(base: number, renderDpr: number, displayDpr = 1): number {
+  if (!(base > 0)) return 0
+  if (!Number.isFinite(renderDpr) || !Number.isFinite(displayDpr) || displayDpr <= 0) return base
+  const ss = renderDpr / displayDpr
+  if (ss <= 1) return base
+  if (ss >= SHARPEN_FADE_AT) return 0
+  return base * (1 - (ss - 1) / (SHARPEN_FADE_AT - 1))
+}
 
 // ─────────────────────────────────────────────────────────────
 // Device probe

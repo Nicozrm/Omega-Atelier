@@ -5,6 +5,7 @@ import {
   UNKNOWN_DEVICE,
   scoreDevice,
   profileForScore,
+  sharpenForResolve,
   activeProfile,
   setRenderProfileChoice,
   renderProfileChoice,
@@ -128,6 +129,78 @@ describe('RENDER_PROFILES', () => {
       expect(p.label.length).toBeGreaterThan(0)
       expect(p.hint.length).toBeGreaterThan(0)
     }
+  })
+
+  /**
+   * The regression this exists to prevent has already happened once: every
+   * stylistic knob was turned *up* at `ultra` on the assumption that "maximum
+   * quality" means maximum of everything, and the top profile came out looking
+   * processed rather than photographed. None of these four adds information to
+   * the frame — each is a remedy for a deficiency that a better-resolved frame
+   * has less of, so each must fall as the tier rises.
+   */
+  it('scales stylisation down as the tier rises', () => {
+    const ids = RENDER_PROFILE_ORDER
+    for (let i = 1; i < ids.length; i++) {
+      const lo = RENDER_PROFILES[ids[i - 1]]
+      const hi = RENDER_PROFILES[ids[i]]
+      const why = `${hi.id} must not stylise more than ${lo.id}`
+      expect(hi.grain, why).toBeLessThanOrEqual(lo.grain)
+      expect(hi.sharpen, why).toBeLessThanOrEqual(lo.sharpen)
+      expect(hi.vignette, why).toBeLessThanOrEqual(lo.vignette)
+      // AO only compares where both tiers actually run it: `performance` has
+      // none, which is a cost decision rather than a point on this ladder.
+      if (lo.ao !== 'off' && hi.ao !== 'off') {
+        expect(hi.aoIntensity, why).toBeLessThanOrEqual(lo.aoIntensity)
+      }
+    }
+  })
+
+  it('keeps chromatic aberration a trace at best, and least at the top', () => {
+    // A lens defect: the better the glass, the less of it. Anything approaching
+    // the old 0.00045 is visible fringing rather than a photographic cue.
+    for (const p of Object.values(RENDER_PROFILES)) {
+      expect(p.chromaticAberration).toBeLessThan(0.0003)
+      expect(p.chromaticAberration).toBeGreaterThanOrEqual(0)
+    }
+    expect(RENDER_PROFILES.ultra.chromaticAberration)
+      .toBeLessThan(RENDER_PROFILES.high.chromaticAberration)
+  })
+})
+
+describe('sharpenForResolve', () => {
+  it('leaves a natively-resolved frame at the profile value', () => {
+    expect(sharpenForResolve(0.3, 1, 1)).toBeCloseTo(0.3, 6)
+    expect(sharpenForResolve(0.3, 2, 2)).toBeCloseTo(0.3, 6)
+  })
+
+  it('fades to nothing once the frame is supersampled', () => {
+    // ultra's settled frame on a 1× panel: 2.25 render / 1 display.
+    expect(sharpenForResolve(0.16, 2.25, 1)).toBe(0)
+    expect(sharpenForResolve(0.16, 1.6, 1)).toBe(0)
+  })
+
+  it('ramps monotonically between native and fully supersampled', () => {
+    let last = Infinity
+    for (let dpr = 1; dpr <= 1.7; dpr += 0.05) {
+      const v = sharpenForResolve(0.3, dpr, 1)
+      expect(v).toBeLessThanOrEqual(last + 1e-9)
+      expect(v).toBeGreaterThanOrEqual(0)
+      last = v
+    }
+  })
+
+  it('does not amplify an undersampled frame', () => {
+    // Motion on a Retina panel renders below native. Detail is missing there,
+    // not merely softened — sharpening it would only sharpen the aliasing.
+    expect(sharpenForResolve(0.3, 1.25, 2)).toBeCloseTo(0.3, 6)
+    expect(sharpenForResolve(0.3, 0.5, 2)).toBeCloseTo(0.3, 6)
+  })
+
+  it('stays off when the profile has it off, and survives a broken DPR', () => {
+    expect(sharpenForResolve(0, 1, 1)).toBe(0)
+    expect(sharpenForResolve(0.3, Number.NaN, 1)).toBe(0.3)
+    expect(sharpenForResolve(0.3, 2, 0)).toBe(0.3)
   })
 })
 
