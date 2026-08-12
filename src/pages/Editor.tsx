@@ -17,7 +17,7 @@ import { ModesPanel } from '@/components/modes/ModesPanel'
 import { WorkspaceRail, RailReopenTab, InspectorPanel, LibraryPanel } from '@/features/workspace'
 import { OnboardingTour } from '@/components/ui/OnboardingTour'
 import { ShortcutsHelp } from '@/components/ui/ShortcutsHelp'
-import { usePlanStore } from '@/store/usePlanStore'
+import { usePlanStore, loadLocalPlan } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
 import { useGlobalHotkeys } from '@/hooks/useHotkeys'
 import { useRealtimePlan } from '@/hooks/useRealtimePlan'
@@ -107,14 +107,26 @@ export function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planRowId])
 
-  // Bug #1 Fix: Load demo plan for /plan/new or /plan/local
+  /**
+   * Seed the editor when the store is empty — which is every direct navigation
+   * and every page reload, since the store lives in memory only.
+   *
+   * `/plan/local` **is** the local document, so it restores what was saved.
+   * Previously both routes built a fresh demo plan, and because the store
+   * debounce-writes every document back to `omega.plan.current`, that demo
+   * then overwrote the saved one: a plain browser refresh silently replaced the
+   * user's work with the demo flat. The same overwrite is why a plan's
+   * real-world anchor never survived a reload, so the aerial-photo ground and
+   * the cadastre neighbourhood were unreachable on this route.
+   *
+   * `/plan/new` keeps starting fresh — that is what it is for.
+   */
   useEffect(() => {
-    if (!doc && !planRowId) {
-      const demo = createDemoPlan()
-      loadDocument(demo, false)
-    }
+    if (doc || planRowId) return
+    const restored = id === 'local' ? loadLocalPlan() : null
+    loadDocument(restored ?? createDemoPlan(), false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, planRowId])
+  }, [doc, planRowId, id])
 
   // Auto-save: when authenticated and planRowId is set, debounce-save the doc
   // 1.5s after the last change. Skips local-only / new sessions.

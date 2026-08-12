@@ -37,6 +37,9 @@ import { SunLight } from './SunLight'
 import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import { SkyDome } from './SkyDome'
+import { Precipitation } from './Precipitation'
+import { PRECIP_LABEL, seasonalPrecip, type Precip } from '@/lib/precipitation'
+import { seasonFromDate } from '@/lib/season'
 import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
@@ -60,7 +63,7 @@ import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, type TextureBundle } from '@/lib/textures'
-import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture } from 'lucide-react'
+import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture, CloudRain, Snowflake } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
 import { useTier } from '@/hooks/useTier'
@@ -6103,9 +6106,10 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
   )
 }
 
-function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus }: {
+function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus, precip }: {
   env: EnvironmentState; floorVariant: FloorVariant; wallMaterialId: string; walkMode: boolean; envPreset: EnvPreset; showHouse: boolean;
   stackView: boolean; houseStyle: HouseStyle; residents: number; onResidentStatus?: (s: ResidentStatus) => void;
+  precip: Precip;
 }) {
   const doc = usePlanStore((s) => s.doc)
   const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
@@ -6138,6 +6142,10 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
           bakes into the reflections — so the view through the glazing and the
           sky mirrored in it can no longer be two unrelated images. */}
       <SkyDome env={env} span={Math.max(wM, hM)} />
+
+      {/* Weather in front of that sky. Off by default — this is a planning
+          tool, and rain has to be asked for rather than imposed. */}
+      {precip !== 'none' && <Precipitation kind={precip} span={Math.max(wM, hM)} />}
 
       {/* Environment lighting — ambient + hemisphere come from the environment
           model. The directional key uses the model's sun appearance; its
@@ -6431,6 +6439,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   const [photoLook, setPhotoLook] = useState(true)
   // Virtual residents: 0 = off, then 1 or 2 people walking their daily routine.
   const [residents, setResidents] = useState(0)
+  // Weather. Off by default and cycled by hand: this is a planning tool, and
+  // imposing rain on someone's living room would be a costume, not information.
+  // The first press picks what the season would actually bring.
+  const [precip, setPrecip] = useState<Precip>('none')
+  const cyclePrecip = () => setPrecip((p) =>
+    p === 'none' ? seasonalPrecip(seasonFromDate(new Date().getMonth() + 1))
+      : p === 'rain' ? 'snow' : 'none')
   const [residentStatus, setResidentStatus] = useState<ResidentStatus | null>(null)
   const compassNeedleRef = useRef<HTMLDivElement | null>(null)
   // Cinematic camera: every move is an eased AAA-style flight (presets, room
@@ -6803,7 +6818,7 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
             <CompassTracker needle={compassNeedleRef} />
             <CaptureHelper captureRef={captureRef} />
             {!walkMode && <CinematicDirector req={flyReq} hud={tourHud} onTourEnd={endTour} />}
-            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} />
+            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} precip={precip} />
             <PostFX
               walkMode={walkMode}
               sunDirection={env.sun.direction}
@@ -6962,6 +6977,17 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               {canStack ? <Layers size={15} /> : <Lock size={15} />}
             </button>
           )}
+          {/* Wetter — aus · Regen · Schnee. Der erste Druck nimmt, was die
+              Jahreszeit ohnehin brächte. */}
+          <button
+            onClick={cyclePrecip}
+            title={`Wetter: ${PRECIP_LABEL[precip]}${precip === 'none' ? ' — klicken für Niederschlag' : ''}`}
+            className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
+              precip !== 'none' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
+            }`}
+          >
+            {precip === 'snow' ? <Snowflake size={15} /> : <CloudRain size={15} />}
+          </button>
           {/* Bau-Studio — construction · stone colour · roof shape · roof colour */}
           {!walkMode && showHouse && (
             <div className="relative">
