@@ -252,6 +252,9 @@ def main() -> int:
             f"{maps:16s} seam {seam:.2f}{const}"
         )
 
+    # Same pruning as the other two builders.
+    manifest = {k: v for k, v in manifest.items() if k in surfaces.SURFACES}
+
     with open(MANIFEST, "w") as fh:
         json.dump(
             {
