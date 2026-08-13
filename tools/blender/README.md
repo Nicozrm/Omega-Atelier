@@ -156,3 +156,49 @@ one surface is* upgrades the plan's own house, the generated neighbourhood and
 the cadastre buildings at once, without a call site changing. Until the images
 arrive the canvas drawing stands, which keeps the first frame immediate and the
 app working offline with no files at all.
+
+## Vegetation
+
+`plants.py` builds the trees in `public/models/env/`:
+
+```bash
+blender --background --python tools/blender/plants.py -- --only tree-birch
+python3 tools/blender/plants.py --list
+```
+
+The procedural trees in the neighbourhood are cone stacks and canopy blobs on a
+plain six-sided cylinder. The canopies were already irregular; the *trunks* were
+not, and a tree with no branch structure reads as a lollipop. These add a tapered
+stem that runs up **into** the crown and limbs that end **inside** it — the first
+attempt stopped both short and left the canopy hovering over an umbrella frame.
+
+The budget shapes everything: a neighbourhood plants hundreds and `Static` merges
+them, so a triangle here is paid a few hundred times over. 124–368 triangles
+each, 32 KB for the set. The main crown gets subdivision 2 because it carries the
+silhouette; the satellites that break its outline stay at 1.
+
+### Two heights, one ratio
+
+The world model scales a tree by a factor where 1 means "the procedural tree of
+this kind at its natural size", and those natural sizes differ per kind. So the
+registry records both the model's authored height and the procedural height it
+stands in for, and renders at their ratio. Getting this wrong would silently
+rescale every tree in the scene, which is why `plantRegistry.test.ts` pins it.
+
+Kinds with no model — olive, palm — keep their procedural form. That is a
+supported outcome, not a gap.
+
+### Only geometry comes from the file
+
+The neighbourhood tints foliage by season and daylight: snow, autumn, dusk. A
+clone keeping the file's baked greens would sit at high summer through a
+snowstorm, so `PlantModelImpl` reassigns every mesh the scene's own foliage and
+bark materials. Geometry is shared by reference across clones, so a street of
+trees costs little beyond its nodes.
+
+### Manifests are pruned, not just merged
+
+All three builders drop records for assets that no longer exist. Merging alone
+let a removed builder keep its manifest entry forever, and the app's conformance
+test then hunted for a file nothing builds — which is exactly what happened when
+`shrub` was dropped.

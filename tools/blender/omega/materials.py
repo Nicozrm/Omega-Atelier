@@ -32,6 +32,13 @@ PALETTE: dict[str, tuple[str, float, float]] = {
     "glass_dark": ("#31353c", 0.15, 0.25),
     "linen": ("#ded6c6", 0.96, 0.0),
     "slate": ("#5c6068", 0.7, 0.0),
+    # Vegetation. Deliberately desaturated: a neighbourhood of fully saturated
+    # greens reads as a toy, and these sit next to the baked lawn.
+    "lawn_green": ("#5c8646", 0.93, 0.0),
+    "conifer_green": ("#3f6b4a", 0.94, 0.0),
+    "hedge_green": ("#4d7440", 0.95, 0.0),
+    "birch_leaf": ("#7ba65a", 0.93, 0.0),
+    "birch_bark": ("#d8d5cc", 0.82, 0.0),
 }
 
 

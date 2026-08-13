@@ -116,6 +116,10 @@ def main() -> int:
         record["size"] = [round(v, 4) for v in asset.size]
         manifest[asset.asset_id] = record
 
+    # Same pruning as the other two builders: a removed piece must not keep its
+    # manifest record, or the registry test hunts for a file nothing builds.
+    manifest = {k: v for k, v in manifest.items() if k in pieces.REGISTRY}
+
     with open(MANIFEST, "w") as fh:
         json.dump(
             {

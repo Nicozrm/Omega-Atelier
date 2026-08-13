@@ -33,6 +33,8 @@ import {
   type Surface,
 } from '@/lib/proceduralTextures'
 import { canopyGeometry } from '@/lib/render/canopy'
+import { PlantModel } from './PlantModel'
+import { hasPlant } from '@/assets/plantRegistry'
 import { seasonPalette, snowed, mixHex, type Season } from '@/lib/season'
 import type { DayPhase } from '@/lib/environment'
 import {
@@ -425,6 +427,38 @@ function tree(key: string, kind: TreeKind, at: Vec2, scale: number, mats: MatBag
   const gw = 0.82 + h(31) * 0.38
   const gh = 0.84 + h(37) * 0.36
   const shape: [number, number, number] = [gw, gh, gw]
+
+  /*
+   * A Blender-built silhouette where one exists, the procedural stack where it
+   * does not (olive, palm). The model is scaled so it occupies exactly the space
+   * the procedural tree of this kind and scale would have, and it wears this
+   * scene's foliage and bark materials — so season, snow and the sun still reach
+   * it. `procedural` below is both the fallback and the only path for the kinds
+   * with no model.
+   */
+  const procedural = proceduralTree(key, kind, at, s, mats, shape, spin, lean, h, fol)
+  if (hasPlant(kind)) {
+    return (
+      <group key={key} scale={shape} position={[at.x, GROUND_Y, at.z]} rotation={[0, spin, lean]}>
+        <PlantModel
+          kind={kind}
+          scale={s}
+          materials={{ foliage: fol(0), bark: kind === 'birch' ? m.trim : m.trunk }}
+          fallback={procedural}
+        />
+      </group>
+    )
+  }
+  return procedural
+}
+
+/** The primitive-built tree — fallback, and the only form for olive and palm. */
+function proceduralTree(
+  key: string, kind: TreeKind, at: Vec2, s: number, mats: MatBag,
+  shape: [number, number, number], spin: number, lean: number,
+  h: (n: number) => number, fol: (i: number) => THREE.Material,
+): React.ReactNode {
+  const { m } = mats
 
   switch (kind) {
     case 'conifer':
