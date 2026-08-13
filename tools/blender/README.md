@@ -196,9 +196,66 @@ snowstorm, so `PlantModelImpl` reassigns every mesh the scene's own foliage and
 bark materials. Geometry is shared by reference across clones, so a street of
 trees costs little beyond its nodes.
 
+## Street furniture
+
+`props.py` builds the kerbside pieces in `public/models/props/`:
+
+```bash
+blender --background --python tools/blender/props.py -- --only bench
+python3 tools/blender/props.py --list
+```
+
+Four pieces, and the shortlist is the interesting part. Everything at the kerb is
+drawn from boxes and cylinders, and most of it should stay that way: a bollard
+*is* a cylinder and a manhole *is* a disc, so a model of either buys nothing but
+bytes. These four are different — they appear in numbers, they are seen from
+close by, and the primitive version of each is visibly a stand-in:
+
+| prop | tris | why it earns a model |
+| --- | --- | --- |
+| `lamp-post` | 508 | The arm. A pole with a lump on top is a bollard; what makes a street lamp legible is the swan neck reaching over the carriageway. |
+| `bench` | 660 | The slats. Two solid boards make a plinth — the gaps are what the eye reads. |
+| `litter-bin` | 420 | The rim and lid. Without them a bin is a cylinder on a stick. |
+| `car` | 1400 | The taper. A cabin as wide as the body reads as a van, and the slab-plus-box version was the worst offender on the street. |
+
+The car is also *cheaper* than what it replaces: 1400 triangles in four materials
+against roughly 2400 in six for four `RoundedBox`es at smoothness 3.
+
+Fences are deliberately absent, for the reason the hedge model was dropped: a
+boundary is five boxes per segment, and a panel model repeated along every plot
+line multiplies that across the whole estate for a detail nobody looks at. The
+cheap version is the right version there.
+
+### Rotation stopped being decorative
+
+The procedural furniture was symmetric, so which way a piece faced never
+mattered and the placement logic used `seg.horizontal ? 0 : π/2` as a stand-in.
+A lamp with an arm, a bench with a back and a car with a bonnet all have a
+front, so `amenities.ts` now derives rotation from `seg.dir` — `faceAlong` for
+things that run with the street, `faceAcross` for things that look at it. That
+turned up a pre-existing bug: bus shelters faced the carriageway on streets
+running along x and away from it on streets running along z.
+
+### Placement rules
+
+Cars park in 6 m bays, nose to tail, on the side they are parked on, clear of
+junctions by 9 m, and never in the middle of a collector where the bus stop is.
+Occupancy is seeded and sparse, so a street is neither empty nor solid and looks
+the same after a reload. Bus stops get a bench and a bin, crossings get a bin.
+`amenities.test.ts` checks each of those as a geometric property rather than as a
+count.
+
 ### Manifests are pruned, not just merged
 
-All three builders drop records for assets that no longer exist. Merging alone
+All four builders drop records for assets that no longer exist. Merging alone
 let a removed builder keep its manifest entry forever, and the app's conformance
 test then hunted for a file nothing builds — which is exactly what happened when
 `shrub` was dropped.
+
+### One directory per registry
+
+`public/models/` is the catalog furniture, `public/models/env/` the vegetation,
+`public/models/props/` the street furniture. Each is owned by one registry with
+one test asserting that the directory holds exactly what the registry names.
+Sharing a directory would let a stale file in one set silently satisfy another
+set's test, which is the failure those tests exist to catch.

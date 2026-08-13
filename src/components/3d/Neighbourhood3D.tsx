@@ -36,6 +36,7 @@ import { canopyGeometry } from '@/lib/render/canopy'
 import { eavesDrop, gableSlope, hipRoofGeometry } from '@/lib/render/roofGeometry'
 import { PlantModel } from './PlantModel'
 import { hasPlant } from '@/assets/plantRegistry'
+import { PropModel, type PropMaterials } from './PropModel'
 import { seasonPalette, snowed, mixHex, type Season } from '@/lib/season'
 import type { DayPhase } from '@/lib/environment'
 import {
@@ -353,10 +354,35 @@ function buildMaterials(world: Neighbourhood, season: Season, daylight: number, 
       clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.4,
     }))
 
+  /*
+   * Role → scene material, for the Blender-built props.
+   *
+   * The models name their materials for the *role* the mesh plays, not for a
+   * colour, precisely so this table can exist: the estate tints its scenery by
+   * season and daylight, and a parked car takes its paint from the placement.
+   * Nothing new is built here — every entry points at a material the procedural
+   * version of the same prop already used, which is also what keeps `Static`
+   * merging props and boxes into the same draw call.
+   *
+   * One set per car colour, built once and kept: `PropModelImpl` memoises its
+   * clone on the material set's identity, so a fresh object per frame would
+   * re-clone every car on the street every frame.
+   */
+  const propRoles = (body: THREE.Material): PropMaterials => ({
+    body,
+    glass: m.glassDark,
+    metal: m.metal,
+    lens: m.lamp,     // emissive after dusk, like the procedural lantern
+    wood: m.trunk,
+    dark: m.dark,
+  })
+  const props = propRoles(m.dark)
+  const carProps = carBodies.map(propRoles)
+
   const all: THREE.Material[] = [
     ...Object.values(m), ...facades, ...roofs, ...foliage, ...foliageVars.flat(), ...carBodies,
   ]
-  return { m, facades, roofs, foliage, foliageVars, carBodies, textures, all, spec, sp }
+  return { m, facades, roofs, foliage, foliageVars, carBodies, props, carProps, textures, all, spec, sp }
 }
 
 /* ────────────────────────────── Mesh vocabulary ─────────────────────── */
@@ -1092,26 +1118,49 @@ function gardenFeature(
   }
 }
 
-/** A car body — shared by driveways, parking bays and moving traffic. */
+/**
+ * A car — shared by driveways, parking bays and moving traffic.
+ *
+ * The body is a Blender model now (`tools/blender/omega/props.py`). What it buys
+ * over the rounded boxes below is the *taper*: a car reads as a lower body with
+ * a narrower, shorter greenhouse set back on it, and a cabin the same width as
+ * the body reads as a van. It also costs less — 1400 triangles against roughly
+ * 2400 for four `RoundedBox`es at smoothness 3, in four materials rather than
+ * six, and `Static` merges a street of them by colour.
+ *
+ * The boxes stay as the fallback, so a missing or unloadable GLB costs the
+ * street its shoulders and never its traffic.
+ */
 export function car(
   key: string, at: Vec2, rot: number, body: THREE.Material, mats: MatBag, detail = true,
 ): React.ReactNode {
   const { m } = mats
+  // Same six colours the boxes used, addressed by the body material's index so
+  // the caller keeps choosing the paint.
+  const idx = Math.max(0, mats.carBodies.indexOf(body as THREE.MeshPhysicalMaterial))
   return (
     <group key={key} position={[at.x, 0, at.z]} rotation={[0, rot, 0]}>
-      <RoundedBox position={[0, 0.46, 0]} args={[1.84, 0.52, 4.3]} radius={0.14} smoothness={3} castShadow material={body} />
-      <RoundedBox position={[0, 0.88, -0.2]} args={[1.66, 0.5, 2.25]} radius={0.12} smoothness={3} castShadow material={body} />
-      <RoundedBox position={[0, 0.88, -0.2]} args={[1.68, 0.4, 2.05]} radius={0.1} smoothness={3} material={m.glassDark} />
-      {detail && [-1, 1].map((s) => (
-        <mesh key={`h${s}`} position={[s * 0.6, 0.54, 2.12]} material={m.sign}><boxGeometry args={[0.36, 0.1, 0.06]} /></mesh>
-      ))}
-      {detail && <mesh position={[0, 0.56, -2.12]} material={m.hydrant}><boxGeometry args={[1.46, 0.08, 0.06]} /></mesh>}
-      {([[-0.88, 1.32], [0.88, 1.32], [-0.88, -1.32], [0.88, -1.32]] as const).map(([wx, wz], i) => (
-        <group key={i} position={[wx, 0.33, wz]} rotation={[0, 0, Math.PI / 2]}>
-          <mesh castShadow material={m.dark}><cylinderGeometry args={[0.33, 0.33, 0.22, 12]} /></mesh>
-          {detail && <mesh position={[0, -Math.sign(wx) * 0.12, 0]} material={m.metal}><cylinderGeometry args={[0.19, 0.19, 0.04, 10]} /></mesh>}
-        </group>
-      ))}
+      <PropModel
+        id="car"
+        materials={mats.carProps[idx] ?? mats.props}
+        fallback={(
+          <>
+            <RoundedBox position={[0, 0.46, 0]} args={[1.84, 0.52, 4.3]} radius={0.14} smoothness={3} castShadow material={body} />
+            <RoundedBox position={[0, 0.88, -0.2]} args={[1.66, 0.5, 2.25]} radius={0.12} smoothness={3} castShadow material={body} />
+            <RoundedBox position={[0, 0.88, -0.2]} args={[1.68, 0.4, 2.05]} radius={0.1} smoothness={3} material={m.glassDark} />
+            {detail && [-1, 1].map((s) => (
+              <mesh key={`h${s}`} position={[s * 0.6, 0.54, 2.12]} material={m.sign}><boxGeometry args={[0.36, 0.1, 0.06]} /></mesh>
+            ))}
+            {detail && <mesh position={[0, 0.56, -2.12]} material={m.hydrant}><boxGeometry args={[1.46, 0.08, 0.06]} /></mesh>}
+            {([[-0.88, 1.32], [0.88, 1.32], [-0.88, -1.32], [0.88, -1.32]] as const).map(([wx, wz], j) => (
+              <group key={j} position={[wx, 0.33, wz]} rotation={[0, 0, Math.PI / 2]}>
+                <mesh castShadow material={m.dark}><cylinderGeometry args={[0.33, 0.33, 0.22, 12]} /></mesh>
+                {detail && <mesh position={[0, -Math.sign(wx) * 0.12, 0]} material={m.metal}><cylinderGeometry args={[0.19, 0.19, 0.04, 10]} /></mesh>}
+              </group>
+            ))}
+          </>
+        )}
+      />
     </group>
   )
 }
@@ -1208,10 +1257,18 @@ function furnitureNode(f: StreetFurniture, i: number, mats: MatBag): React.React
     case 'lamp':
       return (
         <group key={`f${i}`} position={p} rotation={[0, f.rotationY, 0]}>
-          <mesh position={[0, 0.05, 0]} material={m.lampPole}><cylinderGeometry args={[0.11, 0.14, 0.1, 8]} /></mesh>
-          <mesh position={[0, 1.9, 0]} castShadow material={m.lampPole}><cylinderGeometry args={[0.045, 0.06, 3.7, 8]} /></mesh>
-          <mesh position={[0, 3.68, 0]} material={m.lamp}><cylinderGeometry args={[0.07, 0.075, 0.14, 8]} /></mesh>
-          <mesh position={[0, 3.82, 0]} material={m.lampPole}><cylinderGeometry args={[0.1, 0.055, 0.16, 8]} /></mesh>
+          <PropModel
+            id="lamp-post"
+            materials={mats.props}
+            fallback={(
+              <>
+                <mesh position={[0, 0.05, 0]} material={m.lampPole}><cylinderGeometry args={[0.11, 0.14, 0.1, 8]} /></mesh>
+                <mesh position={[0, 1.9, 0]} castShadow material={m.lampPole}><cylinderGeometry args={[0.045, 0.06, 3.7, 8]} /></mesh>
+                <mesh position={[0, 3.68, 0]} material={m.lamp}><cylinderGeometry args={[0.07, 0.075, 0.14, 8]} /></mesh>
+                <mesh position={[0, 3.82, 0]} material={m.lampPole}><cylinderGeometry args={[0.1, 0.055, 0.16, 8]} /></mesh>
+              </>
+            )}
+          />
         </group>
       )
     case 'busStop':
@@ -1235,21 +1292,44 @@ function furnitureNode(f: StreetFurniture, i: number, mats: MatBag): React.React
       )
     case 'litterBin':
       return (
-        <group key={`f${i}`} position={p}>
-          <mesh position={[0, 0.55, 0]} castShadow material={m.dark}><cylinderGeometry args={[0.22, 0.19, 0.7, 10]} /></mesh>
-          <mesh position={[0, 0.28, 0]} material={m.lampPole}><cylinderGeometry args={[0.04, 0.04, 0.55, 6]} /></mesh>
+        <group key={`f${i}`} position={p} rotation={[0, f.rotationY, 0]}>
+          <PropModel
+            id="litter-bin"
+            materials={mats.props}
+            fallback={(
+              <>
+                <mesh position={[0, 0.55, 0]} castShadow material={m.dark}><cylinderGeometry args={[0.22, 0.19, 0.7, 10]} /></mesh>
+                <mesh position={[0, 0.28, 0]} material={m.lampPole}><cylinderGeometry args={[0.04, 0.04, 0.55, 6]} /></mesh>
+              </>
+            )}
+          />
         </group>
       )
     case 'bench':
       return (
         <group key={`f${i}`} position={p} rotation={[0, f.rotationY, 0]}>
-          <mesh position={[0, 0.45, 0]} castShadow material={m.trunk}><boxGeometry args={[1.7, 0.08, 0.5]} /></mesh>
-          <mesh position={[0, 0.72, -0.22]} rotation={[-0.25, 0, 0]} material={m.trunk}><boxGeometry args={[1.7, 0.08, 0.36]} /></mesh>
-          {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.72, 0.22, 0]} material={m.dark}><boxGeometry args={[0.08, 0.44, 0.46]} /></mesh>
-          ))}
+          <PropModel
+            id="bench"
+            materials={mats.props}
+            fallback={(
+              <>
+                <mesh position={[0, 0.45, 0]} castShadow material={m.trunk}><boxGeometry args={[1.7, 0.08, 0.5]} /></mesh>
+                <mesh position={[0, 0.72, -0.22]} rotation={[-0.25, 0, 0]} material={m.trunk}><boxGeometry args={[1.7, 0.08, 0.36]} /></mesh>
+                {[-1, 1].map((s) => (
+                  <mesh key={s} position={[s * 0.72, 0.22, 0]} material={m.dark}><boxGeometry args={[0.08, 0.44, 0.46]} /></mesh>
+                ))}
+              </>
+            )}
+          />
         </group>
       )
+    case 'parkedCar':
+      // The kerbside cars. `car()` also draws the driveway ones and the moving
+      // traffic, so all three go through the same model. It places on the road
+      // surface (y = 0) rather than on `GROUND_Y`, which is where the driveway
+      // cars already sit — a car parked 13 cm into the tarmac is a car sunk into
+      // the tarmac.
+      return car(`f${i}`, f.at, f.rotationY, mats.carBodies[(f.variant ?? 0) % mats.carBodies.length], mats)
     case 'signpost':
       return (
         <group key={`f${i}`} position={p} rotation={[0, f.rotationY, 0]}>
