@@ -39,6 +39,16 @@ PALETTE: dict[str, tuple[str, float, float]] = {
     "hedge_green": ("#4d7440", 0.95, 0.0),
     "birch_leaf": ("#7ba65a", 0.93, 0.0),
     "birch_bark": ("#d8d5cc", 0.82, 0.0),
+    # Props. These are *roles*: the scene reassigns them per instance (a parked
+    # car takes its colour from the placement), so the values here only decide
+    # how the model looks in a preview render.
+    "lamp_lens": ("#f6f0dc", 0.25, 0.0),
+    "car_body": ("#9aa3ad", 0.35, 0.35),
+    "car_glass": ("#2b3138", 0.1, 0.3),
+    "car_dark": ("#2a2c31", 0.55, 0.2),
+    "car_tyre": ("#1c1d20", 0.92, 0.0),
+    "car_lamp": ("#eef2f4", 0.2, 0.1),
+    "car_tail": ("#a8302c", 0.3, 0.1),
 }
 
 

@@ -14,7 +14,13 @@
 
 import { cityStyleSpec, type AmenityKind, type CityStyle } from './cityStyle'
 import { SeededRng, hashInts } from '@/lib/composer/rng'
-import { alongSegment, type Block, type StreetNetwork, type Vec2 } from './streetNetwork'
+import {
+  alongSegment,
+  type Block,
+  type StreetNetwork,
+  type StreetSegment,
+  type Vec2,
+} from './streetNetwork'
 import type { PlotUse } from './plots'
 
 export interface ParkingLot {
@@ -73,6 +79,7 @@ export interface ParkSpec {
 export type FurnitureKind =
   | 'lamp' | 'busStop' | 'hydrant' | 'litterBin' | 'bench' | 'signpost'
   | 'bollard' | 'manhole' | 'drain' | 'cabinet' | 'bikeStand' | 'crossing'
+  | 'parkedCar'
 
 export interface StreetFurniture {
   kind: FurnitureKind
@@ -80,6 +87,91 @@ export interface StreetFurniture {
   rotationY: number
   /** Bus stop names, street names — rendered as a small plate where it matters. */
   label?: string
+  /** Opaque variant index — the renderer picks a body colour from it. */
+  variant?: number
+}
+
+/** Kerbside parking bay length: a car plus room to get out of it. */
+const PARKING_BAY_M = 6.0
+/** No parking within this distance of a junction. */
+const JUNCTION_CLEARANCE_M = 9.0
+
+/*
+ * ## Which way a thing faces
+ *
+ * Rotation used to be decorative here, because everything at the kerb was drawn
+ * from boxes and cylinders and most of it was symmetric: a bollard has no front,
+ * and neither has a pole with a lump on top. The built models do — a lamp has an
+ * arm, a bench has a back, a car has a bonnet — so the two helpers below replace
+ * the `seg.horizontal ? 0 : π/2` shorthand that was standing in for them.
+ *
+ * Both derive from `seg.dir`, so they hold for a segment pointing any of the
+ * four ways rather than only for the two the shorthand happened to get right.
+ * The lateral convention is `alongSegment`'s: `+side` is the **right of travel**,
+ * the direction `(dir.z, −dir.x)`.
+ */
+
+/** Rotation that turns a model's front (+z) along the segment. */
+function faceAlong(seg: StreetSegment, side: number): number {
+  return Math.atan2(seg.dir.x, seg.dir.z) + (side > 0 ? 0 : Math.PI)
+}
+
+/**
+ * Rotation that turns a model's front (+z) **across** the street, from a thing
+ * standing `side` of the centre line back toward the carriageway — which is
+ * where a waiting passenger looks and where a street lamp has to reach.
+ */
+function faceAcross(seg: StreetSegment, side: number): number {
+  return Math.atan2(-side * seg.dir.z, side * seg.dir.x)
+}
+
+/**
+ * Cars parked at the kerb.
+ *
+ * A residential street with every car on a driveway and none at the kerb reads
+ * as a rendering, not as a street. The rules are the ones that actually govern
+ * where a car ends up:
+ *
+ *  - **In bays**, one car length apart, not at arbitrary offsets. Cars queue.
+ *  - **Nose to tail along the kerb**, so they face down the street rather than
+ *    across it, and on the side they are parked on.
+ *  - **Clear of junctions.** Parking up to the corner blocks sightlines, and it
+ *    is the first thing that looks wrong when it is missing.
+ *  - **Never on the middle of a collector**, where the bus stop is.
+ *
+ * Occupancy is sparse and seeded, so a street is neither empty nor solid, and
+ * the same street looks the same after a reload.
+ */
+function kerbsideParking(seg: StreetSegment, rng: SeededRng): StreetFurniture[] {
+  const out: StreetFurniture[] = []
+  const usable = seg.lengthM - 2 * JUNCTION_CLEARANCE_M
+  if (usable < PARKING_BAY_M) return out
+
+  const bays = Math.floor(usable / PARKING_BAY_M)
+  // Just inside the kerb line, so the car sits on the carriageway edge rather
+  // than up on the pavement.
+  const lateral = seg.widthM / 2 - 1.1
+  const collector = seg.kind === 'collector'
+  // A collector carries through traffic and its middle holds the bus stop.
+  const occupancy = collector ? 0.22 : 0.42
+
+  for (let i = 0; i < bays; i++) {
+    if (!rng.bool(occupancy)) continue
+    const distance = JUNCTION_CLEARANCE_M + (i + 0.5) * PARKING_BAY_M
+    const t = distance / seg.lengthM
+    if (collector && Math.abs(t - 0.5) < 0.12) continue // leave the stop clear
+    const side = rng.bool() ? 1 : -1
+    out.push({
+      kind: 'parkedCar',
+      at: alongSegment(seg, t, side * lateral),
+      // Nose down the street, and the two kerbs face opposite ways — cars park
+      // with the flow, so a row facing both ways is the tell that they were
+      // scattered rather than parked.
+      rotationY: faceAlong(seg, side),
+      variant: rng.int(0, 5),
+    })
+  }
+  return out
 }
 
 /**
@@ -293,9 +385,12 @@ export function streetFurniture(
       // Alternate sides so the light falls evenly across the carriageway.
       const side = i % 2 === 0 ? 1 : -1
       out.push({
+        // The column stands at the kerb and its arm reaches out over the
+        // carriageway — that overhang is what makes a street lamp read as one
+        // rather than as a bollard, and it is why the rotation matters now.
         kind: 'lamp',
         at: alongSegment(seg, t, side * kerb),
-        rotationY: seg.horizontal ? 0 : Math.PI / 2,
+        rotationY: faceAcross(seg, side),
       })
     }
 
@@ -314,11 +409,33 @@ export function streetFurniture(
       if (busSpacing > 150) {
         busSpacing = 0
         const side = stopIndex % 2 === 0 ? 1 : -1
+        const stopLateral = side * (seg.widthM / 2 + spec.street.sidewalkWidthM * 0.9)
+        // Toward the carriageway. This was `side > 0 ? π : 0`, which happens to
+        // point a shelter the right way on a street running along +x and the
+        // wrong way on one running along +z — invisible while the shelter was a
+        // symmetric box, obvious the moment a bench with a back stands under it.
+        const facing = faceAcross(seg, side)
         out.push({
           kind: 'busStop',
-          at: alongSegment(seg, 0.5, side * (seg.widthM / 2 + spec.street.sidewalkWidthM * 0.9)),
-          rotationY: side > 0 ? Math.PI : 0,
+          at: alongSegment(seg, 0.5, stopLateral),
+          rotationY: facing,
           label: stopNames[stopIndex % stopNames.length],
+        })
+        /*
+         * A shelter with nowhere to sit and nowhere to put a wrapper is not a
+         * bus stop. Both belong *to* the stop rather than scattered at random,
+         * and both face the carriageway the way someone waiting would.
+         */
+        const alongM = 2.4 / Math.max(seg.lengthM, 1)
+        out.push({
+          kind: 'bench',
+          at: alongSegment(seg, 0.5, stopLateral - side * 0.35),
+          rotationY: facing,
+        })
+        out.push({
+          kind: 'litterBin',
+          at: alongSegment(seg, 0.5 + alongM, stopLateral - side * 0.2),
+          rotationY: facing,
         })
         stopIndex++
       }
@@ -339,6 +456,8 @@ export function streetFurniture(
         rotationY: seg.horizontal ? 0 : Math.PI / 2,
       })
     }
+
+    out.push(...kerbsideParking(seg, rng))
   }
 
   // Zebra crossings and bollards at the junctions flagged during layout.
@@ -348,6 +467,8 @@ export function streetFurniture(
       for (const s of [-1, 1]) {
         out.push({ kind: 'bollard', at: { x: node.at.x + s * 5, z: node.at.z + 5.2 }, rotationY: 0 })
       }
+      // Where people stop and wait, litter collects.
+      out.push({ kind: 'litterBin', at: { x: node.at.x + 6.2, z: node.at.z + 5.2 }, rotationY: 0 })
     }
   }
 
