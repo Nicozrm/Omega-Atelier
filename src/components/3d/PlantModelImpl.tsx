@@ -35,6 +35,10 @@ export default function PlantModelImpl({ def, scale, materials }: {
       const name = Array.isArray(source) ? (source[0]?.name ?? '') : (source?.name ?? '')
       mesh.material = plantMaterialRole(name) === 'foliage' ? materials.foliage : materials.bark
       mesh.castShadow = true
+      // A tree also stands in other trees' shade — without this a crown stays
+      // uniformly lit while the ground beneath it is dark, which reads as a
+      // cut-out rather than as a plant.
+      mesh.receiveShadow = true
     })
     return root
   }, [gltf.scene, materials.foliage, materials.bark])

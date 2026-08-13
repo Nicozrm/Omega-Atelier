@@ -33,6 +33,7 @@ import {
   type Surface,
 } from '@/lib/proceduralTextures'
 import { canopyGeometry } from '@/lib/render/canopy'
+import { eavesDrop, gableSlope, hipRoofGeometry } from '@/lib/render/roofGeometry'
 import { PlantModel } from './PlantModel'
 import { hasPlant } from '@/assets/plantRegistry'
 import { seasonPalette, snowed, mixHex, type Season } from '@/lib/season'
@@ -550,83 +551,6 @@ function windowUnit(
 
 
 /**
- * Ein echtes Walmdach.
- *
- * Hier stand `coneGeometry(hypot(W, D) * 0.52, rise, 4)` — ein vierseitiger
- * Kegel, also eine **Vierkantpyramide**, um 45° gedreht. Das ist ein Zeltdach,
- * und ein Zeltdach gibt es nur über einem quadratischen Grundriss. Über einem
- * Rechteck ist es in beide Richtungen zugleich falsch: der Umkreisradius wird
- * aus der Diagonale gebildet, die Grundkante der Pyramide misst also
- * `hypot(W, D) · 0,52 · √2`. Auf einem 12 × 8 m Haus sind das 10,6 × 10,6 m —
- * über der langen Seite fehlen 1,4 m Dach, über der kurzen ragt es 1,3 m je
- * Seite hinaus. Beides sieht man sofort, und beides betraf jedes Walmdachhaus
- * der Nachbarschaft.
- *
- * Ein echtes Walmdach hat bei gleicher Neigung ringsum einen **First**: zwei
- * trapezförmige Hauptflächen über den langen Seiten und zwei dreieckige Walme
- * an den Enden. Der First läuft über die längere Achse und ist genau
- * `|W − D|` lang — bei quadratischem Grundriss wird er null, und dann ist es
- * tatsächlich ein Zeltdach. Der Sonderfall ergibt sich also von selbst, statt
- * der Normalfall zu sein.
- *
- * Die Wicklung wird nicht von Hand abgezählt, sondern je Dreieck geprüft: alle
- * Dachflächen zeigen nach oben, also ist `normal.y > 0` das Kriterium. Das ist
- * kürzer als vier Fälle durchzudenken und lässt sich nicht falsch abschreiben.
- */
-export function hipRoofGeometry(w: number, d: number, rise: number): THREE.BufferGeometry {
-  const alongX = w >= d
-  const ridgeLen = Math.abs(w - d)
-  const hw = w / 2, hd = d / 2
-
-  // Traufecken, im Uhrzeigersinn von vorne links.
-  const c: [number, number, number][] = [
-    [-hw, 0, -hd], [hw, 0, -hd], [hw, 0, hd], [-hw, 0, hd],
-  ]
-  const r1: [number, number, number] = alongX ? [-ridgeLen / 2, rise, 0] : [0, rise, -ridgeLen / 2]
-  const r2: [number, number, number] = alongX ? [ridgeLen / 2, rise, 0] : [0, rise, ridgeLen / 2]
-
-  /*
-   * Quadratischer Grundriss: der First fällt auf einen Punkt zusammen, und aus
-   * dem Walmdach wird ein Zeltdach. Ohne diesen Fall blieben zwei der sechs
-   * Dreiecke mit **null Fläche** stehen — sie haben keine Normale, `computeVertexNormals`
-   * bekommt einen Nullvektor, und die angrenzenden Ecken erben eine kaputte
-   * Schattierung. Unsichtbar im Standbild, sichtbar als Flackern an der
-   * Dachspitze, sobald sich das Licht bewegt.
-   */
-  const tris: [number, number, number][][] = ridgeLen < 1e-6
-    ? [[c[0], c[1], r1], [c[1], c[2], r1], [c[2], c[3], r1], [c[3], c[0], r1]]
-    : alongX
-    ? [
-      [c[0], c[1], r2], [c[0], r2, r1],   // Hauptfläche vorne
-      [c[2], c[3], r1], [c[2], r1, r2],   // Hauptfläche hinten
-      [c[3], c[0], r1],                    // Walm links
-      [c[1], c[2], r2],                    // Walm rechts
-    ]
-    : [
-      [c[1], c[2], r2], [c[1], r2, r1],   // Hauptfläche rechts
-      [c[3], c[0], r1], [c[3], r1, r2],   // Hauptfläche links
-      [c[0], c[1], r1],                    // Walm vorne
-      [c[2], c[3], r2],                    // Walm hinten
-    ]
-
-  const pos: number[] = []
-  for (const t of tris) {
-    const [a, b, e] = t
-    const ux = b[0] - a[0], uz = b[2] - a[2]
-    const vx = e[0] - a[0], vz = e[2] - a[2]
-    // Flächennormale zeigt bei richtiger Wicklung nach oben.
-    const ny = uz * vx - ux * vz
-    const ordered = ny > 0 ? t : [a, e, b]
-    for (const p of ordered) pos.push(p[0], p[1], p[2])
-  }
-
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.computeVertexNormals()
-  return g
-}
-
-/**
  * Ein Nachbarhaus.
  *
  * `realGround` ist die wichtigste Unterscheidung darin. Liegt unter der Szene
@@ -736,14 +660,15 @@ function houseNode(h: HouseSpec, mats: MatBag, rich: boolean, realGround = false
         </mesh>,
       )
     } else {
-      // Giebel quer zum Hauptdach — die zweite Firstlinie.
+      // Giebel quer zum Hauptdach — die zweite Firstlinie. Die Gruppe ist um
+      // 90° gedreht, lokales x läuft also über die **Tiefe** des Anbaus; die
+      // Sparrenlänge kam bisher aus der Breite und war damit die falsche Achse.
       const rh = Math.min(g.widthM, g.depthM) * 0.5
-      const sl = Math.hypot(g.widthM / 2 + 0.35, rh)
-      const a = Math.atan2(rh, g.widthM / 2 + 0.35)
+      const sl = gableSlope(g.depthM / 2, rh, 0.3)
       wr.push(
         <group key="wrg" position={[0, g.heightM, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <mesh position={[-g.depthM / 4, rh / 2, 0]} rotation={[0, 0, a]} castShadow={casts} material={roofMat}><boxGeometry args={[sl, 0.1, g.widthM + 0.6]} /></mesh>
-          <mesh position={[g.depthM / 4, rh / 2, 0]} rotation={[0, 0, -a]} castShadow={casts} material={roofMat}><boxGeometry args={[sl, 0.1, g.widthM + 0.6]} /></mesh>
+          <mesh position={[-sl.cx, sl.cy, 0]} rotation={[0, 0, sl.angle]} castShadow={casts} material={roofMat}><boxGeometry args={[sl.rafter, 0.1, g.widthM + 0.6]} /></mesh>
+          <mesh position={[sl.cx, sl.cy, 0]} rotation={[0, 0, -sl.angle]} castShadow={casts} material={roofMat}><boxGeometry args={[sl.rafter, 0.1, g.widthM + 0.6]} /></mesh>
           <mesh position={[0, rh + 0.02, 0]} material={m.ridge}><boxGeometry args={[0.22, 0.1, g.widthM + 0.62]} /></mesh>
         </group>,
       )
@@ -776,10 +701,16 @@ function houseNode(h: HouseSpec, mats: MatBag, rich: boolean, realGround = false
     const hw = W + OVH * 2, hd = D + OVH * 2
     // Firsthöhe aus der Neigung über die **kurze** Achse: dort spannen die
     // Sparren, und die Neigung ist ringsum dieselbe.
-    const rh = (Math.min(hw, hd) / 2) * Math.tan((h.roofPitchDeg * Math.PI) / 180)
+    const pitch = Math.tan((h.roofPitchDeg * Math.PI) / 180)
+    const rh = (Math.min(hw, hd) / 2) * pitch
     const ridgeLen = Math.abs(hw - hd)
+    // Die Fläche ist für den **überstehenden** Grundriss gebaut, sitzt an der
+    // Traufkante also auf ihrer eigenen Grundebene. Diese Ebene liegt um den
+    // Anstieg über den Überstand unter der Mauerkrone, sonst schwebt das ganze
+    // Dach ringsum über der Wand. Siehe `eavesDrop`.
+    const base = H - eavesDrop(OVH, pitch)
     parts.push(
-      <mesh key="rh" position={[0, H, 0]} castShadow={casts} material={roofMat}>
+      <mesh key="rh" position={[0, base, 0]} castShadow={casts} material={roofMat}>
         <primitive object={hipRoofGeometry(hw, hd, rh)} attach="geometry" />
       </mesh>,
     )
@@ -789,7 +720,7 @@ function houseNode(h: HouseSpec, mats: MatBag, rich: boolean, realGround = false
       parts.push(
         <mesh
           key="rhr"
-          position={[0, H + rh + 0.02, 0]}
+          position={[0, base + rh + 0.02, 0]}
           rotation={[0, hw >= hd ? Math.PI / 2 : 0, 0]}
           castShadow={casts}
           material={m.ridge}
@@ -807,17 +738,30 @@ function houseNode(h: HouseSpec, mats: MatBag, rich: boolean, realGround = false
     // Dach auf dem Mauerwerk auf wie ein Deckel auf einer Schachtel.
     const OVH = 0.45, VRG = 0.35
     const rh = Math.min(rW, rD) * (h.roof === 'mansard' ? 0.58 : 0.5)
-    const slope = Math.hypot(rW / 2 + OVH, rh)
-    const ang = Math.atan2(rh, rW / 2 + OVH)
+    // Sparrenlage aus `gableSlope`: aufliegend auf der Mauerkrone, überstehend
+    // nach aussen **und unten**. Vorher lief die Neigung erst an der Traufspitze
+    // auf Höhe null aus, wodurch das Dach an der Wand ~15 cm über der Mauerkrone
+    // schwebte — ein offener Schlitz ums ganze Haus.
+    const sl = gableSlope(rW / 2, rh, OVH)
+    const ang = sl.angle
     parts.push(
       <group key="rg" position={[0, H, 0]} rotation={[0, rYaw, 0]}>
-        <mesh position={[-rW / 4, rh / 2, 0]} rotation={[0, 0, ang]} castShadow={casts} material={roofMat}><boxGeometry args={[slope, 0.1, rD + VRG * 2]} /></mesh>
-        <mesh position={[rW / 4, rh / 2, 0]} rotation={[0, 0, -ang]} castShadow={casts} material={roofMat}><boxGeometry args={[slope, 0.1, rD + VRG * 2]} /></mesh>
+        <mesh position={[-sl.cx, sl.cy, 0]} rotation={[0, 0, ang]} castShadow={casts} material={roofMat}><boxGeometry args={[sl.rafter, 0.1, rD + VRG * 2]} /></mesh>
+        <mesh position={[sl.cx, sl.cy, 0]} rotation={[0, 0, -ang]} castShadow={casts} material={roofMat}><boxGeometry args={[sl.rafter, 0.1, rD + VRG * 2]} /></mesh>
         <mesh position={[0, rh + 0.02, 0]} castShadow={casts} material={m.ridge}><boxGeometry args={[0.24, 0.1, rD + VRG * 2 + 0.05]} /></mesh>
+        {/* Giebeldreiecke. `shapeGeometry` liegt in der xy-Ebene und schaut nach
+            +z, also war das hintere Dreieck ohne Drehung von aussen abgewandt
+            und wurde weggecullt: jedes Satteldachhaus stand hinten offen. Die
+            Drehung um π dreht die Normale mit, statt sie doppelseitig zu
+            übermalen — die Beleuchtung bleibt damit richtig. */}
         {[-1, 1].map((s) => {
           const sh = new THREE.Shape()
           sh.moveTo(-rW / 2, 0); sh.lineTo(rW / 2, 0); sh.lineTo(0, rh); sh.closePath()
-          return <mesh key={s} position={[0, 0, (s * rD) / 2]} material={facade}><shapeGeometry args={[sh]} /></mesh>
+          return (
+            <mesh key={s} position={[0, 0, (s * rD) / 2]} rotation={[0, s > 0 ? 0 : Math.PI, 0]} material={facade}>
+              <shapeGeometry args={[sh]} />
+            </mesh>
+          )
         })}
         {/* Ortgangbrett am Giebel — der helle Streifen, der die Dachkante gegen
             den Himmel absetzt. Ohne ihn verschmilzt das dunkle Dach mit dem
@@ -825,24 +769,24 @@ function houseNode(h: HouseSpec, mats: MatBag, rich: boolean, realGround = false
         {detail && [-1, 1].map((sz) => [-1, 1].map((sx) => (
           <mesh
             key={`vg${sz}${sx}`}
-            position={[sx * (rW / 4), rh / 2, (sz * (rD + VRG * 2)) / 2]}
+            position={[sx * sl.cx, sl.cy, (sz * (rD + VRG * 2)) / 2]}
             rotation={[0, 0, sx < 0 ? ang : -ang]}
             material={m.trim}
           >
-            <boxGeometry args={[slope, 0.16, 0.05]} />
+            <boxGeometry args={[sl.rafter, 0.16, 0.05]} />
           </mesh>
         )))}
         {/* Zinc gutters along both eaves plus a downpipe to the plinth. */}
         {detail && [-1, 1].map((s) => (
           <group key={`gt${s}`}>
-            <mesh position={[s * (rW / 2 + OVH - 0.06), -0.06, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.metal}><cylinderGeometry args={[0.055, 0.055, rD + VRG * 2, 8]} /></mesh>
-            <mesh position={[s * (rW / 2 + OVH - 0.04), -H / 2, rD * 0.34]} material={m.metal}><cylinderGeometry args={[0.04, 0.04, H, 8]} /></mesh>
+            <mesh position={[s * (sl.eaveX - 0.06), sl.eaveY - 0.03, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.metal}><cylinderGeometry args={[0.055, 0.055, rD + VRG * 2, 8]} /></mesh>
+            <mesh position={[s * (sl.eaveX - 0.04), -H / 2, rD * 0.34]} material={m.metal}><cylinderGeometry args={[0.04, 0.04, H, 8]} /></mesh>
           </group>
         ))}
         {h.solar && (
-          <group position={[-rW / 4, rh / 2 + 0.07, 0]} rotation={[0, 0, ang]}>
-            <mesh castShadow={casts} material={m.solarFrame}><boxGeometry args={[slope * 0.74, 0.05, rD * 0.52]} /></mesh>
-            <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[slope * 0.7, 0.02, rD * 0.48]} /></mesh>
+          <group position={[-sl.cx, sl.cy + 0.07, 0]} rotation={[0, 0, ang]}>
+            <mesh castShadow={casts} material={m.solarFrame}><boxGeometry args={[sl.rafter * 0.74, 0.05, rD * 0.52]} /></mesh>
+            <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[sl.rafter * 0.7, 0.02, rD * 0.48]} /></mesh>
           </group>
         )}
         {/* Gaube: liegt auf der Dachfläche und ist mitgeneigt, statt als
