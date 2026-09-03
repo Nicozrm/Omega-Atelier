@@ -3785,7 +3785,11 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       onClick={(e) => { e.stopPropagation(); setSelection({ type: 'furniture', ids: [f.id] }) }}
     >
       <group ref={groupRef}>
-        <GltfModel id={f.furnitureId} fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />} />
+        <GltfModel
+          id={f.furnitureId}
+          footprint={[w, h]}
+          fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
+        />
         {(isSelected || hovered) && (
           <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[Math.max(M(w), M(h)) / 2 + 0.06, Math.max(M(w), M(h)) / 2 + 0.075, 64]} />

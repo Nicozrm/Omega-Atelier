@@ -17,32 +17,48 @@
 export interface ModelDef {
   /** File name in `public/models/`, without the `.glb` extension. */
   file: string
-  /** Uniform scale applied to the loaded model (model units → metres). */
-  scale?: number
-  /** Position offset (m) applied after placement, e.g. to sit it on the floor. */
-  offset?: [number, number, number]
-  /** Y rotation (rad) so the model's front faces +Z, matching the placement. */
+  /**
+   * Y rotation (rad) so the model's *front* faces +Z.
+   *
+   * The build pipeline already squares up each asset's footprint and sits it on
+   * the floor, so this is only needed when a model is correctly proportioned but
+   * facing the wrong way — which no amount of measuring can detect.
+   */
   rotationY?: number
+  /**
+   * Escape hatch for an asset the pipeline cannot fit automatically (a lamp
+   * whose shade should not scale with its footprint, say). Normally omitted:
+   * the runtime fits the model to the footprint of the instance it is drawing,
+   * from the measured sizes in `modelSizes.ts`.
+   */
+  scale?: number
+  /** Position offset (m) applied after placement. Rarely needed — the pipeline
+   *  centres each asset on the origin and seats it on the floor. */
+  offset?: [number, number, number]
 }
 
 /**
  * id (furnitureId or deviceId) → local GLB.
  *
- * Current assets — all CC0 from Poly Haven (polyhaven.com), 1k textures,
- * packed to single GLBs via gltf-pipeline:
+ * Several ids may share one file: each instance is fitted to its own catalogue
+ * footprint at runtime, so the three plant ids need one asset between them
+ * rather than three scale factors.
+ *
+ * Assets are CC0 from Poly Haven (polyhaven.com), rebuilt by
+ * `scripts/assets/build.mjs`:
  *  - plant.glb        ← potted_plant_04
  *  - armchair.glb     ← modern_arm_chair_01
  *  - table-coffee.glb ← modern_coffee_table_01
  */
 export const MODELS: Record<string, ModelDef> = {
   'plant':        { file: 'plant' },
-  'plant-tall':   { file: 'plant', scale: 1.15 },
-  'plant-large':  { file: 'plant', scale: 1.3 },
-  'armchair':     { file: 'armchair', rotationY: Math.PI / 2 },
+  'plant-tall':   { file: 'plant' },
+  'plant-large':  { file: 'plant' },
+  'armchair':     { file: 'armchair' },
   'table-coffee': { file: 'table-coffee' },
   'chair-dining': { file: 'chair-dining' },
   'nightstand':   { file: 'nightstand' },
-  'vase-floor':   { file: 'vase-floor', scale: 2.1 },
+  'vase-floor':   { file: 'vase-floor' },
 }
 
 export function hasModel(id: string): boolean {
