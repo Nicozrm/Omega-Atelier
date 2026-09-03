@@ -1,0 +1,13 @@
+{
+  "generated": "2026-09-03T17:18:42.360Z",
+  "assets": [
+    {
+      "file": "mirror.glb",
+      "bytes": 183740,
+      "triangles": 14246,
+      "drawCalls": 1,
+      "textureBytes": 137486,
+      "savedPercent": 73.3
+    }
+  ]
+}

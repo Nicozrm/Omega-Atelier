@@ -19,7 +19,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // The ONVIF bridge is a Node service outside the Vite bundle, but its
+    // rules (RTSP never guessed, credentials never returned, PTZ without
+    // capability discovery) are exactly the ones worth pinning down.
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'tools/**/*.{test,spec}.mjs'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

@@ -35,8 +35,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { PlacedDevice, PlacedFurniture, Room, ModeKey } from '@/types'
 import { deriveLightSources, type CategoryLookup } from '@/lib/lighting'
-import { selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from '@/lib/render/lightBudget'
-import { readTier } from '@/lib/render/tier'
+import { selectLights, assignSlots, lightBudgetForProfile, type PointLightSpec } from '@/lib/render/lightBudget'
+import { activeProfile } from '@/lib/render/quality'
 import { twinManager, type TwinView } from '@/twin/twinManager'
 import { resolveRoomBinding, deriveRoomLiveState } from '@/twin/binding'
 import { lightIntensity } from '@/twin/reflection'
@@ -292,8 +292,25 @@ export function LightRig({ rooms, devices, furniture, mode, categoryOf, sizeOf }
   // Pool size changes only when the plan or mode changes — never while orbiting —
   // so shader programs survive interaction. Clamped to the sources that exist so
   // a two-lamp plan does not pay for eight.
-  const tier = readTier()
-  const budget = Math.min(lightBudgetForTier(tier), sources.length)
+  const profile = activeProfile()
+  const budget = Math.min(lightBudgetForProfile(profile.maxDynamicLights), sources.length)
+  /*
+   * The first `casters` slots also cast shadows.
+   *
+   * By slot index, not by rank, and that is the whole design: the number of
+   * shadow-casting point lights is compiled into every material's shader, so a
+   * set that changed with the ranking would recompile the scene several times a
+   * second. Slot assignment already keeps incumbents in place (`assignSlots`),
+   * so which lamps cast is stable in practice — and the ranking puts the
+   * nearest, highest-priority sources in the pool to begin with.
+   *
+   * Affordable only because `ShadowController` runs the shadow maps on manual
+   * update: a cube map is six passes per world change, not six per frame.
+   */
+  const casters = Math.min(profile.shadowCastingLights, budget)
+  const pointShadowSize = profile.pointShadowMapSize
+  /** Far plane for a lamp's cube shadow: past the largest source `distance`. */
+  const pointShadowFar = 9
 
   const lightRefs = useRef<Array<THREE.PointLight | null>>([])
   const slots = useRef<Slot[]>([])
@@ -393,11 +410,20 @@ export function LightRig({ rooms, devices, furniture, mode, categoryOf, sizeOf }
           key={`rig-${i}`}
           ref={(el: THREE.PointLight | null) => { lightRefs.current[i] = el }}
           intensity={0}
-          // Shadow casting stays off across the pool: interior point-light
-          // shadows would mean a cube-map render per light per frame, which is
-          // exactly the cost this rig exists to avoid. The sun casts the scene's
-          // real shadows; contact darkening comes from AO.
-          castShadow={false}
+          // Only the first few slots cast, and only on profiles that asked for
+          // it — see `casters` above. Everything else still relies on the sun
+          // for shadows and on AO for contact darkening, which is what the
+          // whole pool did before.
+          castShadow={i < casters}
+          shadow-mapSize-width={pointShadowSize}
+          shadow-mapSize-height={pointShadowSize}
+          // A lamp is a small source close to its surroundings, so the depth
+          // range is short and the bias can stay small — which is what keeps a
+          // chair leg's shadow attached to the chair leg.
+          shadow-camera-near={0.08}
+          shadow-camera-far={pointShadowFar}
+          shadow-bias={-0.0015}
+          shadow-normalBias={0.03}
         />
       ))}
     </>

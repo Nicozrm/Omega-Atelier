@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { lightScore, selectLights, assignSlots, lightBudgetForTier, type PointLightSpec } from './lightBudget'
+import { lightScore, selectLights, assignSlots, lightBudgetForProfile, type PointLightSpec } from './lightBudget'
+import { RENDER_PROFILES } from './quality'
 
 const spec = (over: Partial<PointLightSpec> & { key: string }): PointLightSpec => ({
   position: [0, 0, 0],
@@ -116,11 +117,24 @@ describe('selectLights', () => {
   })
 })
 
-describe('lightBudgetForTier', () => {
-  it('scales the pool with the tier', () => {
-    expect(lightBudgetForTier('high')).toBe(8)
-    expect(lightBudgetForTier('low')).toBe(4)
-    expect(lightBudgetForTier('off')).toBe(2)
+describe('lightBudgetForProfile', () => {
+  it('honours the profile budget verbatim', () => {
+    // The four shipped profiles, so a change to RENDER_PROFILES that the rig
+    // cannot carry shows up here rather than as a stutter on someone's laptop.
+    expect(lightBudgetForProfile(RENDER_PROFILES.ultra.maxDynamicLights)).toBe(24)
+    expect(lightBudgetForProfile(RENDER_PROFILES.high.maxDynamicLights)).toBe(16)
+    expect(lightBudgetForProfile(RENDER_PROFILES.balanced.maxDynamicLights)).toBe(10)
+    expect(lightBudgetForProfile(RENDER_PROFILES.performance.maxDynamicLights)).toBe(6)
+  })
+
+  it('keeps at least one slot, so a single-lamp plan is still lit', () => {
+    expect(lightBudgetForProfile(0)).toBe(1)
+    expect(lightBudgetForProfile(-5)).toBe(1)
+    expect(lightBudgetForProfile(Number.NaN)).toBe(1)
+  })
+
+  it('yields a whole number of slots — the pool is an array length', () => {
+    expect(lightBudgetForProfile(7.9)).toBe(7)
   })
 })
 

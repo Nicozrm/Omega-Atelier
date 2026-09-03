@@ -24,8 +24,13 @@ export interface BrandClient {
    * (simulator ticks, or cloud polling). Returns an unsubscribe handle.
    */
   subscribe?(onUpdate: (update: DeviceUpdate) => void): Unsubscribe
-  /** Optional connectivity probe run during connect(). */
-  probe?(): Promise<void>
+  /**
+   * Optional connectivity probe run during connect(). It may return a note —
+   * a connection that succeeds but yields nothing usable ("connected, but the
+   * account lists no devices") is a state the user has to be told about, and
+   * throwing would be wrong because nothing actually failed.
+   */
+  probe?(): Promise<void | { message?: string }>
 }
 
 export interface BrandConnectorOptions {
@@ -56,9 +61,9 @@ export function createBrandConnector(opts: BrandConnectorOptions): Connector {
     async connect(): Promise<void> {
       setStatus('connecting')
       try {
-        await client.probe?.()
+        const note = await client.probe?.()
         lastSync = new Date().toISOString()
-        setStatus('connected')
+        setStatus('connected', note?.message)
       } catch (e) {
         setStatus('error', e instanceof Error ? e.message : 'Verbindung fehlgeschlagen')
         throw e

@@ -27,31 +27,35 @@
  */
 
 
-import { useEffect, useMemo, useRef, useState, Suspense, Component } from 'react'
-import type { ReactNode, TouchEvent as ReactTouchEvent } from 'react'
-import { EffectComposer, Bloom, N8AO, SMAA, Vignette, ChromaticAberration, BrightnessContrast, HueSaturation, DepthOfField } from '@react-three/postprocessing'
-import type { DepthOfFieldEffect } from 'postprocessing'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
+import type { TouchEvent as ReactTouchEvent } from 'react'
 import type { Wall, WallSubtype, Room, Floor, PlacedDevice, PlacedFurniture, Point } from '@/types'
-
-// ── v51 Rendering-Layer: Post-Processing (isoliert, tier-gegated, fallback-sicher)
-const CA_OFFSET = new THREE.Vector2(0.0005, 0.0005)
-class RenderFXBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() { return { failed: true } }
-  render() { return this.state.failed ? null : this.props.children }
-}
 import { DEFAULT_WALL_MATERIAL_ID, type Material } from '@/data/materials'
 import { resolveFloorMaterial, resolveSurfaceMaterialId, resolveCeilingMaterial, materialsForSurface } from '@/lib/materials'
 import { LightRig } from './LightRig'
 import { SunLight } from './SunLight'
 import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
+import { SkyDome } from './SkyDome'
+import { Precipitation } from './Precipitation'
+import { PRECIP_LABEL, seasonalPrecip, type Precip } from '@/lib/precipitation'
+import { seasonFromDate } from '@/lib/season'
+import { WorldAround } from './WorldAround'
+import { PostFX } from './PostFX'
+import { AdaptiveQuality } from './AdaptiveQuality'
+import { QualityMenu } from './QualityMenu'
+import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
 import { readTier } from '@/lib/render/tier'
+import { activeProfile, subscribeRenderProfile } from '@/lib/render/quality'
+import { exposureFor } from '@/lib/render/exposure'
+import { applyBoxUvScales, boxUvScales } from '@/lib/render/wallUv'
+import { glassMaterial, disposeGlassMaterials } from '@/lib/render/glass'
 import { enablePcssShadows } from '@/lib/render/pcssShadows'
+import { enableSpecularAA } from '@/lib/render/specularAA'
 import { deriveEnvironment, type EnvironmentState, type DayPhase } from '@/lib/environment'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, ContactShadows, PointerLockControls, PerformanceMonitor, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
+import { OrbitControls, ContactShadows, PointerLockControls, RoundedBox, MeshReflectorMaterial } from '@react-three/drei'
 import { usePlanStore } from '@/store/usePlanStore'
 import { LiveTwinReflection } from './LiveTwinReflection'
 import { VirtualResidents, type ResidentStatus } from './VirtualResidents'
@@ -61,8 +65,18 @@ import { BlasterAsset3D } from './BlasterAsset3D'
 import { DEVICES } from '@/data/devices'
 import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
-import { getTextures, getTexturesAsync, makeTex, type TextureBundle } from '@/lib/textures'
-import { X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square, ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture } from 'lucide-react'
+import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
+import { resetProceduralTextures } from '@/lib/proceduralTextures'
+import { applyPhotoTextures, resetPhotoTextures } from '@/lib/photoTextureLoader'
+import { useOutdoorTextures } from '@/hooks/useOutdoorTextures'
+import { resetOutdoorTextures } from '@/lib/outdoorTextureLoader'
+import { canopyGeometry } from '@/lib/render/canopy'
+import { eavesDrop, gableSlope, hipRoofGeometry } from '@/lib/render/roofGeometry'
+import {
+  X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
+  ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture,
+  CloudRain, Snowflake,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
 import { useTier } from '@/hooks/useTier'
@@ -117,6 +131,8 @@ interface MatCache {
   // Furniture / device materials
   woodOak:    THREE.Material
   woodWalnut: THREE.Material
+  /** Weathered outdoor decking — the terrace, which must not be lacquered. */
+  deckWeathered: THREE.Material
   fabric:     THREE.Material
   fabricGray: THREE.Material
   fabricBlue: THREE.Material
@@ -144,10 +160,10 @@ let _mat: MatCache | null = null
 
 function buildMaterials(): MatCache {
   const T = getTextures()
-  // Roughness micro-detail maps are uploaded only on the 'high' tier — they add
-  // a (cheap, per-fragment) texture sample but cost GPU memory/bandwidth, so weak
-  // devices skip them and keep the lean path.
-  const HQ = readTier() === 'high'
+  // Roughness micro-detail maps add a (cheap, per-fragment) texture sample but
+  // cost GPU memory and bandwidth, so weak devices skip them and keep the lean
+  // path. `detailMaps` is the profile's explicit vote on that trade.
+  const HQ = activeProfile().detailMaps
   const rough = (c: HTMLCanvasElement, r: [number, number]) =>
     HQ ? { roughnessMap: makeTex(c, r, false) } : {}
   return {
@@ -224,11 +240,25 @@ function buildMaterials(): MatCache {
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     }),
 
-    // ─── Walls ──────────────────────────────────────────────
+    /*
+     * ─── Walls ──────────────────────────────────────────────
+     *
+     * Repeat 1 : the tiling lives on the wall geometry, not here.
+     *
+     * A fixed repeat on the texture means every box face shows the same number
+     * of tiles whatever its size, so on one door frame the pier, the reveal and
+     * the wall body carried the same plaster at three different scales and
+     * aspect ratios — see `lib/render/wallUv`. `Wall3D` now scales each face's
+     * UVs by its real extent, which needs the material's own repeat to be
+     * neutral or the two would multiply.
+     *
+     * Keeping the scale on the geometry also keeps one material across every
+     * wall in the plan, so they still batch.
+     */
     wallPlaster: new THREE.MeshStandardMaterial({
-      map: makeTex(T.plasterC, [2, 2]),
-      normalMap: makeTex(T.plasterN, [2, 2], false),
-      ...rough(T.plasterR, [2, 2]),
+      map: makeTex(T.plasterC),
+      normalMap: makeTex(T.plasterN, [1, 1], false),
+      ...rough(T.plasterR, [1, 1]),
       normalScale: new THREE.Vector2(0.2, 0.2),
       // Near-white with a hint of warmth — the reference interiors read as
       // white walls against dark floors; warm light provides the tint.
@@ -237,25 +267,25 @@ function buildMaterials(): MatCache {
       metalness: 0.0,
     }),
     wallConcrete: new THREE.MeshStandardMaterial({
-      map: makeTex(T.concreteC, [2, 2]),
-      normalMap: makeTex(T.concreteN, [2, 2], false),
+      map: makeTex(T.concreteC),
+      normalMap: makeTex(T.concreteN, [1, 1], false),
       normalScale: new THREE.Vector2(0.5, 0.5),
-      ...rough(T.concreteR, [2, 2]),
+      ...rough(T.concreteR, [1, 1]),
       color: '#c9c5be',
       roughness: 0.85,
       metalness: 0.04,
     }),
     wallWallpaper: new THREE.MeshStandardMaterial({
-      map: makeTex(T.wallpaperC, [2, 3]),
-      normalMap: makeTex(T.wallpaperN, [2, 3], false),
+      map: makeTex(T.wallpaperC),
+      normalMap: makeTex(T.wallpaperN, [1, 1], false),
       normalScale: new THREE.Vector2(0.25, 0.25),
-      ...rough(T.wallpaperR, [2, 3]),
+      ...rough(T.wallpaperR, [1, 1]),
       color: '#ece4d2',
       roughness: 0.88,
       metalness: 0.0,
     }),
     wallSel: new THREE.MeshStandardMaterial({
-      map: makeTex(T.plasterC, [2, 2]),
+      map: makeTex(T.plasterC),
       color: '#cdd9ee',
       roughness: 0.7,
       metalness: 0.05,
@@ -289,6 +319,30 @@ function buildMaterials(): MatCache {
       metalness: 0.05,
       clearcoat: 0.3,
       clearcoatRoughness: 0.35,
+    }),
+    /**
+     * Terrassendiele — draußen, und deshalb ein eigenes Material.
+     *
+     * Die Terrasse lief vorher auf `woodWalnut` + `woodOak`, also auf
+     * *Möbelholz*: geölt, `clearcoat` 0.25–0.3, `roughness` 0.5. Drinnen ist
+     * das richtig — Möbel sind gepflegt. Draußen ist eine große waagerechte
+     * Fläche mit Decklack unter einem hellen Himmel aber ein Spiegel, und
+     * genau das war auf den Screenshots zu sehen: die Terrasse warf das Haus
+     * zurück, als stünde sie unter Wasser.
+     *
+     * Echte Terrassendielen sind unbehandelt oder nur geölt und vergrauen in
+     * einer Saison. Kein Decklack, keine Metallizität, hohe Rauheit — und ein
+     * kühler, entsättigter Ton, weil UV das Holz ausbleicht.
+     */
+    deckWeathered: new THREE.MeshStandardMaterial({
+      map: makeTex(T.woodOakC, [3, 1]),
+      normalMap: makeTex(T.woodOakN, [3, 1], false),
+      ...rough(T.woodOakR, [3, 1]),
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      color: '#8e8377',
+      roughness: 0.92,
+      metalness: 0,
+      envMapIntensity: 0.75,
     }),
     // Dark-stained walnut — near-black dining table / statement furniture.
     // Same grain, deep espresso tint under a satin lacquer.
@@ -404,37 +458,12 @@ function buildMaterials(): MatCache {
       metalness: 1.0,
       envMapIntensity: 1.2,
     }),
-    // Real glazing: a light, see-through dielectric pane (was an opaque near-black
-    // mirror). Low opacity makes windows transparent; the local IBL still reflects
-    // off the smooth surface via Fresnel, so panes read as glass, not holes.
-    // depthWrite:false blends the pane over the opaque geometry behind it.
-    // Real physical glazing: transmission (refraction) on the 'high' tier for
-    // that thick, light-bending picture-window look; a cheap transparent
-    // dielectric elsewhere so mid/low tiers stay fast. Same singleton either way.
-    glass: readTier() === 'high'
-      ? new THREE.MeshPhysicalMaterial({
-          color: '#eef3f7',
-          roughness: 0.06,
-          metalness: 0.0,
-          transmission: 1.0,       // true refractive glass
-          thickness: 0.05,         // thin pane
-          ior: 1.5,                // window glass
-          transparent: true,
-          depthWrite: false,
-          envMapIntensity: 1.3,
-          specularIntensity: 1.0,
-          attenuationColor: '#dfe8ee',
-          attenuationDistance: 6,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: '#bfc9d4',
-          roughness: 0.05,
-          metalness: 0.0,
-          transparent: true,
-          opacity: 0.25,
-          depthWrite: false,
-          envMapIntensity: 1.2,
-        }),
+    // Glazing comes from the glass family (`lib/render/glass.ts`), which
+    // parameterises panes physically — refractive index, transmission with a
+    // real thickness, Beer-Lambert body colour (the faint green of float glass),
+    // optional dispersion — and degrades to a tuned transparent dielectric on
+    // profiles that cannot afford a transmission pass. Same singleton either way.
+    glass: glassMaterial('clear'),
     // Premium wool rug — color + heavy normal for that thick-pile look.
     // polygonOffset pushes it slightly forward of the floor at the same Y → no z-fighting.
     rug: new THREE.MeshStandardMaterial({
@@ -551,9 +580,50 @@ function leanizeForPerf(cache: MatCache): void {
 function ensureMat(): MatCache {
   if (!_mat) {
     _mat = buildMaterials()
-    if (readTier() !== 'high') leanizeForPerf(_mat)
+    if (!activeProfile().richMaterials) leanizeForPerf(_mat)
+    /*
+     * The photographic PBR maps in `public/textures/` are swapped onto these
+     * same instances once they decode. Deliberately not awaited: the canvas
+     * materials above are complete and correct on their own, so the first frame
+     * is immediate and the scene works with no files at all — this only ever
+     * improves what is already on screen. A missing or undecodable file leaves
+     * the canvas texture in place.
+     */
+    void applyPhotoTextures(_mat as unknown as Record<string, THREE.Material>)
   }
   return _mat
+}
+
+/**
+ * Drop every cached material so the next frame rebuilds them for the profile
+ * now in force. Called when the user changes the quality setting: the shader
+ * *programs* differ between profiles (clearcoat/sheen lobes, transmission,
+ * detail-map samplers), so patching uniforms in place would not be enough — the
+ * materials have to be recompiled from scratch.
+ */
+function resetMaterialCaches(): void {
+  if (_mat) {
+    for (const m of Object.values(_mat)) m.dispose()
+    _mat = null
+  }
+  for (const m of catalogMatCache.values()) m.dispose()
+  catalogMatCache.clear()
+  for (const m of SLOT_MAT_CACHE.values()) m.dispose()
+  SLOT_MAT_CACHE.clear()
+  disposeGlassMaterials()
+  // The maps themselves are generated at a profile-dependent resolution, so
+  // they are as profile-bound as the materials that sample them. Rebuilding
+  // materials around the old canvases would leave a switch to a higher profile
+  // looking identical until the next page load.
+  resetTextureBundle()
+  // Same for the outdoor library: brick, roofs, asphalt and lawn read their
+  // anisotropy and resolution once, at creation, and are cached module-wide.
+  resetProceduralTextures()
+  // And the photographic sets, which bake the profile's anisotropy into every
+  // decoded texture and are skipped entirely below the detail-map threshold.
+  resetPhotoTextures()
+  // Same for the Blender-baked outdoor library.
+  resetOutdoorTextures()
 }
 
 /** Floor variants the UI can switch between. */
@@ -584,6 +654,7 @@ const MAT = {
   wood:       () => ensureMat().woodOak,
   woodOak:    () => ensureMat().woodOak,
   woodWalnut: () => ensureMat().woodWalnut,
+  deckWeathered: () => ensureMat().deckWeathered,
   fabric:     () => ensureMat().fabric,
   fabricGray: () => ensureMat().fabricGray,
   fabricBlue: () => ensureMat().fabricBlue,
@@ -623,6 +694,43 @@ const CATALOG_TO_LEGACY: Record<string, () => THREE.Material> = {
   'wall-wallpaper':    () => ensureMat().wallWallpaper,
 }
 const catalogMatCache = new Map<string, THREE.Material>()
+
+/**
+ * A catalog material that always wins where it lies **flush** with another
+ * surface using the same material.
+ *
+ * Two coplanar faces at the same depth are a coin toss decided per fragment by
+ * floating-point rounding, and the coin lands differently as the camera moves —
+ * which is what shimmering seams are. The plan geometry has two such pairs by
+ * construction, and neither can be separated by moving anything:
+ *
+ *  - **Corner pillars.** The pillar is a box of the corner's wall thickness
+ *    centred on the corner, so its side faces sit in exactly the planes of the
+ *    faces of the walls meeting there. Making it smaller stops it covering the
+ *    seam it exists for; making it larger leaves a ridge at every corner.
+ *  - **Per-room floors.** They overlay the plan-wide floor, which spans the
+ *    whole extent underneath them.
+ *
+ * `polygonOffset` is the tool for exactly this: a negative factor biases the
+ * depth *written* by this material toward the camera, so the overlay resolves in
+ * front deterministically while the geometry stays where it belongs. Everything
+ * else in the catalog carries `+1`, which is what these have to beat.
+ */
+function matFromCatalogInFront(material: Material, opts?: { doubleSide?: boolean }): THREE.Material {
+  const key = `${material.id}:front${opts?.doubleSide ? ':double' : ''}`
+  let cached = catalogMatCache.get(key)
+  if (!cached) {
+    cached = matFromCatalog(material).clone()
+    const m = cached as THREE.MeshStandardMaterial
+    m.polygonOffset = true
+    m.polygonOffsetFactor = -2
+    m.polygonOffsetUnits = -2
+    if (opts?.doubleSide) m.side = THREE.DoubleSide
+    catalogMatCache.set(key, cached)
+  }
+  return cached
+}
+
 function matFromCatalog(material: Material, opts?: { doubleSide?: boolean }): THREE.Material {
   if (opts?.doubleSide) {
     const key = `${material.id}:double`
@@ -649,9 +757,10 @@ function matFromCatalog(material: Material, opts?: { doubleSide?: boolean }): TH
       concrete: { clearcoat: 0.2, clearcoatRoughness: 0.45 },
     }
     const g = GLOSS[material.category]
-    // The clearcoat/sheen finishes are per-light-expensive; only build them on
-    // 'high' devices, otherwise fall back to the cheap standard material.
-    const hq = readTier() === 'high'
+    // The clearcoat/sheen finishes are per-light-expensive; only build them
+    // when the profile budgets for rich materials, otherwise fall back to the
+    // cheap standard material.
+    const hq = activeProfile().richMaterials
     // Catalog floors that had no map render as a flat solid colour. Bind existing
     // textures (reuse — no new generation): concrete screed, wool carpet, walnut
     // parquet. Smooth ceramic stays untextured (polished = flat is correct).
@@ -800,6 +909,43 @@ function cornerExtensionsFor(wall: WallLike, allWalls: WallLike[]): { extA: numb
   return { extA, extB }
 }
 
+/**
+ * Skirting-board height, metres. One constant because the trim has to be the
+ * same height on a solid wall and on the piers beside a door — a step at the
+ * frame is worse than no trim at all.
+ */
+const SKIRT_H = 0.08
+/** Alias used in the opening branch, for readability at the call sites. */
+const OPENING_SKIRT_H = SKIRT_H
+
+/**
+ * A wall box whose texture keeps the same grain on every face.
+ *
+ * `boxGeometry` maps 0…1 across each face regardless of its size, so a shared
+ * material with a fixed repeat drew the plaster at one scale on a 6 m wall and
+ * at another on the 24 cm reveal beside a door — surfaces that meet at a corner
+ * the camera stands right next to in walk mode. Here the geometry carries the
+ * tiling instead, sized from the box's real extent, so a tile covers
+ * `WALL_TILE_M` everywhere. The material stays shared, so walls still batch.
+ *
+ * Geometry is per-wall in any case (every wall has its own dimensions), so this
+ * costs nothing beyond the UV rewrite it performs once at build time.
+ */
+function WallBox({ args, ...props }: { args: [number, number, number] } & Omit<React.ComponentProps<'mesh'>, 'args'>) {
+  const [w, h, d] = args
+  const geometry = useMemo(() => {
+    const g = new THREE.BoxGeometry(w, h, d)
+    const uv = g.attributes.uv?.array as Float32Array | undefined
+    if (uv) {
+      applyBoxUvScales(uv, boxUvScales(w, h, d))
+      g.attributes.uv.needsUpdate = true
+    }
+    return g
+  }, [w, h, d])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  return <mesh {...props} geometry={geometry} />
+}
+
 function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 0, extB = 0, subtype = 'wall', openingWidth, openingHeight, openingSill, interiorSign = 1, outNx = 0, outNz = 0, dim = false }: {
   id?: string; a: Point; b: Point; thickness: number; height?: number; selected?: boolean;
   material: Material; extA?: number; extB?: number; subtype?: WallSubtype;
@@ -827,13 +973,24 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
   // clone remembers its base opacity / transparency so the fade multiplies
   // instead of clobbering (glass stays glass; opaque plaster stays opaque).
   const fade = useMemo(() => {
+    /*
+     * Every wall used to clone all four materials, glass included — so a plan
+     * with forty solid walls carried forty glass clones that never reached a
+     * draw call, plus forty disposals behind them. Glass is cloned only where a
+     * pane actually exists; elsewhere the shared one is referenced but never
+     * fades, so it must stay out of the mutation list below and out of the
+     * disposal — mutating a shared material would fade every pane in the scene.
+     */
+    const needsGlass = subtype === 'window' || subtype === 'door'
     const clones = {
       body:   (selected ? MAT.wallSel() : matFromCatalog(material)).clone(),
       cap:    MAT.shellDark().clone(),
-      glass:  MAT.glass().clone(),
+      glass:  needsGlass ? MAT.glass().clone() : undefined,
       skirt:  MAT.matteWhite().clone(),
     }
-    const list = (Object.values(clones) as THREE.Material[]).map((mm) => {
+    const owned = [clones.body, clones.cap, clones.glass, clones.skirt]
+      .filter((m): m is THREE.Material => !!m)
+    const list = owned.map((mm) => {
       const rec = {
         m: mm,
         base: (mm as THREE.MeshStandardMaterial).opacity ?? 1,
@@ -843,8 +1000,8 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
       mm.transparent = true
       return rec
     })
-    return { ...clones, list }
-  }, [selected, material])
+    return { ...clones, glass: clones.glass ?? MAT.glass(), list }
+  }, [selected, material, subtype])
   useEffect(() => {
     const list = fade.list
     return () => list.forEach((r) => r.m.dispose())
@@ -890,7 +1047,7 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     // Modern white skirting (Sockelleiste): matte white, ~8cm tall, protruding a
     // touch past the wall face on both sides so it reads as real trim where the
     // wall meets the floor — the archviz "finished room" detail.
-    const baseboardHeight = 0.08
+    const baseboardHeight = SKIRT_H
     const baseMaterial = fade.skirt
     // Exterior walls (thick perimeter walls) get dark cladding on the outside
     // face so the dollhouse reads as a dark shell around warm interiors.
@@ -898,9 +1055,7 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     return (
       <group position={[M(midX), heightM / 2, M(midY)]} rotation={[0, -angle, 0]}>
         {/* Main wall body */}
-        <mesh castShadow receiveShadow material={mat}>
-          <boxGeometry args={[lengthM, heightM, thickM]} />
-        </mesh>
+        <WallBox castShadow receiveShadow material={mat} args={[lengthM, heightM, thickM]} />
         {/* Cut-section cap — dark anthracite band along the sliced top */}
         <mesh position={[0, heightM / 2 + 0.015, 0]} material={cap}>
           <boxGeometry args={[lengthM + 0.004, 0.03, thickM + 0.004]} />
@@ -931,26 +1086,44 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
     <group position={[M(midX), 0, M(midY)]} rotation={[0, -angle, 0]}>
       {/* Left side — full height */}
       {sideW > 0 && (
-        <mesh position={[-(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[sideW, heightM, thickM]} />
-        </mesh>
+        <WallBox position={[-(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat} args={[sideW, heightM, thickM]} />
       )}
       {/* Right side — full height */}
       {sideW > 0 && (
-        <mesh position={[(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[sideW, heightM, thickM]} />
-        </mesh>
+        <WallBox position={[(opW / 2 + sideW / 2), heightM / 2, 0]} castShadow receiveShadow material={mat} args={[sideW, heightM, thickM]} />
       )}
       {/* Lintel — above opening */}
       {lintelH > 0 && (
-        <mesh position={[0, opSill + opH + lintelH / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[opW, lintelH, thickM]} />
-        </mesh>
+        <WallBox position={[0, opSill + opH + lintelH / 2, 0]} castShadow receiveShadow material={mat} args={[opW, lintelH, thickM]} />
       )}
       {/* Sill — only for windows */}
       {!isDoor && opSill > 0 && (
-        <mesh position={[0, opSill / 2, 0]} castShadow receiveShadow material={mat}>
-          <boxGeometry args={[opW, opSill, thickM]} />
+        <WallBox position={[0, opSill / 2, 0]} castShadow receiveShadow material={mat} args={[opW, opSill, thickM]} />
+      )}
+      {/*
+        Skirting on the piers beside the opening, and across the full width
+        under a window sill.
+
+        It used to exist only on the `subtype === 'wall'` branch, so a room with
+        one door had trim on three walls and a bare plaster-to-floor junction on
+        the fourth — visible from anywhere in the room, and exactly the kind of
+        break that makes an interior read as unfinished. A door interrupts a
+        skirting board at the frame; it does not abolish it.
+      */}
+      {sideW > 0 && (
+        <>
+          <mesh position={[-(opW / 2 + sideW / 2), OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+            <boxGeometry args={[sideW, OPENING_SKIRT_H, thickM + 0.02]} />
+          </mesh>
+          <mesh position={[(opW / 2 + sideW / 2), OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+            <boxGeometry args={[sideW, OPENING_SKIRT_H, thickM + 0.02]} />
+          </mesh>
+        </>
+      )}
+      {/* Under a window the wall is continuous, so the trim runs straight through. */}
+      {!isDoor && opSill > OPENING_SKIRT_H && (
+        <mesh position={[0, OPENING_SKIRT_H / 2, 0]} castShadow material={fade.skirt}>
+          <boxGeometry args={[opW, OPENING_SKIRT_H, thickM + 0.02]} />
         </mesh>
       )}
       {/* Cut-section cap — dark anthracite band along the sliced top */}
@@ -987,31 +1160,73 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
           </group>
         </group>
       )}
-      {/* Window — real transparent glazing in a slim white aluminium frame */}
-      {!isDoor && (
+      {/*
+        Window — a real casement set in the opening, not a white block filling it.
+
+        Everything here follows from **where the frame sits in the wall**. It used
+        to be `thickM * 1.05` deep, i.e. the entire wall thickness plus a little:
+        a 20 cm exterior wall got a 21 cm deep white frame, so from any angle but
+        dead-on the window was a solid white slab and the opening had no depth at
+        all. A casement frame is ~7 cm deep and is set toward the *outside*, which
+        is what leaves the plaster reveal (Laibung) on the room side — and the
+        reveal is the thing that makes an opening read as a hole through a wall
+        rather than as a white rectangle painted on it.
+
+        `frameZ` is that setback: half the frame depth in from the outer face,
+        plus 2 cm of weather rebate. On a thin partition the frame simply centres.
+      */}
+      {!isDoor && (() => {
+        const frameD = Math.min(0.07, thickM * 0.6)
+        const frameW = 0.045
+        /*
+         * Depths are worked out along one axis `u`, measured from the wall's
+         * centre plane **toward the room** — that keeps every number a plain
+         * distance and confines `interiorSign` to the two places it is applied.
+         * The wall's room-side face is at `u = thickM / 2`.
+         */
+        const setback = Math.max(0, thickM / 2 - frameD / 2 - 0.02)  // frame sits outboard
+        const frameU = -setback
+        const frameZ = interiorSign * frameU
+        // Plaster reveal left between the frame and the room, and the cill that
+        // caps it — a nose of 6 cm into the room, like a real stone Fensterbank.
+        const revealDepth = thickM / 2 - (frameU + frameD / 2)
+        const cillDepth = revealDepth + 0.06
+        const cillZ = interiorSign * (frameU + frameD / 2 + cillDepth / 2)
+        // A single sash below ~1.1 m, two above. A centre mullion drawn on every
+        // window regardless of size chopped a 60 cm bathroom light in half.
+        const mullion = opW > 1.1
+        // Glass fills the frame, in the frame's plane — a pane, not a slab. The
+        // refraction thickness is a material property (`glass.ts`), so geometry
+        // depth buys nothing here and a box only doubles the transmissive
+        // surfaces the renderer has to resolve.
+        const glassW = opW - frameW * 2
+        const glassH = opH - frameW * 2
+        return (
         <group position={[0, opSill + opH / 2, 0]}>
-          <mesh material={glass}>
-            <boxGeometry args={[opW * 0.94, opH * 0.94, 0.012]} />
+          <mesh position={[0, 0, frameZ]} material={glass}>
+            <planeGeometry args={[glassW, glassH]} />
           </mesh>
-          {/* Frame: top, bottom, two stiles + a centre mullion */}
-          <mesh position={[0, opH / 2 - 0.02, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW, 0.04, thickM * 1.05]} />
+          {/* Frame: head, cill rail, two stiles, and a mullion only if it fits */}
+          <mesh position={[0, opH / 2 - frameW / 2, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW, frameW, frameD]} />
           </mesh>
-          <mesh position={[0, -opH / 2 + 0.02, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW, 0.04, thickM * 1.05]} />
+          <mesh position={[0, -opH / 2 + frameW / 2, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW, frameW, frameD]} />
           </mesh>
-          <mesh position={[-opW / 2 + 0.02, 0, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[0.04, opH, thickM * 1.05]} />
+          <mesh position={[-opW / 2 + frameW / 2, 0, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[frameW, opH, frameD]} />
           </mesh>
-          <mesh position={[opW / 2 - 0.02, 0, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[0.04, opH, thickM * 1.05]} />
+          <mesh position={[opW / 2 - frameW / 2, 0, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[frameW, opH, frameD]} />
           </mesh>
-          <mesh material={MAT.matteWhite()}>
-            <boxGeometry args={[0.03, opH, thickM * 1.05]} />
-          </mesh>
-          {/* Window sill — a slim ledge below the opening */}
-          <mesh position={[0, -opH / 2 - 0.02, thickM * 0.4]} castShadow receiveShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW + 0.06, 0.03, thickM * 1.5]} />
+          {mullion && (
+            <mesh position={[0, 0, frameZ]} material={MAT.matteWhite()}>
+              <boxGeometry args={[0.035, opH, frameD]} />
+            </mesh>
+          )}
+          {/* Interior stone cill — runs from the frame out past the wall face. */}
+          <mesh position={[0, -opH / 2 - 0.015, cillZ]} castShadow receiveShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW + 0.06, 0.03, cillDepth]} />
           </mesh>
           {/* Radiator — slim modern flat panel below the window, interior side.
               Sized from the sill height; skipped when there is no room for it. */}
@@ -1088,7 +1303,8 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
             )
           })()}
         </group>
-      )}
+        )
+      })()}
     </group>
   )
 }
@@ -1096,11 +1312,19 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
 /**
  * Vertical pillar at a wall corner. Covers any tiny seam between two
  * extended-and-overlapping walls. Renders only ONCE per unique corner.
+ *
+ * `size` is the thickness of the thickest wall meeting here and the pillar is
+ * centred on the corner, so its four side faces land in **exactly** the planes
+ * of those walls' faces — coplanar, same material, same depth. That is the
+ * flicker you see as vertical strips at every junction while orbiting: the
+ * depth test has nothing to decide with and picks differently per frame. The
+ * pillar therefore draws with a depth bias toward the camera and wins the tie
+ * outright; see `matFromCatalogInFront`.
  */
 function CornerPillar({ x, z, size, height, material }: {
   x: number; z: number; size: number; height: number; material: Material;
 }) {
-  const mat = useMemo(() => matFromCatalog(material), [material])
+  const mat = useMemo(() => matFromCatalogInFront(material), [material])
   return (
     <group>
       <mesh position={[M(x), height / 2, M(z)]} castShadow receiveShadow material={mat}>
@@ -3180,9 +3404,10 @@ function FurnitureMesh({ furnitureId, w, h, item }: {
         <mesh castShadow material={MAT.aluminium()}>
           <boxGeometry args={[wM, frameH, depth]} />
         </mesh>
-        {/* Real reflection on 'high': a planar reflector mirrors the actual
-            scene (deep mirror reflections). Lower tiers keep the cheap chrome. */}
-        {readTier() === 'high' ? (
+        {/* A planar reflector mirrors the actual scene (deep, true mirror
+            reflections) where the profile budgets for it; lower profiles keep
+            the cheap chrome stand-in. */}
+        {activeProfile().reflectiveFloor ? (
           <mesh position={[0, 0, depth / 2 + 0.004]}>
             <planeGeometry args={[wM - 0.04, frameH - 0.04]} />
             <MeshReflectorMaterial
@@ -3787,7 +4012,7 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       <group ref={groupRef}>
         <GltfModel
           id={f.furnitureId}
-          footprint={[w, h]}
+          target={[M(w), M(h)]}
           fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
         />
         {(isSelected || hovered) && (
@@ -4274,7 +4499,7 @@ function speakerGrilleTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(cv)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-  tex.anisotropy = 4
+  tex.anisotropy = activeProfile().anisotropy
   _grilleTex = tex
   return tex
 }
@@ -4336,7 +4561,7 @@ function ensureTileTextures(): { map: THREE.CanvasTexture; bump: THREE.CanvasTex
     const t = new THREE.CanvasTexture(c)
     if (srgb) t.colorSpace = THREE.SRGBColorSpace
     t.wrapS = t.wrapT = THREE.RepeatWrapping
-    t.anisotropy = 8
+    t.anisotropy = activeProfile().anisotropy
     return t
   }
   _tileTex = mk(cv, true)
@@ -4391,9 +4616,8 @@ function _mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.repeat.set(rep[0], rep[1])
-  // Max anisotropic filtering — the renderer clamps to the GPU limit. Keeps
-  // floors, walls and roofs crisp at grazing angles instead of blurring out.
-  t.anisotropy = 16
+  // Profile-driven, like every other sampling budget — see `lib/render/quality`.
+  t.anisotropy = activeProfile().anisotropy
   return t
 }
 // Deterministic PRNG so textures are stable across reloads (no reflow flicker).
@@ -4813,27 +5037,9 @@ interface ActiveFlight {
   restoreFov?: number
 }
 
-/**
- * Shared camera-focus channel: the CinematicDirector writes where the story
- * looks and how hard to pull focus; `CinematicFocus` (the DOF driver) reads
- * it each frame. A plain mutable object — no React state at 60 fps.
- */
-const cameraFocus = {
-  point: new THREE.Vector3(0, 1, 0),
-  /** 0 = ambient depth … 1 = full cinematic focus pull (mid-glide). */
-  pull: 0,
-}
+/* The shared camera-focus channel (`cameraFocusBus`) and the depth-of-field
+   driver that reads it now live beside the post stack, in `PostFX`. */
 
-/**
- * Contextual depth of field. At rest the focal plane sits exactly on the
- * orbit target (whatever the user frames is sharp); during a glide the
- * director pulls focus onto the destination and the bokeh swells, then the
- * landing relaxes back — the classic focus pull, never a static blur.
- */
-// Foto-Look — swap the renderer tone-map at runtime. AgX (photographic) has a
-// gentler highlight roll-off and truer colour than ACES; a one-time material
-// recompile applies it. Off by default so the tuned "Brillant" (ACES) look is
-// the baseline; the toggle is the opt-in maximum-photorealism path.
 // Freezes a fully static subtree's world-matrix updates after first commit —
 // the neighbourhood, house shell, terrace court and ghost floors never move,
 // so skipping their per-frame matrix work saves real CPU on large scenes.
@@ -4850,20 +5056,10 @@ function Static({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>
 }
 
-function ToneMapController({ photo }: { photo: boolean }) {
-  const gl = useThree((s) => s.gl)
-  const scene = useThree((s) => s.scene)
-  useEffect(() => {
-    gl.toneMapping = photo ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping
-    gl.toneMappingExposure = photo ? 1.0 : 0.95
-    scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material
-      if (Array.isArray(m)) m.forEach((mm) => { mm.needsUpdate = true })
-      else if (m) (m as THREE.Material).needsUpdate = true
-    })
-  }, [gl, scene, photo])
-  return null
-}
+/* Tone mapping moved into the post chain (`PostFX`). The renderer stays on
+   `NoToneMapping` so the whole pipeline runs in HDR and maps exactly once, at
+   the end — the Foto-Look toggle now picks the *effect's* mode (AgX vs ACES)
+   instead of swapping the renderer's and forcing a material recompile. */
 
 // One row of the Bau-Studio popover — chips (labelled) or colour dots.
 function BauRow({ label, options, active, onPick, shape }: {
@@ -4897,23 +5093,6 @@ function BauRow({ label, options, active, onPick, shape }: {
       </div>
     </div>
   )
-}
-
-function CinematicFocus({ walkMode }: { walkMode: boolean }) {
-  const fx = useRef<DepthOfFieldEffect>(null)
-  const controls = useThree((s) => s.controls) as { target?: THREE.Vector3 } | null
-  useFrame((_, dt) => {
-    const eff = fx.current
-    if (!eff || !eff.target) return
-    const anchor = cameraFocus.pull > 0.02 || !controls?.target ? cameraFocus.point : controls.target
-    eff.target.x = THREE.MathUtils.damp(eff.target.x, anchor.x, 7, dt)
-    eff.target.y = THREE.MathUtils.damp(eff.target.y, anchor.y, 7, dt)
-    eff.target.z = THREE.MathUtils.damp(eff.target.z, anchor.z, 7, dt)
-    // Eye-level walking wants uniform sharpness — the bokeh breathes to zero.
-    const scale = walkMode ? 0 : 1.2 + cameraFocus.pull * 2.2
-    eff.bokehScale = THREE.MathUtils.damp(eff.bokehScale, scale, 5, dt)
-  })
-  return <DepthOfField ref={fx} target={[0, 1, 0]} focalLength={0.08} bokehScale={1.2} height={480} />
 }
 
 /** Flies the orbit camera like a AAA game: eased arcs to presets/rooms and the
@@ -5150,10 +5329,13 @@ function CeilingFade({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean }) 
       it.material.transparent = next < 0.999
     }
   })
+  // `−π/2`, like the floors: the outlines are built with `-M(y)`, and the
+  // opposite sign mirrors every ceiling across z = 0 — in a flat, plan-wide
+  // plane that only shows up as the *wrong room's* material overhead.
   return (
     <group ref={group} visible={level.current > 0.02}>
       {items.map((it) => (
-        <mesh key={`ceil-${it.id}`} position={[0, M(250), 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow material={it.material}>
+        <mesh key={`ceil-${it.id}`} position={[0, M(250), 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={it.material}>
           <shapeGeometry args={[it.shape]} />
         </mesh>
       ))}
@@ -5198,12 +5380,15 @@ function mulberry32(seed: number) {
 function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
   wM: number; hM: number; cx: number; cz: number; phase: DayPhase; daylightScale: number
 }) {
+  // The klinker, roof and paver surfaces this builds from are the ones the
+  // Blender bake replaces, so this memo has to rebuild when they land too.
+  const bakedOutdoorVersion = useOutdoorTextures()
   const built = useMemo(() => {
     const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
     // Detail budget: fine garnish (flower beds, parasols, gutters, fence posts,
-    // rear windows …) only on the high quality tier so weak GPUs keep the
-    // silhouette-level scene and stay smooth.
-    const rich = readTier() === 'high'
+    // rear windows …) only where the profile budgets for it, so weak GPUs keep
+    // the silhouette-level scene and stay smooth.
+    const rich = activeProfile().richMaterials
     // Night recession — the reference dollhouse floats in near-darkness. The
     // interior lights are shadowless and would keep painting the lawn, so the
     // exterior albedo itself follows the sky (cheaper and more reliable than
@@ -5385,30 +5570,33 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
     // trees read as the same lollipop.
     const tree = (key: string, x: number, z: number, s: number, kind: number) => {
       const sway = (Math.abs(Math.sin(x * 12.9898 + z * 78.233)) % 1) * 0.08 - 0.04
+      // Kronenform aus dem Standort, nicht aus einem Zähler: derselbe Baum
+      // sieht nach jedem Neuaufbau der Szene gleich aus, der Nachbar anders.
+      const seedAt = Math.floor(Math.abs(x * 31.7 + z * 17.3) * 13)
       return (
         <group key={key} position={[x, -0.13, z]} rotation={[0, x + z, sway]}>
           {kind === 1 ? (
             <>
               <mesh position={[0, 0.5 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.09 * s, 0.13 * s, 1.0 * s, 6]} /></mesh>
-              <mesh position={[0, 1.55 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[1.0 * s, 1.7 * s, 8]} /></mesh>
-              <mesh position={[0, 2.6 * s, 0]} castShadow material={m.foliageA}><coneGeometry args={[0.76 * s, 1.5 * s, 8]} /></mesh>
-              <mesh position={[0, 3.45 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[0.5 * s, 1.15 * s, 8]} /></mesh>
+              <mesh position={[0, 1.55 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[1.0 * s, 1.7 * s, 11]} /></mesh>
+              <mesh position={[0, 2.6 * s, 0]} castShadow material={m.foliageA}><coneGeometry args={[0.76 * s, 1.5 * s, 11]} /></mesh>
+              <mesh position={[0, 3.45 * s, 0]} castShadow material={m.foliageB}><coneGeometry args={[0.5 * s, 1.15 * s, 11]} /></mesh>
             </>
           ) : (
             <>
               <mesh position={[0, 0.85 * s, 0]} castShadow material={m.trunk}><cylinderGeometry args={[0.08 * s, 0.12 * s, 1.7 * s, 7]} /></mesh>
               <mesh position={[0.32 * s, 1.4 * s, 0]} rotation={[0, 0, -0.65]} castShadow material={m.trunk}><cylinderGeometry args={[0.035 * s, 0.055 * s, 0.75 * s, 5]} /></mesh>
-              <mesh position={[0, 2.2 * s, 0]} scale={[1, 0.86, 1]} castShadow material={kind === 0 ? m.foliageA : m.foliageC}><icosahedronGeometry args={[1.02 * s, 1]} /></mesh>
-              <mesh position={[0.64 * s, 1.9 * s, 0.2 * s]} scale={[1, 0.8, 1]} castShadow material={m.foliageB}><icosahedronGeometry args={[0.6 * s, 1]} /></mesh>
-              <mesh position={[-0.52 * s, 1.75 * s, -0.28 * s]} scale={[1, 0.78, 1]} castShadow material={kind === 2 ? m.foliageD : m.foliageC}><icosahedronGeometry args={[0.55 * s, 1]} /></mesh>
-              <mesh position={[-0.12 * s, 2.85 * s, 0.3 * s]} castShadow material={m.foliageB}><icosahedronGeometry args={[0.48 * s, 1]} /></mesh>
+              <mesh position={[0, 2.2 * s, 0]} scale={[1.02 * s, 0.88 * s, 1.02 * s]} castShadow geometry={canopyGeometry(seedAt + 1)} material={kind === 0 ? m.foliageA : m.foliageC} />
+              <mesh position={[0.64 * s, 1.9 * s, 0.2 * s]} scale={[0.6 * s, 0.48 * s, 0.6 * s]} castShadow geometry={canopyGeometry(seedAt + 3)} material={m.foliageB} />
+              <mesh position={[-0.52 * s, 1.75 * s, -0.28 * s]} scale={[0.55 * s, 0.43 * s, 0.55 * s]} castShadow geometry={canopyGeometry(seedAt + 5)} material={kind === 2 ? m.foliageD : m.foliageC} />
+              <mesh position={[-0.12 * s, 2.85 * s, 0.3 * s]} scale={0.48 * s} castShadow geometry={canopyGeometry(seedAt + 7)} material={m.foliageB} />
             </>
           )}
         </group>
       )
     }
     const bush = (key: string, x: number, z: number, s: number, mat: THREE.Material) => (
-      <mesh key={key} position={[x, -0.13 + 0.3 * s, z]} scale={[1, 0.72, 1]} castShadow material={mat}><icosahedronGeometry args={[0.45 * s, 1]} /></mesh>
+      <mesh key={key} position={[x, -0.13 + 0.3 * s, z]} scale={[0.45 * s, 0.32 * s, 0.45 * s]} castShadow geometry={canopyGeometry(x * 31 + z * 17)} material={mat} />
     )
 
     // Driveway cars — rounded body + glass cabin + light strips + rims.
@@ -5484,30 +5672,40 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
           if (rich) parts.push(<mesh key="rfu" position={[fw * 0.2, bh + 0.37, -fd * 0.15]} castShadow material={m.zinc}><boxGeometry args={[0.7, 0.36, 0.5]} /></mesh>)
         } else if (roofKind < 0.9) {
           const rh = Math.min(fw, fd) * 0.5
-          const slope = Math.hypot(fw / 2 + 0.16, rh)
-          const ang = Math.atan2(rh, fw / 2 + 0.16)
+          // Rafters bear on the wall head and the eaves hang below it — see
+          // `gableSlope`. Built from the overhang instead, the roof floated a
+          // hand's width clear of the masonry all the way round.
+          const sl = gableSlope(fw / 2, rh, 0.16)
+          const ang = sl.angle
           parts.push(
             <group key="rg" position={[0, bh, 0]}>
-              <mesh position={[-fw / 4, rh / 2, 0]} rotation={[0, 0, ang]} castShadow material={roofMat}><boxGeometry args={[slope, 0.1, fd + 0.5]} /></mesh>
-              <mesh position={[fw / 4, rh / 2, 0]} rotation={[0, 0, -ang]} castShadow material={roofMat}><boxGeometry args={[slope, 0.1, fd + 0.5]} /></mesh>
+              <mesh position={[-sl.cx, sl.cy, 0]} rotation={[0, 0, ang]} castShadow material={roofMat}><boxGeometry args={[sl.rafter, 0.1, fd + 0.5]} /></mesh>
+              <mesh position={[sl.cx, sl.cy, 0]} rotation={[0, 0, -ang]} castShadow material={roofMat}><boxGeometry args={[sl.rafter, 0.1, fd + 0.5]} /></mesh>
               {/* ridge cap */}
               <mesh position={[0, rh + 0.02, 0]} castShadow material={m.ridge}><boxGeometry args={[0.24, 0.1, fd + 0.55]} /></mesh>
               {/* zinc gutters along both eaves + downspouts to the plinth */}
               {rich && [-1, 1].map((s) => (
                 <group key={`gt${s}`}>
-                  <mesh position={[s * (fw / 2 + 0.22), 0.03, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.zinc}><cylinderGeometry args={[0.055, 0.055, fd + 0.5, 8]} /></mesh>
-                  <mesh position={[s * (fw / 2 + 0.24), -bh / 2 + 0.02, fd * 0.32]} material={m.zinc}><cylinderGeometry args={[0.04, 0.04, bh, 8]} /></mesh>
+                  <mesh position={[s * (sl.eaveX - 0.06), sl.eaveY - 0.03, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.zinc}><cylinderGeometry args={[0.055, 0.055, fd + 0.5, 8]} /></mesh>
+                  <mesh position={[s * (sl.eaveX - 0.04), -bh / 2 + 0.02, fd * 0.32]} material={m.zinc}><cylinderGeometry args={[0.04, 0.04, bh, 8]} /></mesh>
                 </group>
               ))}
+              {/* Gable ends. A `shapeGeometry` faces +z, so the far one was
+                  turned away from the viewer and culled — every gable house in
+                  the estate stood open at the back. */}
               {[-1, 1].map((s) => {
                 const sh = new THREE.Shape(); sh.moveTo(-fw / 2, 0); sh.lineTo(fw / 2, 0); sh.lineTo(0, rh); sh.closePath()
-                return <mesh key={s} position={[0, 0, (s * fd) / 2]} material={facade}><shapeGeometry args={[sh]} /></mesh>
+                return (
+                  <mesh key={s} position={[0, 0, (s * fd) / 2]} rotation={[0, s > 0 ? 0 : Math.PI, 0]} material={facade}>
+                    <shapeGeometry args={[sh]} />
+                  </mesh>
+                )
               })}
               {/* Framed solar array on the front slope */}
               {stories === 2 && (
-                <group position={[-fw / 4, rh / 2 + 0.07, faceZ * fd * 0.1]} rotation={[0, 0, ang]}>
-                  <mesh castShadow material={m.solarFrame}><boxGeometry args={[slope * 0.74, 0.05, fd * 0.52]} /></mesh>
-                  <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[slope * 0.7, 0.02, fd * 0.48]} /></mesh>
+                <group position={[-sl.cx, sl.cy + 0.07, faceZ * fd * 0.1]} rotation={[0, 0, ang]}>
+                  <mesh castShadow material={m.solarFrame}><boxGeometry args={[sl.rafter * 0.74, 0.05, fd * 0.52]} /></mesh>
+                  <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[sl.rafter * 0.7, 0.02, fd * 0.48]} /></mesh>
                 </group>
               )}
               {/* Grey metal dormer with a window on the front slope */}
@@ -5520,8 +5718,32 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
             </group>,
           )
         } else {
-          const rh = Math.min(fw, fd) * 0.4
-          parts.push(<mesh key="rh" position={[0, bh + rh / 2, 0]} rotation={[0, Math.PI / 4, 0]} castShadow material={roofMat}><coneGeometry args={[Math.hypot(fw, fd) * 0.52, rh, 4]} /></mesh>)
+          /*
+           * Walmdach. This was `coneGeometry(hypot(fw, fd) * 0.52, rh, 4)` —
+           * a square pyramid turned 45°, i.e. a Zeltdach, which only fits a
+           * square plan. Over a rectangle its base edge is `hypot(w, d)·0.52·√2`
+           * in *both* directions at once: too short across the long side, too
+           * long across the short one. The same mistake was already corrected
+           * for the neighbourhood proper; this fallback estate kept it.
+           */
+          const OVH = 0.3
+          const hw = fw + OVH * 2, hd = fd + OVH * 2
+          const pitch = 0.55
+          const rise = (Math.min(hw, hd) / 2) * pitch
+          const ridgeLen = Math.abs(hw - hd)
+          const base = bh - eavesDrop(OVH, pitch)
+          parts.push(
+            <mesh key="rh" position={[0, base, 0]} castShadow material={roofMat}>
+              <primitive object={hipRoofGeometry(hw, hd, rise)} attach="geometry" />
+            </mesh>,
+          )
+          if (ridgeLen > 0.3) {
+            parts.push(
+              <mesh key="rhr" position={[0, base + rise + 0.02, 0]} rotation={[0, hw >= hd ? Math.PI / 2 : 0, 0]} castShadow material={m.ridge}>
+                <boxGeometry args={[0.24, 0.1, ridgeLen]} />
+              </mesh>,
+            )
+          }
         }
         if (hasChimney) {
           parts.push(<mesh key="ch" position={[fw * 0.25, bh + 0.9, fd * 0.1]} castShadow material={m.chimney}><boxGeometry args={[0.3, 1.1, 0.3]} /></mesh>)
@@ -5550,7 +5772,7 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
           parts.push(
             <group key="pot" position={[-0.95, 0, dz + faceZ * 0.5]}>
               <mesh position={[0, 0.22, 0]} castShadow material={m.pot}><cylinderGeometry args={[0.2, 0.16, 0.44, 8]} /></mesh>
-              <mesh position={[0, 0.56, 0]} castShadow material={m.hedgeTop}><icosahedronGeometry args={[0.26, 1]} /></mesh>
+              <mesh position={[0, 0.56, 0]} scale={0.26} castShadow geometry={canopyGeometry(5)} material={m.hedgeTop} />
             </group>,
           )
         }
@@ -5738,7 +5960,8 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
     }
 
     return { nodes, allMats, extraTex }
-  }, [wM, hM, cx, cz, phase, daylightScale])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wM, hM, cx, cz, phase, daylightScale, bakedOutdoorVersion])
 
   useEffect(() => {
     const mats = built.allMats, texs = built.extraTex
@@ -5877,38 +6100,65 @@ function HouseShell({ rooms, phase, daylightScale, style }: { rooms: Room[]; pha
       for (const [k, x, z, w, d] of [['pa', 0, (spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pb', 0, -(spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pl', (spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2], ['pr', -(spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2]] as const) {
         roofGroup.push(<mesh key={k} position={[x, 0.34, z]} castShadow material={zinc}><boxGeometry args={[w, 0.36, d]} /></mesh>)
       }
-    } else {
-      const rh = (spanPerp / 2 + oh) * rhints.pitch
-      const slope = Math.hypot(spanPerp / 2 + oh, rh)
-      const ang = Math.atan2(rh, spanPerp / 2 + oh)
-      // Walmdach: the ridge is pulled in from the ends by the hip inset, so the
-      // main slopes become trapezoids and the ends become sloped hips instead
-      // of vertical gables. Satteldach keeps a full-length ridge + gable walls.
-      const hipInset = style.roof === 'hip' ? Math.min(spanPerp / 2 + oh, (spanRidge + oh * 2) * 0.22) : 0
-      const ridgeLen = spanRidge + oh * 2 - 2 * hipInset
-      // main slopes (front/back)
-      roofGroup.push(<mesh key="s1" position={[0, rh / 2, -(spanPerp / 4 + oh / 2)]} rotation={[-ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-      roofGroup.push(<mesh key="s2" position={[0, rh / 2, (spanPerp / 4 + oh / 2)]} rotation={[ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-      if (style.roof === 'hip') {
-        // Two hip end-slopes, tilted inward from each short end to the ridge.
-        const hang = Math.atan2(rh, hipInset || 0.001)
-        const hslope = Math.hypot(hipInset, rh)
-        for (const s of [-1, 1]) {
-          roofGroup.push(
-            <mesh key={`hip${s}`} position={[s * (spanRidge / 2 + oh - hipInset / 2), rh / 2, 0]} rotation={[0, 0, s * hang]} castShadow receiveShadow material={roofMat}>
-              <boxGeometry args={[hslope, 0.12, spanPerp + oh * 2]} />
-            </mesh>,
-          )
-        }
-      } else {
-        // Satteldach gable triangles close the two ends.
-        for (const s of [-1, 1]) {
-          const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
-          roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
-        }
+    } else if (style.roof === 'hip') {
+      /*
+       * Walmdach.
+       *
+       * Was here: two full-length slope slabs plus two "hip" slabs rotated by
+       * `+s · hang`. That sign lifts the *outer* end of each hip to ridge height
+       * and drops the inner end to the eaves — the hip upside down. The result
+       * was a spike above the ridge at both ends and an open gap where the hip
+       * belonged, on every Walmdach in the app. The inset was wrong too: a hip
+       * at the same pitch as the main slopes is inset by exactly half the short
+       * span, which makes the ridge `|w − d|` long, not 56 % of the length.
+       *
+       * A hip is not four boxes. Its main faces are trapezoids and its ends are
+       * triangles meeting along a sloped ridge line, so it is built as real
+       * geometry — the same `hipRoofGeometry` the neighbourhood already uses.
+       */
+      const w = spanRidge + oh * 2
+      const d = spanPerp + oh * 2
+      const rise = (Math.min(w, d) / 2) * rhints.pitch
+      const ridgeLen = Math.abs(w - d)
+      // The shell is built for the *overhung* footprint, so it meets its own
+      // base plane at the eave tip. That plane belongs below the wall head by
+      // the climb over the overhang — see `eavesDrop`.
+      const base = -eavesDrop(oh, rhints.pitch)
+      roofGroup.push(
+        <mesh key="hip" position={[0, base, 0]} castShadow receiveShadow material={roofMat}>
+          <primitive object={hipRoofGeometry(w, d, rise)} attach="geometry" />
+        </mesh>,
+      )
+      // Traufbrett: the shell is a single surface with no thickness, so without
+      // a fascia the roof edge reads as paper from below and at grazing angles.
+      for (const [k, x, z, bw, bd] of [
+        ['fa', 0, d / 2, w, 0.06], ['fb', 0, -d / 2, w, 0.06],
+        ['fl', w / 2, 0, 0.06, d], ['fr', -w / 2, 0, 0.06, d],
+      ] as const) {
+        roofGroup.push(<mesh key={k} position={[x, base - 0.07, z]} castShadow material={roofMat}><boxGeometry args={[bw, 0.14, bd]} /></mesh>)
       }
-      // ridge cap
-      roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[ridgeLen, 0.12, 0.2]} /></mesh>)
+      if (ridgeLen > 0.2) {
+        roofGroup.push(
+          <mesh key="ridge" position={[0, base + rise, 0]} rotation={[0, w >= d ? 0 : Math.PI / 2, 0]} material={roofMat}>
+            <boxGeometry args={[ridgeLen, 0.12, 0.2]} />
+          </mesh>,
+        )
+      }
+    } else {
+      // Satteldach. `rh` is the ridge height above the wall head, and the slope
+      // bears on the wall head rather than on the tip of its own overhang —
+      // otherwise the roof hovers `oh · pitch` (here ~27 cm) clear of the
+      // masonry the whole way round and the attic is open to the street.
+      const rh = (spanPerp / 2) * rhints.pitch
+      const sl = gableSlope(spanPerp / 2, rh, oh)
+      roofGroup.push(<mesh key="s1" position={[0, sl.cy, -sl.cx]} rotation={[-sl.angle, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, sl.rafter]} /></mesh>)
+      roofGroup.push(<mesh key="s2" position={[0, sl.cy, sl.cx]} rotation={[sl.angle, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, sl.rafter]} /></mesh>)
+      // Gable triangles close the two ends, matching the slope line exactly.
+      for (const s of [-1, 1]) {
+        const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
+        roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
+      }
+      roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, 0.2]} /></mesh>)
     }
     nodes.push(
       <group key="roof" position={[bcx, eaves, bcz]} rotation={[0, ridgeAlongX ? 0 : Math.PI / 2, 0]}>{roofGroup}</group>,
@@ -6096,6 +6346,31 @@ function GhostFloors({ floors, activeId }: { floors: Floor[]; activeId: string }
  * the scene re-triangulated every room's floor and re-extruded every terrace —
  * some of the most expensive geometry in the scene — for outlines that only
  * change when the plan does.
+ *
+ * ## Why the rotation is negative
+ *
+ * A `Shape` is authored in the XY plane and has to be laid down flat, and the
+ * sign of that quarter turn decides two things at once. `+π/2` maps the shape's
+ * y onto world **+z** and its face normal onto world **−y**; `−π/2` maps y onto
+ * **−z** and the normal onto **+y**. The outlines are built with `-M(y)`, so
+ * only `−π/2` puts a room where its walls are *and* leaves it facing up.
+ *
+ * With `+π/2` it did neither: every slab was mirrored across `z = 0` — a room at
+ * plan y = 3 m rendered at world z = −3 m, out on the neighbours' lawn — and its
+ * shading normal pointed at the ground, so it was lit from below and came out
+ * black. The per-room floor picker has therefore never put a material anywhere
+ * anyone would look for it.
+ *
+ * ## Why the slab is double-sided
+ *
+ * `ShapeGeometry` normalises its triangle winding, so a flat outline always
+ * *culls* the same way whatever order the points arrive in — face down, under
+ * this rotation — while its `normal` attribute is always `+z`, which the same
+ * rotation turns face up. Winding and normal therefore disagree by construction
+ * and no choice of point order reconciles them. `DoubleSide` is the honest
+ * answer: the shading normal is right, and nothing is culled that shouldn't be.
+ * `ExtrudeGeometry` (the terrace) has no such problem — its caps come out
+ * consistently — so the deck stays single-sided.
  */
 function RoomFloors({ rooms }: { rooms: Room[] }) {
   const slabs = useMemo(() => {
@@ -6114,7 +6389,9 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
           shape,
           extrudeOptions,
           outdoor: r.zoneType === 'outdoor',
-          material: matFromCatalog(resolveFloorMaterial(r)),
+          // Lies flush over the plan-wide floor, so it needs the depth bias
+          // that resolves the tie in its favour — see `matFromCatalogInFront`.
+          material: matFromCatalogInFront(resolveFloorMaterial(r), { doubleSide: true }),
         }
       })
   }, [rooms])
@@ -6122,32 +6399,26 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
   return (
     <>
       {slabs.map((slab) => (slab.outdoor ? (
-        <group key={`room-${slab.id}`}>
-          {/* Deck slab — extruded wood */}
-          <mesh
-            position={[0, 0.0, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            castShadow
-            material={MAT.woodWalnut() as THREE.Material}
-          >
-            <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
-          </mesh>
-          {/* Top surface board (oak) sitting flush on the deck for plank detail */}
-          <mesh
-            position={[0, M(6) + 0.001, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            material={MAT.woodOak() as THREE.Material}
-          >
-            <shapeGeometry args={[slab.shape]} />
-          </mesh>
-        </group>
+        // Weathered decking, not the indoor furniture woods this used to
+        // borrow. See `MAT.deckWeathered`. One extrusion, not two meshes: the
+        // slab already caps at `M(6)`, and the separate "top board" that used to
+        // sit 1 mm over that cap was the same material at the same place —
+        // invisible while the rotation was wrong, and a z-fighting surface the
+        // moment it was not.
+        <mesh
+          key={`room-${slab.id}`}
+          rotation={[-Math.PI / 2, 0, 0]}
+          receiveShadow
+          castShadow
+          material={MAT.deckWeathered() as THREE.Material}
+        >
+          <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
+        </mesh>
       ) : (
         <mesh
           key={`room-${slab.id}`}
           position={[0, 0.001, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
           material={slab.material}
         >
@@ -6158,9 +6429,10 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
   )
 }
 
-function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus }: {
+function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHouse, stackView, houseStyle, residents, onResidentStatus, precip }: {
   env: EnvironmentState; floorVariant: FloorVariant; wallMaterialId: string; walkMode: boolean; envPreset: EnvPreset; showHouse: boolean;
   stackView: boolean; houseStyle: HouseStyle; residents: number; onResidentStatus?: (s: ResidentStatus) => void;
+  precip: Precip;
 }) {
   const doc = usePlanStore((s) => s.doc)
   const floor = useMemo(() => doc?.floors.find((f) => f.id === doc?.activeFloorId), [doc])
@@ -6189,6 +6461,15 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
 
   return (
     <>
+      {/* The sky the camera sees, from the same Preetham model `SkyEnvironment`
+          bakes into the reflections — so the view through the glazing and the
+          sky mirrored in it can no longer be two unrelated images. */}
+      <SkyDome env={env} span={Math.max(wM, hM)} />
+
+      {/* Weather in front of that sky. Off by default — this is a planning
+          tool, and rain has to be asked for rather than imposed. */}
+      {precip !== 'none' && <Precipitation kind={precip} span={Math.max(wM, hM)} />}
+
       {/* Environment lighting — ambient + hemisphere come from the environment
           model. The directional key uses the model's sun appearance; its
           position is still chosen geometrically until sun-position math lands. */}
@@ -6244,8 +6525,23 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         />
       )}
 
-      {/* Surrounding new-build neighbourhood — environmental context around the plan. */}
-      <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />
+      {/* What surrounds the plan. With a real-world anchor this is the actual
+          place — official aerial imagery on the ground, buildings from the
+          cadastre and OpenStreetMap; without one it is the generated
+          new-build neighbourhood this view always had. `WorldAround` owns that
+          choice, and switches ground and buildings together so a photograph is
+          never laid under invented streets. */}
+      {doc?.geo
+        ? (
+          <WorldAround
+            planId={doc.id}
+            geo={doc.geo}
+            cx={cx} cz={cz} wM={wM} hM={hM}
+            phase={env.phase}
+            daylightScale={env.lighting.exteriorAlbedoScale}
+          />
+        )
+        : <Neighborhood wM={wM} hM={hM} cx={cx} cz={cz} phase={env.phase} daylightScale={env.lighting.exteriorAlbedoScale} />}
 
       {/* Own-house exterior envelope (Klinker + Ziegel roof) — toggleable so the
           plan can be seen as the real building instead of an open dollhouse. */}
@@ -6280,7 +6576,7 @@ function Scene({ env, floorVariant, wallMaterialId, walkMode, envPreset, showHou
         blur={2.4}
         far={2.5}
         frames={residents > 0 ? Infinity : 12}
-        resolution={readTier() === 'high' ? 1024 : 512}
+        resolution={activeProfile().contactShadowSize}
       />
 
       {/* Walls — with corner extensions and pillars for clean joints */}
@@ -6466,6 +6762,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   const [photoLook, setPhotoLook] = useState(true)
   // Virtual residents: 0 = off, then 1 or 2 people walking their daily routine.
   const [residents, setResidents] = useState(0)
+  // Weather. Off by default and cycled by hand: this is a planning tool, and
+  // imposing rain on someone's living room would be a costume, not information.
+  // The first press picks what the season would actually bring.
+  const [precip, setPrecip] = useState<Precip>('none')
+  const cyclePrecip = () => setPrecip((p) =>
+    p === 'none' ? seasonalPrecip(seasonFromDate(new Date().getMonth() + 1))
+      : p === 'rain' ? 'snow' : 'none')
   const [residentStatus, setResidentStatus] = useState<ResidentStatus | null>(null)
   const compassNeedleRef = useRef<HTMLDivElement | null>(null)
   // Cinematic camera: every move is an eased AAA-style flight (presets, room
@@ -6512,6 +6815,11 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
     const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
     return (fl?.rooms ?? []).filter((r) => r.polygon.length >= 3).map((r) => ({ id: r.id, name: r.name }))
   }, [planDoc])
+  // Plan extent in metres — sizes the god-ray sun distance in the post chain.
+  const sceneSpan = useMemo(() => {
+    const fl = planDoc?.floors.find((f) => f.id === planDoc?.activeFloorId)
+    return fl ? Math.max(M(fl.extent.width), M(fl.extent.height)) : 12
+  }, [planDoc])
 
   // Material target: the whole plan or ONE room — every room is individually
   // stylable. Writes go into the document (persisted, undoable, 2D↔3D sync),
@@ -6532,16 +6840,28 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // has to run before the canvas below compiles its first material — hence the
   // render phase rather than an effect. The call is idempotent and guarded, and
   // returns false rather than breaking if three's shader ever changes shape.
-  // Only on 'high': PCSS costs roughly twice the shadow taps of plain PCF.
-  useMemo(() => (readTier() === 'high' ? enablePcssShadows() : false), [])
+  // Profile-gated: PCSS costs roughly twice the shadow taps of plain PCF.
+  const profile = activeProfile()
+  useMemo(() => (profile.softShadows ? enablePcssShadows() : false), [profile.softShadows])
+  // Normal-variance roughness filtering, installed the same way and for the same
+  // reason (global chunk, must precede the first compile). Deliberately *not*
+  // profile-gated: it costs two derivatives and a square root, and the sparkle
+  // it removes is worst exactly where the budget is smallest — a phone at DPR 1
+  // has no supersampling to average the glitter away. See `specularAA`.
+  useMemo(() => enableSpecularAA(), [])
 
-  // Adaptive resolution: render at up to the device's real pixel ratio (capped
-  // at 2 so 3× phones don't melt), which keeps edges crisp on hi-dpi screens
-  // instead of the old flat 1.5. PerformanceMonitor then steps it DOWN under
-  // load and back UP when headroom returns — a smooth ramp, not the old
-  // one-way drop to 1. Material quality is never touched.
-  const dprCap = useMemo(() => Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), [])
-  const [dprMax, setDprMax] = useState(() => Math.min(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2), 1.75))
+  // Resolution is no longer a fixed cap: `AdaptiveQuality` drops it while the
+  // camera moves and supersamples past native once it settles, so the only
+  // value needed here is the profile's motion floor to start from.
+  const [profileNonce, setProfileNonce] = useState(0)
+  useEffect(() => subscribeRenderProfile(() => {
+    // Shader programs differ between profiles (transmission, clearcoat/sheen
+    // lobes, detail-map samplers), so the caches are dropped and the canvas is
+    // remounted on the new nonce rather than patched in place.
+    resetMaterialCaches()
+    setProfileNonce((n) => n + 1)
+  }), [])
+
   // v17 — warm the texture cache (IndexedDB or generate) before mounting the 3D Canvas
   const [texturesReady, setTexturesReady] = useState(false)
   useEffect(() => {
@@ -6804,71 +7124,44 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {texturesReady && (
         <Suspense fallback={<LoadingFallback />}>
           <Canvas
+            key={profileNonce}
             camera={{ position: [6, 6, 8], fov: 38 }}
             shadows="soft"
-            dpr={[1, dprMax]}
+            dpr={profile.dprMotion}
             gl={{
               antialias: true,
               alpha: false,
               preserveDrawingBuffer: true,
               powerPreference: 'high-performance',
-              toneMapping: THREE.AgXToneMapping,
+              // The composer owns tone mapping (see PostFX): it renders into a
+              // half-float buffer and maps at the end of the chain, so bloom,
+              // depth of field and ambient occlusion all operate on true
+              // radiance instead of on values already clipped to white.
+              toneMapping: THREE.NoToneMapping,
               toneMappingExposure: 1.0,
               outputColorSpace: THREE.SRGBColorSpace,
             }}
             style={{ background: `linear-gradient(180deg, ${env.sky.zenithColor} 0%, ${env.sky.horizonColor} 100%)` }}
           >
-            <PerformanceMonitor
-              bounds={(rate) => (rate > 90 ? [55, 90] : [48, 60])}
-              flipflops={3}
-              onDecline={() => setDprMax((d) => Math.max(1, Math.round((d - 0.25) * 100) / 100))}
-              onIncline={() => setDprMax((d) => Math.min(dprCap, Math.round((d + 0.25) * 100) / 100))}
-              onFallback={() => setDprMax(1)}
-            />
+            <AdaptiveQuality />
             <CompassTracker needle={compassNeedleRef} />
             <CaptureHelper captureRef={captureRef} />
             {!walkMode && <CinematicDirector req={flyReq} hud={tourHud} onTourEnd={endTour} />}
-            <ToneMapController photo={photoLook} />
-            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} />
-            <RenderFXBoundary>
-              {readTier() === 'high' && dprMax > 1 ? (
-                /* MSAA 4× resolves geometry edges BEFORE post, then SMAA cleans
-                   the shaded/sub-pixel edges — together they kill the jaggies on
-                   walls, furniture and the neighbourhood roofs. */
-                <EffectComposer multisampling={4}>
-                  {/* N8AO — modern high-quality ambient occlusion (contact darkening
-                      in corners / under furniture), a big step up from SSAO for the
-                      grounded archviz look. Half-res + medium quality stays perf-safe. */}
-                  <N8AO
-                    aoRadius={0.9}
-                    distanceFalloff={1.0}
-                    intensity={2.6}
-                    quality="medium"
-                    halfRes
-                    color="#080810"
-                  />
-                  {/* Contextual DOF — focal plane rides the orbit target; the
-                      CinematicDirector pulls focus during glides. */}
-                  <CinematicFocus walkMode={walkMode} />
-                  <Bloom luminanceThreshold={0.88} intensity={0.24} mipmapBlur radius={0.55} />
-                  <HueSaturation saturation={0.08} />
-                  <BrightnessContrast contrast={0.05} />
-                  <ChromaticAberration offset={CA_OFFSET} radialModulation modulationOffset={0.35} />
-                  <Vignette offset={0.3} darkness={0.42} />
-                  <SMAA />
-                </EffectComposer>
-              ) : readTier() !== 'off' && (
-                /* Mid tier: MSAA 2× + SMAA so edges are smooth here too (the old
-                   pass had NO anti-aliasing → the "pixelig an Ecken" look), plus
-                   the cheap contrast/vignette mood shaders. No AO/bloom → still
-                   light enough for weaker GPUs. */
-                <EffectComposer multisampling={2}>
-                  <BrightnessContrast contrast={0.07} brightness={-0.008} />
-                  <Vignette offset={0.32} darkness={0.4} />
-                  <SMAA />
-                </EffectComposer>
-              )}
-            </RenderFXBoundary>
+            <Scene env={env} floorVariant={floorVariant} wallMaterialId={wallMaterialId} walkMode={walkMode} envPreset={envPreset} showHouse={showHouse} stackView={stackView} houseStyle={houseStyle} residents={residents} onResidentStatus={setResidentStatus} precip={precip} />
+            <PostFX
+              walkMode={walkMode}
+              sunDirection={env.sun.direction}
+              sunAboveHorizon={env.sun.aboveHorizon}
+              sunColor={env.lighting.sun.color}
+              span={sceneSpan}
+              photoLook={photoLook}
+              // The tone map used to run at a fixed exposure of 1.0 at every
+              // hour, so noon clipped into the roll-off and night fell into the
+              // toe. Exposure now follows the world — partially, so the day
+              // cycle still reads. See `lib/render/exposure`.
+              exposure={exposureFor(env, { walkMode })}
+              lite={preview}
+            />
           </Canvas>
         </Suspense>
         )}
@@ -6944,7 +7237,15 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         {!preview && (
         <div className="absolute top-4 right-4 z-10 surface-elevated px-3 py-2 text-xs text-[color:var(--muted)] hidden md:flex items-center gap-2">
           <Camera size={12} className="text-[color:var(--accent)]" />
-          PBR · Texturen · Soft Shadows · ACES
+          {[
+            'PBR',
+            profile.softShadows ? 'PCSS-Schatten' : 'Soft Shadows',
+            profile.ao !== 'off' && 'AO',
+            profile.ssr && 'SSR',
+            profile.godRays && 'Lichtstrahlen',
+            profile.transmission && 'Echtes Glas',
+            photoLook ? 'AgX HDR' : 'ACES HDR',
+          ].filter(Boolean).join(' · ')}
         </div>
         )}
 
@@ -7010,6 +7311,17 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               {canStack ? <Layers size={15} /> : <Lock size={15} />}
             </button>
           )}
+          {/* Wetter — aus · Regen · Schnee. Der erste Druck nimmt, was die
+              Jahreszeit ohnehin brächte. */}
+          <button
+            onClick={cyclePrecip}
+            title={`Wetter: ${PRECIP_LABEL[precip]}${precip === 'none' ? ' — klicken für Niederschlag' : ''}`}
+            className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
+              precip !== 'none' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
+            }`}
+          >
+            {precip === 'snow' ? <Snowflake size={15} /> : <CloudRain size={15} />}
+          </button>
           {/* Bau-Studio — construction · stone colour · roof shape · roof colour */}
           {!walkMode && showHouse && (
             <div className="relative">
@@ -7062,6 +7374,8 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
               )}
             </button>
           )}
+          {/* Render-Qualität — GPU-erkanntes Profil, live überschreibbar. */}
+          <QualityMenu />
           {!walkMode && <div className="my-0.5 h-px w-6 bg-[color:var(--border)]" />}
           <button
             onClick={() => captureRef.current?.()}
@@ -7081,9 +7395,13 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         )}
 
         {/* Compass + scale — the reference's right-edge viewport widgets.
-            The needle div is rotated imperatively by CompassTracker. */}
+            The needle div is rotated imperatively by CompassTracker.
+            Anchored to the bottom-right and click-through: vertically centred it
+            shared the right-hand column with the camera/quality toolbar above,
+            and on a tall viewport it covered the toolbar's lowest buttons — a
+            read-only widget was eating clicks meant for controls. */}
         {!preview && (
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10 hidden sm:flex flex-col items-center gap-2">
+        <div className="pointer-events-none absolute bottom-6 right-4 z-10 hidden sm:flex flex-col items-center gap-2">
           <div className="relative flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
             <div ref={compassNeedleRef} className="flex flex-col items-center will-change-transform">
               <span className="text-[9px] font-semibold leading-none text-[color:var(--accent)]">N</span>

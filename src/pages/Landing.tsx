@@ -6,7 +6,7 @@ import {
 import { OmegaMark } from '@/components/layout/OmegaMark'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useReveal } from '@/hooks/useReveal'
-import { PLANS, storeTier, type PlanSpec } from '@/lib/entitlements'
+import { PLANS, storePlanInterest, type PlanSpec } from '@/lib/entitlements'
 
 /**
  * Landing — the public face of OMEGA Atelier.
@@ -285,7 +285,9 @@ export function LandingPage() {
   }, [])
 
   const choose = useCallback((plan: PlanSpec) => {
-    storeTier(plan.tier)
+    // Records what they came for; it does not unlock it. Entitlements are
+    // resolved from the account, never from this — see `resolveTier`.
+    storePlanInterest(plan.tier)
     setChosenTier(plan.tier)
     window.setTimeout(() => navigate(user ? '/start' : '/login'), 650)
   }, [navigate, user])

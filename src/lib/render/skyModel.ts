@@ -140,3 +140,16 @@ export function skyFingerprint(env: EnvironmentState): string {
     Math.round(env.weather.cloudiness * 10),
   ].join(',')
 }
+
+/**
+ * sRGB byte (0…255) → linear 0…1, the exact IEC 61966-2-1 transfer curve.
+ *
+ * Needed wherever a *photograph* feeds the lighting model rather than the
+ * display: an aerial image's pixels are display-encoded, and averaging them
+ * without decoding first over-states the ground's brightness by roughly a
+ * factor of two — mid-grey asphalt would light the scene like fresh concrete.
+ */
+export function srgbToLinear(v: number): number {
+  const c = v / 255
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}

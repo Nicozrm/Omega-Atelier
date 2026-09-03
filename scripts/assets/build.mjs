@@ -45,7 +45,10 @@ import draco3d from 'draco3dgltf'
 import { join } from 'node:path'
 
 const SOURCE_DIR = 'assets-src'
-const OUT_DIR = 'public/models'
+/** Photoscans live in their own namespace so they never collide with the
+ *  Blender-generated models, which write straight into `public/models/`. */
+const SIZE_KEY_PREFIX = 'scan/'
+const OUT_DIR = 'public/models/scan'
 const REGISTRY = 'src/assets/modelRegistry.ts'
 const CATALOGUE = 'src/data/furniture.ts'
 const DEVICE_CATALOGUE = 'src/data/devices.ts'
@@ -69,7 +72,11 @@ function readRegistry() {
   const block = src.slice(src.indexOf('export const MODELS'))
   const byFile = new Map()
   const re = /'([^']+)':\s*\{\s*file:\s*'([^']+)'/g
-  for (const [, id, file] of block.matchAll(re)) {
+  for (const [, id, path] of block.matchAll(re)) {
+    // Only photoscans are built here; the Blender-generated models under
+    // `public/models/` come from `tools/blender` and own their own namespace.
+    if (!path.startsWith(SIZE_KEY_PREFIX)) continue
+    const file = path.slice(SIZE_KEY_PREFIX.length)
     if (!byFile.has(file)) byFile.set(file, [])
     byFile.get(file).push(id)
   }
@@ -106,7 +113,7 @@ function writeModelSizes(built) {
   const rows = built
     .slice()
     .sort((a, b) => (a.file < b.file ? -1 : 1))
-    .map((b) => `  '${b.file}': [${b.sizeM.map((n) => n.toFixed(4)).join(', ')}],`)
+    .map((b) => `  '${SIZE_KEY_PREFIX}${b.file}': [${b.sizeM.map((n) => n.toFixed(4)).join(', ')}],`)
     .join('\n')
 
   writeFileSync('src/assets/modelSizes.ts', `/**

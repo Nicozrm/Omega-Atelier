@@ -1,20 +1,28 @@
+import { activeProfile } from '@/lib/render/quality'
+
 /**
- * tier.ts — the render quality tier, read from the document root.
+ * tier.ts — the render quality tier, in the three-value vocabulary the scene
+ * already speaks.
  *
- * `AmbientScene` probes the device once on boot and stamps `q-high` / `q-low` /
- * `q-off` onto `<html>`. Every renderer-side quality decision (shadow map size,
- * post-processing stack, light pool size, texture detail maps) reads it from
- * there, so the whole app agrees on one answer without threading a prop through
- * the tree or subscribing to a store.
+ * This used to read a CSS class that `AmbientScene` stamped onto `<html>` from
+ * `hardwareConcurrency` and `deviceMemory` — a **CPU** signal answering a
+ * **GPU** question. A four-core laptop with a discrete card was demoted to the
+ * cheap path; a many-core machine with integrated graphics was promoted onto
+ * the expensive one; and switching on `prefers-reduced-motion` silently
+ * disabled the entire post stack, which has nothing to do with motion.
+ *
+ * The answer now comes from `render/quality.ts`, which measures the GPU
+ * directly (WebGL2, renderer string, texture limits) and which the user can
+ * override. This shim keeps the existing three-value call sites working while
+ * they migrate to reading the specific profile field they actually care about
+ * — `richMaterials`, `detailMaps`, `reflectiveFloor`, `maxDynamicLights`, … —
+ * which is both more precise and self-documenting.
  */
 
 export type RenderTier = 'high' | 'low' | 'off'
 
-/** The active tier. Defaults to `high` outside the browser (SSR, tests). */
+/** The active tier, derived from the measured render profile. */
 export function readTier(): RenderTier {
-  if (typeof document === 'undefined') return 'high'
-  const c = document.documentElement.classList
-  if (c.contains('q-off')) return 'off'
-  if (c.contains('q-low')) return 'low'
-  return 'high'
+  const id = activeProfile().id
+  return id === 'ultra' || id === 'high' ? 'high' : 'low'
 }

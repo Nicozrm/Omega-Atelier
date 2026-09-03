@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createBrandConnector } from './brandConnector'
 import { createSimulatedBrandClient, BRAND_FLEETS } from './simulatedBrandClient'
 import { goveeControlBody, hexToRgbInt, goveeCapsFor } from './goveeClient'
-import { switchbotSign, switchbotCommand, switchbotCapsFor } from './switchbotClient'
+import {
+  switchbotSign, switchbotCommand, switchbotCapsFor,
+  parseSwitchBotDevices, createSwitchBotClient,
+} from './switchbotClient'
 import { findCapability } from '@/domain'
 
 describe('brand connector (generic over a client)', () => {
@@ -77,5 +80,86 @@ describe('switchbot v1.1', () => {
     expect(switchbotCapsFor('Smart Lock').category).toBe('lock')
     expect(switchbotCapsFor('Bot').caps[0].kind).toBe('OnOff')
     expect(switchbotCapsFor('MeterTH').caps.map((c) => c.kind)).toEqual(['Temperature', 'Humidity'])
+  })
+})
+
+/**
+ * The reported symptom: SwitchBot reports "verbunden" and no device ever shows
+ * up. Two independent causes, both of which look like success from the outside.
+ */
+describe('switchbot — connected but no devices', () => {
+  const envelope = (body: unknown, statusCode = 100) =>
+    new Response(JSON.stringify({ statusCode, message: 'success', body }), { status: 200 })
+
+  const client = (fetchImpl: typeof fetch) =>
+    createSwitchBotClient({ token: 'token', secret: 'secret', baseUrl: 'https://relay/switchbot', fetchImpl, pollMs: 0 })
+
+  it('rejects a 200 response whose envelope says the credentials are wrong', () => {
+    // SwitchBot answers HTTP 200 with statusCode 401 and an empty body. Reading
+    // `deviceList` off that yielded [] — a silent, successful-looking failure.
+    expect(() => parseSwitchBotDevices({ statusCode: 401, message: 'Unauthorized', body: {} }))
+      .toThrow(/Token und Secret prüfen/)
+    expect(() => parseSwitchBotDevices({ statusCode: 190, body: {} })).toThrow(/190/)
+  })
+
+  it('includes infrared remotes, which live in their own list', () => {
+    const devices = parseSwitchBotDevices({
+      statusCode: 100,
+      body: {
+        deviceList: [{ deviceId: 'p1', deviceName: 'Bot', deviceType: 'Bot' }],
+        infraredRemoteList: [{ deviceId: 'ir1', deviceName: 'TV', remoteType: 'TV' }],
+      },
+    })
+    expect(devices.map((d) => d.deviceId)).toEqual(['p1', 'ir1'])
+    expect(devices[1].infrared).toBe(true)
+  })
+
+  it('tolerates an envelope without a statusCode (older relays)', () => {
+    expect(parseSwitchBotDevices({ body: { deviceList: [{ deviceId: 'a', deviceName: 'A' }] } })).toHaveLength(1)
+  })
+
+  it('surfaces the credential error instead of listing nothing', async () => {
+    const fetchImpl = vi.fn(async () => new Response(
+      JSON.stringify({ statusCode: 401, message: 'Unauthorized', body: {} }), { status: 200 },
+    )) as unknown as typeof fetch
+    await expect(client(fetchImpl).list()).rejects.toThrow(/Token und Secret prüfen/)
+  })
+
+  it('lists physical and infrared devices together', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith('/v1.1/devices')) {
+        return envelope({
+          deviceList: [{ deviceId: 'p1', deviceName: 'Wohnzimmer Bot', deviceType: 'Bot' }],
+          infraredRemoteList: [{ deviceId: 'ir1', deviceName: 'Fernseher', remoteType: 'TV' }],
+        })
+      }
+      return envelope({ power: 'on' })
+    }) as unknown as typeof fetch
+
+    const devices = await client(fetchImpl).list()
+    expect(devices.map((d) => d.name)).toEqual(['Wohnzimmer Bot', 'Fernseher'])
+    expect(devices[1].metadata?.infrared).toBe('true')
+    // No `/status` call for the IR remote — SwitchBot has none, and the daily
+    // call budget is finite.
+    const statusCalls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([u]) => String(u).includes('/status'))
+    expect(statusCalls).toHaveLength(1)
+    expect(String(statusCalls[0][0])).toContain('p1')
+  })
+
+  it('reports an empty account as a note rather than as silence', async () => {
+    const fetchImpl = vi.fn(async () => envelope({ deviceList: [], infraredRemoteList: [] })) as unknown as typeof fetch
+    const c = createBrandConnector({ id: 'switchbot', label: 'SwitchBot', client: client(fetchImpl) })
+    await c.connect()
+    expect(c.health().status).toBe('connected')
+    expect(c.health().message).toMatch(/keine Geräte/)
+  })
+
+  it('does not list twice for one connect+discover', async () => {
+    const fetchImpl = vi.fn(async () => envelope({ deviceList: [], infraredRemoteList: [] })) as unknown as typeof fetch
+    const c = createBrandConnector({ id: 'switchbot', label: 'SwitchBot', client: client(fetchImpl) })
+    await c.connect()
+    await c.discover()
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1)
   })
 })

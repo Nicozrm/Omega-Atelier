@@ -165,21 +165,26 @@ export function assignSlots(
 }
 
 /**
- * Pool size for a quality tier.
+ * Pool size for a render profile.
  *
- * The pool is a *fixed* shader cost, so it is sized to what the tier can carry
- * rather than to the plan: the difference between a two-light and an eight-light
- * program is a recompile, and we would rather pay eight lights' arithmetic than
- * stutter. Callers clamp this to the number of sources actually present, which
- * only changes when the plan or the active mode changes — never while orbiting.
+ * The pool is a *fixed* shader cost, so it is sized to what the profile can
+ * carry rather than to the plan: the difference between a two-light and an
+ * eight-light program is a recompile, and we would rather pay the extra lights'
+ * arithmetic than stutter. Callers clamp this to the number of sources actually
+ * present, which only changes when the plan or the active mode changes — never
+ * while orbiting.
+ *
+ * This used to take the coarse three-value tier and answer 8/4/2, which quietly
+ * discarded the profile's own `maxDynamicLights` (24/16/10/6): an ultra machine
+ * lit a scene with eight lamps when it had been budgeted for twenty-four, and
+ * `readTier()` can no longer return `'off'` at all, so the third case was
+ * unreachable. The profile field is the declared budget, so it is the one that
+ * decides — this function exists to state the floor and the rounding, not to
+ * hold a second opinion.
  */
-export function lightBudgetForTier(tier: 'high' | 'low' | 'off'): number {
-  switch (tier) {
-    case 'high':
-      return 8
-    case 'low':
-      return 4
-    default:
-      return 2
-  }
+export function lightBudgetForProfile(maxDynamicLights: number): number {
+  if (!Number.isFinite(maxDynamicLights)) return 1
+  // At least one slot: a plan with a single lamp must still light it, and a
+  // zero-length pool would compile a program that no source can ever occupy.
+  return Math.max(1, Math.floor(maxDynamicLights))
 }

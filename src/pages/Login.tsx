@@ -16,15 +16,6 @@ function GoogleIcon() {
   )
 }
 
-/** Apple brand mark. */
-function AppleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M17.05 12.53c-.02-2.02 1.65-2.99 1.72-3.04-.94-1.37-2.4-1.56-2.92-1.58-1.24-.13-2.42.73-3.05.73-.63 0-1.6-.71-2.63-.69-1.35.02-2.6.79-3.3 2-1.41 2.44-.36 6.05 1.01 8.03.67.97 1.47 2.05 2.52 2.01 1.01-.04 1.39-.65 2.62-.65 1.22 0 1.57.65 2.63.63 1.09-.02 1.78-.98 2.44-1.96.77-1.12 1.09-2.21 1.11-2.27-.02-.01-2.13-.82-2.15-3.24zM15.03 6.29c.56-.68.94-1.62.83-2.56-.81.03-1.79.54-2.37 1.22-.52.6-.98 1.56-.86 2.48.9.07 1.83-.46 2.4-1.14z" />
-    </svg>
-  )
-}
-
 export function LoginPage() {
   const user = useAuthStore((s) => s.user)
   const loading = useAuthStore((s) => s.loading)
@@ -128,22 +119,18 @@ export function LoginPage() {
 
           <div className="omega-divider my-4">&nbsp;</div>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              onClick={() => oauth('google')}
-              disabled={!supabaseReady}
-              className="flex items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] bg-white px-3 py-2.5 text-sm font-medium text-[#1f1f1f] transition hover:bg-[#f5f5f5] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <GoogleIcon /> Google
-            </button>
-            <button
-              onClick={() => oauth('apple')}
-              disabled={!supabaseReady}
-              className="flex items-center justify-center gap-2 rounded-lg border border-black bg-black px-3 py-2.5 text-sm font-medium text-white transition hover:bg-[#1a1a1a] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <AppleIcon /> Apple
-            </button>
-          </div>
+          {/* Google ist der einzige OAuth-Anbieter. Apple ist entfernt: es
+              setzt eine kostenpflichtige Developer-Mitgliedschaft und einen
+              serverseitig signierten Client-Secret voraus, der alle sechs
+              Monate neu erzeugt werden muss — Aufwand, der sich für einen
+              zweiten Anbieter neben E-Mail und Google nicht rechnet. */}
+          <button
+            onClick={() => oauth('google')}
+            disabled={!supabaseReady}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] bg-white px-3 py-2.5 text-sm font-medium text-[#1f1f1f] transition hover:bg-[#f5f5f5] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <GoogleIcon /> Mit Google anmelden
+          </button>
           </>
           )}
 

@@ -74,21 +74,50 @@ export function hasFeature(tier: Tier, feature: FeatureKey): boolean {
   return ORDER[tier] >= ORDER[FEATURE_TIER[feature]]
 }
 
-/** Persist a chosen plan (the landing page's pricing cards call this). */
-export function storeTier(tier: Tier): void {
+/**
+ * Record which plan the visitor clicked on the pricing cards.
+ *
+ * **This grants nothing.** It is a note of intent, kept so a later checkout
+ * flow (and the "you chose Pro" copy on the way there) knows what they came
+ * for. `resolveTier` deliberately does not read it — see there for why.
+ */
+export function storePlanInterest(tier: Tier): void {
   try { localStorage.setItem(TIER_KEY, tier) } catch { /* private mode */ }
 }
 
-/**
- * Resolve the active tier: developers → max, else the locally stored choice,
- * else free.
- */
-export function resolveTier(userEmail?: string | null): Tier {
-  if (userEmail && DEV_EMAILS.includes(userEmail.toLowerCase())) return 'max'
+/** The plan the visitor last clicked, if any. Never an entitlement. */
+export function readPlanInterest(): Tier | null {
   try {
     const t = localStorage.getItem(TIER_KEY)
     if (t === 'free' || t === 'pro' || t === 'max') return t
   } catch { /* private mode */ }
+  return null
+}
+
+/**
+ * Resolve the active tier. **Free for everyone**, `max` for the product owner.
+ *
+ * This used to return whatever `localStorage['omega.tier']` said, which meant
+ * the pricing cards were the subscription: clicking "Max" wrote `max` and the
+ * app unlocked the Max feature set — no payment, no account, no server. Anyone
+ * who never saw the landing page could reach the same state by typing one line
+ * into the console, because a client-side string is not a grant. It is a note
+ * the client wrote to itself.
+ *
+ * So the stored choice is now kept (see `storePlanInterest`) but never read
+ * here. Until real billing exists, exactly two answers are possible, and both
+ * come from something the client cannot rewrite:
+ *
+ *  - the product owner's account → `max`
+ *  - everybody else → `free`
+ *
+ * When billing arrives this function is where it lands: the paid tier has to
+ * come from the session — a verified claim on the server side — and this
+ * signature already takes the account rather than reading storage, so the fix
+ * is to consult that claim here and nowhere else.
+ */
+export function resolveTier(userEmail?: string | null): Tier {
+  if (userEmail && DEV_EMAILS.includes(userEmail.toLowerCase())) return 'max'
   return 'free'
 }
 

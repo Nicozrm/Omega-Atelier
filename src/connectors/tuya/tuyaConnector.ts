@@ -20,7 +20,11 @@ import type {
 } from '@/domain'
 import { signRequest, makeNonce } from './signing'
 import type { TuyaTransport } from './transport'
-import { mapTuyaDevice, commandToTuya, type TuyaDevice } from './mapping'
+import { mapTuyaDevicePassive, commandToTuya, type TuyaDevice } from './mapping'
+import {
+  deviceListPath, emptyAccountHint, isPaginated, parseDevicePage, tuyaErrorMessage,
+} from './discovery'
+import { trace, traceError } from '../diagnostics'
 
 export interface TuyaConnectorOptions {
   id?: string
@@ -56,7 +60,10 @@ export function createTuyaConnector(opts: TuyaConnectorOptions): Connector {
   let message: string | undefined
   let lastSync: string | undefined
   let token: TokenState | undefined
-  let uid = opts.uid
+  /** Only what the user configured — the listing scope they asked for. */
+  const uid = opts.uid
+  /** What the token grant volunteered. A fallback scope, never the primary. */
+  let tokenUid: string | undefined
   let onUpdate: ((u: DeviceUpdate) => void) | undefined
   let statusListener: ((h: ConnectorHealth) => void) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
@@ -87,30 +94,115 @@ export function createTuyaConnector(opts: TuyaConnectorOptions): Connector {
 
   async function ensureToken(): Promise<void> {
     if (token && Date.now() < token.expiresAt - 60_000) return
+    const refreshing = Boolean(token)
     const grant = token
       ? `/v1.0/token/${token.refreshToken}`
       : '/v1.0/token?grant_type=1'
     const res = await call<{ access_token: string; refresh_token: string; expire_time: number; uid?: string }>('GET', grant, undefined, false)
     if (!res.success || !res.result) {
-      throw new Error(res.msg ?? 'Tuya-Token abgelehnt (Client-ID/Secret prüfen)')
+      const reason = tuyaErrorMessage(res.code, res.msg)
+      traceError(id, 'auth', reason, { refreshing, code: res.code ?? -1 })
+      throw new Error(reason)
     }
     token = {
       accessToken: res.result.access_token,
       refreshToken: res.result.refresh_token,
       expiresAt: Date.now() + res.result.expire_time * 1000,
     }
-    if (!uid && res.result.uid) uid = res.result.uid
+    /*
+     * Tuya returns a uid with the token grant. It is kept as a *fallback*, not
+     * adopted as the listing scope: for a simple-mode grant that uid is the
+     * project owner, which is not necessarily a linked app account, and routing
+     * straight to `/v1.0/users/{that}/devices` would answer empty for exactly
+     * the projects the association endpoint serves correctly — the original bug
+     * in a new costume. It is tried only after the primary listing found none.
+     */
+    if (res.result.uid) tokenUid = res.result.uid
+    trace(id, 'auth', refreshing ? 'Access-Token erneuert' : 'Access-Token erhalten', {
+      expiresInS: res.result.expire_time,
+      uidFromToken: Boolean(!opts.uid && res.result.uid),
+    })
+  }
+
+  /**
+   * The message for a listing that produced nothing usable. Kept separate so
+   * the connector can report "connected, but empty" without pretending it is
+   * an error and without pretending it is a success.
+   */
+  let discoveryNote: string | undefined
+
+  /** Read every page of one listing scope. */
+  async function listScope(scope: string | undefined): Promise<TuyaDevice[]> {
+    const raw: TuyaDevice[] = []
+    let cursor: string | undefined
+    let page = 0
+    do {
+      const path = deviceListPath(scope, cursor)
+      const res = await call<unknown>('GET', path)
+      if (!res.success) {
+        const reason = tuyaErrorMessage(res.code, res.msg)
+        traceError(id, 'request', reason, { path: path.split('?')[0], code: res.code ?? -1 })
+        throw new Error(reason)
+      }
+      const parsed = parseDevicePage<TuyaDevice>(res.result)
+      if (!parsed) {
+        // Answering 200 with a shape we do not recognise is not an empty
+        // account, and must never be reported as one.
+        const reason = 'Tuya antwortet in einem unbekannten Format — '
+          + 'Geräteliste konnte nicht gelesen werden'
+        traceError(id, 'parse', reason, { path: path.split('?')[0] })
+        throw new Error(reason)
+      }
+      trace(id, 'request', 'Geräteliste abgerufen', {
+        path: path.split('?')[0], page, returned: parsed.devices.length,
+      })
+      raw.push(...parsed.devices)
+      cursor = isPaginated(scope) ? parsed.nextCursor : undefined
+      page++
+    } while (cursor && page < 20) // bounded: a runaway cursor must not loop forever
+    return raw
   }
 
   async function fetchDevices(): Promise<Device[]> {
     await ensureToken()
-    const path = uid ? `/v1.0/users/${uid}/devices` : '/v1.0/devices'
-    const res = await call<TuyaDevice[]>('GET', path)
-    if (!res.success || !Array.isArray(res.result)) {
-      throw new Error(res.msg ?? 'Geräteliste konnte nicht geladen werden')
+
+    let raw = await listScope(uid)
+
+    /*
+     * An empty primary listing is not yet an empty account. A project whose app
+     * account is linked but not associated at project level lists nothing here
+     * and everything under its own uid, so that scope is tried once before we
+     * tell the user their account is empty. A failure of the fallback is not
+     * worth reporting — the primary result stands.
+     */
+    if (raw.length === 0 && !uid && tokenUid) {
+      try {
+        raw = await listScope(tokenUid)
+      } catch {
+        raw = []
+      }
     }
+
+    /*
+     * Every device Tuya returned becomes a device in the twin. The old code
+     * dropped the ones whose data points it did not recognise, which is how a
+     * successful discovery could still render an empty list.
+     */
+    const devices = raw.map((d) => mapTuyaDevicePassive(d, id))
+    const unsupported = devices.filter((d) => d.capabilities.length === 0).length
+    trace(id, 'normalize', 'Geräte in neutrale Domain übersetzt', {
+      returned: raw.length, mapped: devices.length - unsupported, unsupported,
+    })
+
+    discoveryNote = raw.length === 0
+      ? emptyAccountHint(uid)
+      : unsupported > 0
+        ? `${unsupported} von ${raw.length} Tuya-Geräten liefern keine bekannten Datenpunkte — `
+          + 'sie erscheinen ohne Bedienelemente.'
+        : undefined
+
     lastSync = new Date().toISOString()
-    return res.result.map((d) => mapTuyaDevice(d, id)).filter((d): d is Device => d !== null)
+    return devices
   }
 
   const sigOf = (d: Device): string => JSON.stringify(d.capabilities)
@@ -134,6 +226,12 @@ export function createTuyaConnector(opts: TuyaConnectorOptions): Connector {
   return {
     info: { id, label },
 
+    /**
+     * Authentication only. A valid token proves the credentials and the region,
+     * and proves nothing at all about whether the project can see devices —
+     * those are two different failures with two different fixes, so they are
+     * two different steps here. Discovery reports its own outcome.
+     */
     async connect(): Promise<void> {
       setStatus('connecting')
       try {
@@ -149,6 +247,7 @@ export function createTuyaConnector(opts: TuyaConnectorOptions): Connector {
       if (timer) { clearInterval(timer); timer = undefined }
       onUpdate = undefined
       token = undefined
+      discoveryNote = undefined
       lastSig.clear()
       setStatus('disconnected')
     },
@@ -156,11 +255,17 @@ export function createTuyaConnector(opts: TuyaConnectorOptions): Connector {
     async discover(): Promise<Device[]> {
       const devices = await fetchDevices()
       for (const d of devices) lastSig.set(d.id, sigOf(d))
+      // A note is not an error: the connection is real, the account is empty
+      // (or partly untranslatable), and the card has to say which.
+      if (status === 'connected') setStatus('connected', discoveryNote)
+      trace(id, 'store', 'Geräte an den Twin übergeben', { count: devices.length })
       return devices
     },
 
     async synchronize(): Promise<Device[]> {
-      return fetchDevices()
+      const devices = await fetchDevices()
+      if (status === 'connected') setStatus('connected', discoveryNote)
+      return devices
     },
 
     subscribe(handler: (u: DeviceUpdate) => void): Unsubscribe {
