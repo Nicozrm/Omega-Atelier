@@ -301,7 +301,6 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
    Buttons
    ─────────────────────────────────────────────────────────────────────── */
 .btn {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -391,13 +390,10 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
    Inputs
    ─────────────────────────────────────────────────────────────────────── */
 .input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--fg);
-  font-size: 0.88rem;
   font-family: inherit;
   transition: border-color var(--dur-1) var(--ease-omega), box-shadow var(--dur-1) var(--ease-omega), background-color var(--dur-1) var(--ease-omega);
 }
@@ -519,7 +515,6 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
 
 /* ── Chip / Badge ───────────────────────────────────────────────────── */
 .chip {
-  display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.18rem 0.55rem;
@@ -659,7 +654,6 @@ h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.2
 .twin-bloom { transform-box: fill-box; transform-origin: center; animation: twin-breathe 5.5s var(--ease-out-quart) infinite; }
 
 .list-row {
-  display: flex;
   align-items: center;
   gap: 0.625rem;
   padding: 0.5rem 0.625rem;
@@ -913,4 +907,556 @@ html.q-low .bloom, html.q-off .bloom { filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .composer-scan::before, .composer-particle, .composer-glow { animation: none; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHROME — the interface *around* the render
+   ═══════════════════════════════════════════════════════════════════════
+   Everything below dresses the surfaces the workspace is framed by: the top
+   bar, the tool rail, the side rails, the menus. Their job is the opposite of
+   the render's — to be legible without ever competing with it — so the whole
+   layer is built from three quiet materials and one accent, and nothing here
+   carries a gradient or a glow that the eye can land on by accident.
+   ─────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* One hairline value for the whole chrome. A border that changes weight from
+     panel to panel is the single most reliable tell of an interface assembled
+     rather than designed. */
+  --hairline:        color-mix(in srgb, var(--fg) 9%, transparent);
+  --hairline-soft:   color-mix(in srgb, var(--fg) 6%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--fg) 15%, transparent);
+
+  /* Hover / pressed fills. Tinted toward the accent rather than neutral grey —
+     a grey hover on a warm surface reads as dirt. */
+  --fill-hover:  color-mix(in srgb, var(--accent) 10%, transparent);
+  --fill-active: color-mix(in srgb, var(--accent) 15%, transparent);
+  --fill-quiet:  color-mix(in srgb, var(--fg) 5%, transparent);
+
+  /* Chrome metrics */
+  --chrome-height: 3.25rem;
+  --rail-height:   2.9rem;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Everything below lives in Tailwind's `components` layer on purpose.
+   Unlayered CSS beats *every* layered utility, so a bare `.tabbar { display:
+   grid }` here would quietly defeat `lg:hidden` on the same element and paint
+   the phone tab bar across a desktop. In the components layer the utilities win,
+   which is the only order under which a class like `hidden lg:inline-flex` can
+   be trusted.
+   ─────────────────────────────────────────────────────────────────────── */
+@layer components {
+
+  /*
+   * `display` for the three pre-existing primitives that set it, moved down
+   * here from their unlayered rules.
+   *
+   * This is not cosmetic. `.btn { display: inline-flex }` written outside any
+   * layer outranks every Tailwind utility, so each of the app's
+   * `hidden md:inline-flex` buttons was in fact visible at every width — the
+   * top bar showed its full row of icons on a phone, and every responsive
+   * `hidden` on a button, chip or list row in this codebase was silently a
+   * no-op. Declared here the utilities win again, and those classes mean what
+   * they say. Everything else about the three rules is untouched.
+   */
+  .btn      { display: inline-flex; }
+  .chip     { display: inline-flex; }
+  .list-row { display: flex; }
+
+  /*
+   * `.input`'s box, for the same reason. Its unlayered `padding` shorthand beat
+   * every `pl-*` utility, which is why the device library's search field printed
+   * its placeholder straight through the magnifier icon sitting in the padding
+   * that was supposed to be reserved for it.
+   */
+  .input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.88rem;
+  }
+
+  /*
+   * Native <select> in the app's own clothes. The browser's default control
+   * brings its own font, its own metrics and a system-blue focus ring, and next
+   * to a styled text field it reads as a piece of a different program.
+   */
+  .select {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    padding: 0.375rem 1.75rem 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    font-family: inherit;
+    color: var(--fg);
+    background-color: var(--fill-quiet);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    /* Chevron as a background image, so the control needs no wrapper element
+       and the glyph cannot drift out of alignment with it. A neutral grey is
+       used rather than currentColor (which a data URI cannot read) — it sits
+       correctly against both the dark and the light track. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none' stroke='%23928B7C' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.25 5 4.75 9 1.25'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
+    background-size: 10px 6px;
+    background-repeat: no-repeat;
+    transition: border-color var(--dur-1) var(--ease-out-quart), background-color var(--dur-1) var(--ease-out-quart);
+  }
+  .select:hover { border-color: var(--hairline-strong); }
+  .select:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent); outline-offset: 1px; }
+  .select option { background: var(--surface); color: var(--fg); }
+
+  /* ── The top chrome ──────────────────────────────────────────────────────
+     Two stacked strips (identity + tools) that must read as one pane of glass,
+     so the blur and the tint live on the wrapper and the inner strips carry
+     nothing but a hairline between them. */
+  .chrome {
+    position: relative;
+    z-index: 30;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    backdrop-filter: blur(28px) saturate(1.6);
+    border-bottom: 1px solid var(--hairline);
+    /* A single specular line along the very top edge — what makes the strip read
+       as glass with thickness rather than a flat translucent fill. */
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, var(--fg) 7%, transparent),
+      0 1px 0 0 rgba(0, 0, 0, 0.16),
+      0 8px 24px -12px rgba(0, 0, 0, 0.45);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .chrome { background: var(--bg-elevated); }
+  }
+  .chrome-row {
+    display: flex;
+    align-items: center;
+    height: var(--chrome-height);
+    padding-inline: 0.75rem;
+    gap: 0.5rem;
+  }
+  .chrome-row + .chrome-row {
+    height: var(--rail-height);
+    border-top: 1px solid var(--hairline-soft);
+  }
+  @media (min-width: 768px) {
+    .chrome-row { padding-inline: 1rem; }
+  }
+
+  /* Document identity — title over its status line, the way a document-based app
+     names the thing you are working on. */
+  .doc-title {
+    display: block;
+    max-width: min(22ch, 100%);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    line-height: 1.15;
+    color: var(--fg-strong);
+    text-align: left;
+  }
+  .doc-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+    overflow: hidden;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    color: var(--muted);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  /* Each part of the status line truncates rather than wrapping. A two-line
+     meta row pushes the whole bar taller on exactly the screens with no height
+     to spare. */
+  .doc-meta > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background-color var(--dur-1) var(--ease-out-quart), border-color var(--dur-1) var(--ease-out-quart);
+  }
+  .doc-identity:hover { background: var(--fill-quiet); border-color: var(--hairline-soft); }
+
+  /* ── Search field — the palette's front door ────────────────────────────
+     The ⌘K palette was reachable only through a magnifier glyph, which is to say
+     only by people who already knew it existed. A field that looks like a field
+     says "type here" without a tooltip. */
+  .field-search {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 1.875rem;
+    /* Shrinkable on purpose. The bar's three zones share one line, and the
+       centre one (the view switcher) must never be pushed off it — so this
+       field gives up its prompt text first, then its width, before anything
+       else in the bar has to move. */
+    flex: 0 1 13rem;
+    /* Below this the prompt is a stub and the field stops earning its width —
+       the bar drops it for a plain button at that point instead. */
+    min-width: 9rem;
+    padding: 0 0.5rem 0 0.625rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--hairline);
+    background: var(--fill-quiet);
+    color: var(--muted);
+    font-size: 0.8125rem;
+    letter-spacing: -0.008em;
+    cursor: text;
+    transition:
+      background-color var(--dur-1) var(--ease-out-quart),
+      border-color var(--dur-1) var(--ease-out-quart),
+      color var(--dur-1) var(--ease-out-quart);
+  }
+  .field-search:hover {
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+    border-color: var(--hairline-strong);
+    color: var(--muted-strong);
+  }
+  .field-search > span { min-width: 0; }
+  .field-search kbd {
+    margin-left: auto;
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    line-height: 1;
+    padding: 0.2rem 0.3rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+    color: var(--muted);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+  }
+
+  /* ── Menus ──────────────────────────────────────────────────────────────── */
+  @keyframes menu-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .menu-panel {
+    padding: 0.3125rem;
+    border-radius: var(--radius-xl);
+    background: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
+    -webkit-backdrop-filter: blur(32px) saturate(1.8);
+    backdrop-filter: blur(32px) saturate(1.8);
+    border: 1px solid var(--hairline);
+    /* Contact shadow + wide ambient: a menu floats above everything, and one
+       shadow can only say one of those two things. */
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.28),
+      0 2px 6px rgba(0, 0, 0, 0.22),
+      0 18px 48px -12px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 0 color-mix(in srgb, var(--fg) 8%, transparent);
+    animation: menu-in 170ms var(--ease-out-expo) both;
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .menu-panel { background: var(--bg-elevated); }
+  }
+
+  .menu-section + .menu-section { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px solid var(--hairline-soft); }
+  .menu-section-title {
+    padding: 0.375rem 0.625rem 0.25rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .menu-label {
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu-separator { margin: 0.25rem 0.375rem; height: 1px; background: var(--hairline-soft); }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.4375rem 0.625rem;
+    border-radius: var(--radius-sm);
+    text-align: left;
+    font-size: 0.8125rem;
+    font-weight: 450;
+    letter-spacing: -0.008em;
+    color: var(--fg);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background-color 110ms var(--ease-out-quart), color 110ms var(--ease-out-quart);
+  }
+  .menu-item:hover:not(.is-disabled),
+  .menu-item:focus-visible:not(.is-disabled),
+  .menu-item:focus:not(.is-disabled) {
+    background: var(--fill-hover);
+    color: var(--fg-strong);
+    outline: none;
+  }
+  .menu-item:active:not(.is-disabled) { background: var(--fill-active); }
+  .menu-item.is-danger { color: var(--danger); }
+  .menu-item.is-danger:hover, .menu-item.is-danger:focus {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    color: var(--danger);
+  }
+  .menu-item.is-disabled { cursor: not-allowed; color: var(--muted); opacity: 0.55; }
+
+  /* A fixed icon column is what lets the labels form one readable left edge. */
+  .menu-item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.0625rem;
+    flex: none;
+    color: var(--muted);
+    transition: color 110ms var(--ease-out-quart);
+  }
+  .menu-item:hover .menu-item-icon,
+  .menu-item:focus .menu-item-icon { color: var(--accent-bright); }
+  .menu-item.is-danger .menu-item-icon { color: inherit; }
+
+  .menu-item-body { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
+  .menu-item-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .menu-item-desc {
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu-item-kbd {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .menu-item-trailing { flex: none; display: inline-flex; align-items: center; }
+
+  /* ── Tooltip ────────────────────────────────────────────────────────────
+     Darker than the surface it floats over, not lighter. A tip is a temporary
+     overlay; giving it the same raised treatment as a panel makes it read as
+     part of the layout for the half-second it is up. */
+  @keyframes tooltip-in {
+    from { opacity: 0; transform: translate(var(--tt-x, 0), var(--tt-y, 0)) scale(0.97); }
+    to   { opacity: 1; }
+  }
+  .tooltip-bubble {
+    padding: 0.3125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    letter-spacing: -0.006em;
+    color: var(--fg-strong);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    backdrop-filter: blur(16px) saturate(1.5);
+    border: 1px solid var(--hairline);
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.30),
+      0 6px 20px -6px rgba(0, 0, 0, 0.55);
+    animation: fade-in 110ms var(--ease-out-quart);
+  }
+  .tooltip-kbd {
+    padding: 0.0625rem 0.25rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--fg) 7%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--muted-strong);
+  }
+
+  /* ── Segmented control ──────────────────────────────────────────────────
+     A recessed track with a raised key in it. Both halves are needed: a thumb
+     only reads as selected against a groove, and a groove only reads as a
+     groove once something is sitting in it. */
+  .segmented {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--fg) 4%, transparent);
+    box-shadow:
+      inset 0 0 0 1px var(--hairline-soft),
+      inset 0 1px 2px rgba(0, 0, 0, 0.20);
+  }
+  .segmented-thumb {
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--fg) 14%, transparent),
+      color-mix(in srgb, var(--fg) 9%, transparent)
+    );
+    box-shadow:
+      0 0 0 0.5px rgba(0, 0, 0, 0.30),
+      0 1px 2px rgba(0, 0, 0, 0.30),
+      inset 0 1px 0 0 color-mix(in srgb, var(--fg) 16%, transparent);
+  }
+
+  /* ── Side rails ─────────────────────────────────────────────────────────── */
+  .rail {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--bg-elevated) 62%, transparent);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    backdrop-filter: blur(24px) saturate(1.5);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .rail { background: var(--bg-elevated); }
+  }
+  .rail-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    flex-shrink: 0;
+    padding-inline: 0.625rem 0.5rem;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .rail-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: -0.006em;
+    color: var(--fg-strong);
+  }
+
+  /* The collapsed-rail affordance. A labelled vertical tab, not a mystery arrow:
+     it says which panel comes back. */
+  .rail-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--muted);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28), inset 0 1px 0 0 color-mix(in srgb, var(--fg) 7%, transparent);
+    font-size: 0.6875rem;
+    font-weight: 550;
+    letter-spacing: 0.01em;
+    transition:
+      color var(--dur-1) var(--ease-out-quart),
+      border-color var(--dur-1) var(--ease-out-quart),
+      transform var(--spring-pop-ms) var(--spring-pop);
+  }
+  .rail-tab:hover {
+    color: var(--accent-bright);
+    border-color: var(--border-accent);
+    transform: translateY(-1px);
+  }
+
+  /* ── Tool rail ──────────────────────────────────────────────────────────
+     The drawing tools. Grouped into clusters with real air between them so the
+     row reads as four decisions rather than eighteen buttons. */
+  .tool-cluster {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.125rem;
+    border-radius: var(--radius-md);
+    background: var(--fill-quiet);
+    border: 1px solid var(--hairline-soft);
+  }
+  .tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.875rem;
+    height: 1.875rem;
+    border-radius: var(--radius-xs);
+    border: 0;
+    background: transparent;
+    color: var(--muted-strong);
+    cursor: pointer;
+    transition:
+      color 120ms var(--ease-out-quart),
+      background-color 120ms var(--ease-out-quart),
+      transform var(--spring-pop-ms) var(--spring-pop);
+  }
+  .tool-btn:hover:not(:disabled) { color: var(--fg-strong); background: var(--fill-quiet); }
+  .tool-btn:active:not(:disabled) { transform: scale(0.92); transition-duration: 70ms; }
+  .tool-btn:disabled { opacity: 0.32; cursor: default; }
+  .tool-btn[aria-pressed="true"], .tool-btn.is-on { color: var(--accent-bright); }
+
+  /* Readouts inside the rail (zoom %, counts) hold their width so the row never
+     shifts as the number changes. */
+  .tool-readout {
+    min-width: 3rem;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    user-select: none;
+  }
+
+  /* ── Mobile ─────────────────────────────────────────────────────────────── */
+  .sheet-grabber {
+    width: 2.25rem;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: var(--hairline-strong);
+    margin: 0.5rem auto 0.25rem;
+  }
+  .tabbar {
+    display: grid;
+    border-top: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    backdrop-filter: blur(28px) saturate(1.6);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tabbar { background: var(--bg-elevated); }
+  }
+  .tabbar-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1875rem;
+    padding: 0.5rem 0 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 550;
+    letter-spacing: 0.005em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    transition: color 140ms var(--ease-out-quart);
+  }
+  .tabbar-item[aria-selected="true"] { color: var(--accent-bright); }
+  .tabbar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    transition: background-color 180ms var(--ease-out-quart);
+  }
+  .tabbar-item[aria-selected="true"] .tabbar-icon { background: var(--fill-active); }
 }

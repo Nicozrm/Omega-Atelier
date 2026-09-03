@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/useAuthStore'
 import { usePlanStore, loadLocalPlan } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
 import { useComposerStore } from '@/store/useComposerStore'
+import { Chrome } from '@/components/layout/Chrome'
 import { Topbar } from '@/components/layout/Topbar'
 import { TEMPLATES, createBlankPlan } from '@/data/templates'
 import { timeAgo } from '@/lib/utils'
@@ -121,7 +122,7 @@ export function PlansPage() {
 
   return (
     <div className="omega-noise omega-scroll h-screen overflow-y-auto">
-      <Topbar />
+      <Chrome><Topbar /></Chrome>
 
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-10">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">

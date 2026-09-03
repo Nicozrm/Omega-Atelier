@@ -84,3 +84,58 @@ describe('Menu — menu-button accessibility contract', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   })
 })
+
+describe('Menu — structure and toggles', () => {
+  function Structured({ checked = true }: { checked?: boolean }) {
+    return (
+      <Menu trigger={({ ref, ...p }) => <button ref={ref} {...p}>Mehr</button>}>
+        <Menu.Section title="Ansicht">
+          <Menu.Item checked={checked} shortcut="⌥1">Bibliothek</Menu.Item>
+          <Menu.Item icon={<span data-testid="icon" />}>Thema</Menu.Item>
+        </Menu.Section>
+        <Menu.Section title="Hilfe">
+          <Menu.Item shortcut="?">Tastenkürzel</Menu.Item>
+        </Menu.Section>
+      </Menu>
+    )
+  }
+
+  it('exposes a toggle row as a checkbox item carrying its state', async () => {
+    render(<Structured />)
+    await userEvent.click(screen.getByRole('button', { name: 'Mehr' }))
+    const toggle = screen.getByRole('menuitemcheckbox', { name: /Bibliothek/ })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('reports the unchecked state rather than dropping the attribute', async () => {
+    render(<Structured checked={false} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Mehr' }))
+    expect(screen.getByRole('menuitemcheckbox', { name: /Bibliothek/ }))
+      .toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('includes toggle rows in the arrow-key rotation', () => {
+    // A checkbox row is a `menuitemcheckbox`, not a `menuitem`; keyboard
+    // navigation that only looked for the latter would silently skip it.
+    render(<Structured />)
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Mehr' }), { key: 'ArrowDown' })
+    expect(document.activeElement).toHaveTextContent('Bibliothek')
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })
+    expect(document.activeElement).toHaveTextContent('Thema')
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' })
+    expect(document.activeElement).toHaveTextContent('Tastenkürzel')
+  })
+
+  it('groups items under their section headings', async () => {
+    render(<Structured />)
+    await userEvent.click(screen.getByRole('button', { name: 'Mehr' }))
+    const groups = screen.getAllByRole('group')
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['Ansicht', 'Hilfe'])
+  })
+
+  it('renders the shortcut hint alongside the label', async () => {
+    render(<Structured />)
+    await userEvent.click(screen.getByRole('button', { name: 'Mehr' }))
+    expect(screen.getByRole('menuitem', { name: /Tastenkürzel/ })).toHaveTextContent('?')
+  })
+})

@@ -20,9 +20,9 @@ export interface WorkspaceRailProps {
 /**
  * WorkspaceRail — a collapsible, animated side panel for the 3-panel editor.
  *
- * Collapsed it shrinks to a thin spine with a single expand affordance, so
- * the canvas reclaims the space. Width animates smoothly; the rail never
- * jitters because only `width` and `opacity` transition.
+ * Collapsed it goes to zero width so the canvas reclaims every pixel; the
+ * `RailReopenTab` below is what keeps the panel findable from there. Only
+ * `width` and `opacity` transition, so the rail never jitters.
  */
 export function WorkspaceRail({
   side,
@@ -35,40 +35,33 @@ export function WorkspaceRail({
   className,
 }: WorkspaceRailProps) {
   const isLeft = side === 'left'
-  const ExpandIcon = isLeft ? PanelLeftOpen : PanelRightOpen
   const CollapseIcon = isLeft ? PanelLeftClose : PanelRightClose
 
   return (
     <aside
       className={cn(
-        'relative z-10 flex h-full shrink-0 flex-col overflow-hidden bg-[color:var(--glass-bg)] backdrop-blur-[18px] transition-[width] duration-300 ease-[var(--ease-out-expo)]',
+        'rail transition-[width] duration-300 ease-[var(--ease-out-expo)]',
         isLeft ? 'border-r' : 'border-l',
-        'border-[color:var(--border)]',
+        'border-[color:var(--hairline)]',
         className,
       )}
       style={{ width: open ? width : '0px' }}
       aria-hidden={!open}
     >
-      {/* Header */}
-      <div
-        className={cn(
-          'flex h-11 shrink-0 items-center gap-2 border-b border-[color:var(--border)] px-3',
-          isLeft ? '' : 'flex-row-reverse',
-        )}
-      >
-        <Tooltip label={open ? 'Einklappen' : 'Ausklappen'} side={isLeft ? 'right' : 'left'}>
-          <button
-            onClick={onToggle}
-            aria-label={open ? `${title} einklappen` : `${title} ausklappen`}
-            className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--muted)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--fg)] transition-colors"
-          >
-            {open ? <CollapseIcon size={16} /> : <ExpandIcon size={16} />}
-          </button>
-        </Tooltip>
-        <span className="label-xs flex-1 truncate" style={{ textAlign: isLeft ? 'left' : 'right' }}>
+      <div className={cn('rail-header', !isLeft && 'flex-row-reverse')}>
+        <span className="rail-title flex-1 truncate" style={{ textAlign: isLeft ? 'left' : 'right' }}>
           {title}
         </span>
         {headerActions}
+        <Tooltip label={`${title} ausblenden`} hint={isLeft ? '⌥1' : '⌥2'} side="bottom">
+          <button
+            onClick={onToggle}
+            aria-label={`${title} ausblenden`}
+            className="tool-btn h-7 w-7"
+          >
+            <CollapseIcon size={15} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Body — fades with collapse so text doesn't smear during the width tween */}
@@ -83,8 +76,12 @@ export function WorkspaceRail({
 }
 
 /**
- * RailReopenTab — a slim floating affordance shown over the canvas edge when
- * a rail is collapsed, so it can be summoned without hunting for controls.
+ * RailReopenTab — the affordance shown over the canvas edge when a rail is
+ * collapsed.
+ *
+ * It carries the panel's name, not just an arrow. A bare chevron on the edge of
+ * a workspace is a puzzle: it says something will happen, never what. The label
+ * costs 60px of canvas on a screen wide enough to have rails in the first place.
  */
 export function RailReopenTab({
   side,
@@ -107,13 +104,11 @@ export function RailReopenTab({
         className,
       )}
     >
-      <Tooltip label={label} side={isLeft ? 'right' : 'left'}>
-        <button
-          onClick={onClick}
-          aria-label={label}
-          className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] surface-glass text-[color:var(--muted)] hover:text-[color:var(--accent-bright)] shadow-[var(--shadow-2)] transition-colors"
-        >
-          <Icon size={17} />
+      <Tooltip label={`${label} einblenden`} hint={isLeft ? '⌥1' : '⌥2'} side={isLeft ? 'right' : 'left'}>
+        <button onClick={onClick} aria-label={`${label} einblenden`} className="rail-tab">
+          {isLeft && <Icon size={15} />}
+          <span>{label}</span>
+          {!isLeft && <Icon size={15} />}
         </button>
       </Tooltip>
     </div>

@@ -22,6 +22,10 @@ export interface SegmentedControlProps<T extends string> {
  * each segment lighting its own background, so switching reads as one object
  * moving, not two crossfading. Quiet inactive labels; the active label lifts to
  * the strong foreground once the pill arrives.
+ *
+ * The track is recessed and the thumb is raised — a real key sitting in a real
+ * groove. The previous pill was one step up the neutral ramp from the track it
+ * sat in, which at this contrast is close to no selection state at all.
  */
 export function SegmentedControl<T extends string>({
   options,
@@ -37,22 +41,13 @@ export function SegmentedControl<T extends string>({
     <div
       ref={containerRef}
       role="tablist"
-      className={cn(
-        'relative inline-flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[color:var(--surface-2)] p-0.5',
-        block && 'w-full',
-        className,
-      )}
+      className={cn('segmented', block && 'w-full', className)}
     >
       {/* Shared magic-move pill — sits under the active segment and glides. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 rounded-[var(--radius-sm)] will-change-transform"
-        style={{
-          ...indicatorStyle,
-          background: 'var(--surface-3)',
-          boxShadow: 'inset 0 0 0 1px var(--border-strong), 0 1px 2px rgba(0,0,0,0.3)',
-          opacity: ready ? 1 : 0,
-        }}
+        className="segmented-thumb pointer-events-none absolute left-0 top-0 will-change-transform"
+        style={{ ...indicatorStyle, opacity: ready ? 1 : 0 }}
       />
       {options.map((opt) => {
         const active = opt.value === value

@@ -3,7 +3,7 @@ import { Cloud, CloudOff, CloudUpload, CheckCircle2, AlertTriangle } from 'lucid
 import { usePlanStore } from '@/store/usePlanStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { supabaseReady } from '@/lib/supabase'
-import { timeAgo } from '@/lib/utils'
+import { cn, timeAgo } from '@/lib/utils'
 import { Tooltip } from '@/ui'
 import { deriveSyncStatus, type SyncStatusKind } from '@/lib/syncStatus'
 
@@ -44,7 +44,7 @@ const META: Record<Exclude<SyncStatusKind, 'saved'>, Meta> = {
  * the Offline-First model tangible and surfaces sync failures beyond a fleeting
  * toast. Pure state→status mapping lives in {@link deriveSyncStatus}.
  */
-export function SyncStatus() {
+export function SyncStatus({ className }: { className?: string } = {}) {
   const isSaving = usePlanStore((s) => s.isSaving)
   const lastSavedAt = usePlanStore((s) => s.lastSavedAt)
   const lastSyncError = usePlanStore((s) => s.lastSyncError)
@@ -82,7 +82,7 @@ export function SyncStatus() {
     <Tooltip label={tooltip} side="bottom">
       <span
         data-status={kind}
-        className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium"
+        className={cn('items-center gap-1.5 text-xs font-medium', className ?? 'hidden md:inline-flex')}
         style={{ color }}
       >
         {icon}

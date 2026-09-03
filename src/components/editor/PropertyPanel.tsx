@@ -126,12 +126,10 @@ export function PropertyPanel() {
             </p>
           </div>
         ) : (
-          <div className="mt-3 flex flex-col items-center text-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-[color:var(--surface-2)] flex items-center justify-center">
-              <MousePointer size={18} className="text-[color:var(--muted)]" />
-            </div>
-            <p className="text-sm text-[color:var(--muted)]">
-              Wähle ein Objekt aus, um Details zu sehen.
+          <div className="flex items-center gap-2.5 px-0.5 py-2 text-[color:var(--muted)]">
+            <MousePointer size={15} className="shrink-0" />
+            <p className="text-xs leading-snug">
+              Wähle ein Objekt aus, um seine Eigenschaften zu bearbeiten.
             </p>
           </div>
         )}
