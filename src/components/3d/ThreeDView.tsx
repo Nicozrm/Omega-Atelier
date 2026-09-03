@@ -4010,7 +4010,9 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       onClick={(e) => { e.stopPropagation(); setSelection({ type: 'furniture', ids: [f.id] }) }}
     >
       <group ref={groupRef}>
-
+        <GltfModel
+          id={f.furnitureId}
+          footprint={[M(w), M(h)]}
           fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
         />
         {(isSelected || hovered) && (

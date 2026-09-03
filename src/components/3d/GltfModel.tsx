@@ -20,13 +20,23 @@ class ModelErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
-
+export function GltfModel({ id, footprint, fallback }: {
+  /** Furniture or device id, looked up in {@link MODELS}. */
+  id: string
+  /**
+   * Footprint (m, `[width, depth]`) of the instance being drawn — the catalogue
+   * entry, or whatever the user resized it to. Omitted for devices, which are
+   * drawn at a fixed display scale rather than to a plan footprint.
+   */
+  footprint?: readonly [number, number]
+  /** Procedural mesh drawn while loading, on failure, and for unregistered ids. */
+  fallback: ReactNode
 }) {
   if (!hasModel(id)) return <>{fallback}</>
   return (
     <ModelErrorBoundary fallback={fallback}>
       <Suspense fallback={fallback}>
-
+        <Impl def={MODELS[id]!} footprint={footprint} />
       </Suspense>
     </ModelErrorBoundary>
   )
