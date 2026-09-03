@@ -1,0 +1,13 @@
+{
+  "generated": "2026-09-03T16:51:07.505Z",
+  "assets": [
+    {
+      "file": "vase-floor.glb",
+      "bytes": 163868,
+      "triangles": 9000,
+      "drawCalls": 1,
+      "textureBytes": 132306,
+      "savedPercent": 72.6
+    }
+  ]
+}

@@ -39,6 +39,3 @@ supabase/.temp
 .shot*.mjs
 .texdump.mjs
 
-# Python bytecode (Blender pipeline)
-__pycache__/
-*.pyc

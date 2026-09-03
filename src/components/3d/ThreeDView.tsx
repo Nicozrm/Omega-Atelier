@@ -4010,11 +4010,7 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       onClick={(e) => { e.stopPropagation(); setSelection({ type: 'furniture', ids: [f.id] }) }}
     >
       <group ref={groupRef}>
-        {/* `target` is what makes a registered model follow a resized item —
-            the procedural fallback has always been built to w/h. */}
-        <GltfModel
-          id={f.furnitureId}
-          target={[M(w), M(h)]}
+
           fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
         />
         {(isSelected || hovered) && (
