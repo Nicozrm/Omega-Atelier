@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTier } from '@/hooks/useTier'
+import { Chrome } from '@/components/layout/Chrome'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
@@ -210,24 +211,28 @@ export function EditorPage() {
       <ShortcutsHelp />
       <CinematicLayer />
       
-      <Topbar
-        showBack
-        planRowId={planRowId}
-        onOpenExport={() => setExportOpen(true)}
-        onOpenShare={() => setShareOpen(true)}
-        onOpenDevices={() => setDevicesOpen(true)}
-        onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
-        onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
-      />
-
-      {/* Toolbar — responsive, not overlapping */}
-      <div className="shrink-0 z-20 flex items-center gap-2 px-3 py-2 bg-[color:var(--glass-bg)] backdrop-blur-[18px] border-b border-[color:var(--border)] overflow-x-auto no-select">
-        <EditorToolbar />
-        <div className="mx-2 w-px h-6 bg-[color:var(--border)]" />
-        <FloorTabs />
-        {/* View tabs live in the Topbar (reference layout); the toolbar row
-            keeps tools + floors only. */}
-      </div>
+      {/*
+        One pane of glass, two strips: the document identity row, and the tool
+        rail under it. The material lives on <Chrome/>; the strips inside carry
+        nothing but the hairline between them.
+      */}
+      <Chrome>
+        <Topbar
+          showBack
+          planRowId={planRowId}
+          onOpenExport={() => setExportOpen(true)}
+          onOpenShare={() => setShareOpen(true)}
+          onOpenDevices={() => setDevicesOpen(true)}
+          onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
+          onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
+        />
+        <div className="chrome-row overflow-x-auto omega-scroll">
+          <EditorToolbar />
+          <div className="ml-auto flex items-center gap-2 pl-3">
+            <FloorTabs />
+          </div>
+        </div>
+      </Chrome>
 
       <div className="relative flex flex-1 overflow-hidden min-h-0">
         {/* LEFT RAIL — library (collapsible, desktop lg+) */}
@@ -297,24 +302,34 @@ export function EditorPage() {
 
       <MobileNav />
 
-      {/* Mobile bottom sheet */}
+      {/* Mobile bottom sheet — a grabber, a title, and the panel. The grabber is
+          not decoration: it is the only thing on a phone that says the surface
+          belongs to the bottom edge and can be dismissed downward. */}
       {mobilePanel && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 animate-fade-in"
+          className="lg:hidden fixed inset-0 z-40 scrim animate-fade-in"
           onClick={() => openMobilePanel(null)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 max-h-[80vh] surface rounded-t-2xl overflow-hidden animate-slide-up safe-bottom"
+            role="dialog"
+            aria-modal="true"
+            aria-label={panelLabel(mobilePanel)}
+            className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-hidden rounded-t-[var(--radius-3xl)] border-t border-[color:var(--hairline)] bg-[color:var(--bg-elevated)] shadow-[0_-8px_40px_-8px_rgba(0,0,0,0.55)] animate-slide-up safe-bottom"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 70px)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-3 border-b border-[color:var(--border)]">
-              <div className="font-display text-base font-semibold capitalize">{panelLabel(mobilePanel)}</div>
-              <button onClick={() => openMobilePanel(null)} className="btn btn-ghost btn-icon touch-target">
+            <div className="sheet-grabber" aria-hidden />
+            <div className="flex items-center justify-between px-4 pb-2.5 pt-1">
+              <div className="font-display text-[0.95rem] font-semibold tracking-tight">{panelLabel(mobilePanel)}</div>
+              <button
+                onClick={() => openMobilePanel(null)}
+                aria-label="Schließen"
+                className="btn btn-ghost btn-icon touch-target"
+              >
                 <X size={20} />
               </button>
             </div>
-            <div className="max-h-[65vh] overflow-y-auto omega-scroll">
+            <div className="max-h-[65vh] overflow-y-auto omega-scroll border-t border-[color:var(--hairline-soft)]">
               {mobilePanel === 'library' && (
                 <div className="h-[60vh]"><LibraryPanel /></div>
               )}

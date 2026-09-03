@@ -47,7 +47,56 @@ export interface ModelDef {
   /** Position offset (m) applied after placement. Rarely needed — the pipeline
    *  centres each asset on the origin and seats it on the floor. */
   offset?: [number, number, number]
-  
+  /**
+   * Footprint (m, `[width, depth]`) the asset was *authored* at, as measured by
+   * the Blender build and written into `tools/blender/manifest.json`.
+   *
+   * This is what makes a placed piece follow the plan: the catalogue says a sofa
+   * is 2.2 m wide, the user drags it to 2.75 m, and the asset is stretched by
+   * the ratio between the two. Present only on generated assets — the CC0
+   * downloads carry no nominal, so they render exactly as before.
+   */
+  nominal?: [number, number]
+  /** How the asset adapts when the placed footprint differs from `nominal`.
+   *  Defaults to `stretch` when a `nominal` is known, `none` otherwise. */
+  fit?: ModelFit
+}
+
+/**
+ * Per-axis scale that fits a model authored at `def.nominal` into the footprint
+ * (m, `[width, depth]`) the plan actually reserved for the instance.
+ *
+ * Returns `[1, 1, 1]` — never `0`, `Infinity` or `NaN` — whenever there is
+ * nothing to fit against (no `nominal`, no footprint, a degenerate number), so a
+ * missing measurement costs the correction, never the model.
+ */
+export function fitScale(
+  def: ModelDef,
+  footprint: readonly [number, number] | undefined,
+): [number, number, number] {
+  const identity: [number, number, number] = [1, 1, 1]
+  const nominal = def.nominal
+  const mode: ModelFit = def.fit ?? (nominal ? 'stretch' : 'none')
+  if (mode === 'none' || !nominal || !footprint) return identity
+
+  const [nw, nd] = nominal
+  const [w, d] = footprint
+  if (!(nw > 1e-6) || !(nd > 1e-6) || !(w > 1e-6) || !(d > 1e-6)) return identity
+
+  const sx = w / nw
+  const sz = d / nd
+  if (!Number.isFinite(sx) || !Number.isFinite(sz) || sx <= 0 || sz <= 0) return identity
+
+  // `uniform` takes the tighter axis so proportions survive and the piece stays
+  // inside the space the plan gave it. `stretch` leaves height alone — a wider
+  // sofa is not a taller sofa.
+  if (mode === 'uniform') {
+    const s = Math.min(sx, sz)
+    return [s, s, s]
+  }
+  return [sx, 1, sz]
+}
+
 /**
  * id (furnitureId or deviceId) → local GLB.
  *
@@ -72,7 +121,34 @@ export const MODELS: Record<string, ModelDef> = {
   'table-coffee': { file: 'table-coffee' },
   'chair-dining': { file: 'chair-dining' },
   'nightstand':   { file: 'nightstand' },
+  'vase-floor':   { file: 'vase-floor' },
 
+  /* ── Generated in Blender by `tools/blender/build.py` ─────────────────────
+   * Each carries the footprint the build measured, so a resized instance is
+   * stretched by the ratio between the two rather than rendered at the size it
+   * happened to be authored at. */
+  'barstool':       { file: 'barstool', nominal: [0.38, 0.38] },
+  'bathtub':        { file: 'bathtub', nominal: [1.7, 0.8] },
+  'bed-140':        { file: 'bed-140', nominal: [1.4, 2] },
+  'bed-180':        { file: 'bed-180', nominal: [1.85, 2.1] },
+  'bookshelf':      { file: 'bookshelf', nominal: [0.8, 0.3] },
+  'desk-160':       { file: 'desk-160', nominal: [1.6, 0.8] },
+  'dishwasher':     { file: 'dishwasher', nominal: [0.6, 0.6] },
+  'dresser':        { file: 'dresser', nominal: [1.1, 0.461] },
+  'fridge':         { file: 'fridge', nominal: [0.6, 0.65] },
+  'lounge-chair':   { file: 'lounge-chair', nominal: [0.8, 0.8] },
+  'office-chair':   { file: 'office-chair', nominal: [0.6283, 0.6287] },
+  'oven':           { file: 'oven', nominal: [0.6, 0.6] },
+  'shoe-rack':      { file: 'shoe-rack', nominal: [0.9, 0.3] },
+  'sink-bath':      { file: 'sink-bath', nominal: [0.6, 0.5] },
+  'sofa-2seat':     { file: 'sofa-2seat', nominal: [1.6, 0.95] },
+  'sofa-3seat':     { file: 'sofa-3seat', nominal: [2.2, 0.95] },
+  'table-dining-6': { file: 'table-dining-6', nominal: [1.8, 0.9] },
+  'table-side':     { file: 'table-side', nominal: [0.5, 0.5] },
+  'toilet':         { file: 'toilet', nominal: [0.38, 0.6999] },
+  'tv-sideboard':   { file: 'tv-sideboard', nominal: [2, 0.461] },
+  'wardrobe-200':   { file: 'wardrobe-200', nominal: [2, 0.613] },
+  'washer':         { file: 'washer', nominal: [0.6, 0.607] },
 }
 
 export function hasModel(id: string): boolean {

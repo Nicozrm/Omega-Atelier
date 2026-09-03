@@ -43,6 +43,7 @@ import { seasonFromDate } from '@/lib/season'
 import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
+import { SegmentedControl } from '@/ui'
 import { QualityMenu } from './QualityMenu'
 import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
@@ -86,7 +87,6 @@ import {
   DEFAULT_HOUSE_STYLE, loadHouseStyle, saveHouseStyle,
 } from '@/lib/houseStyle'
 import { cinematicReact } from '@/lib/cinematic'
-import { useUIStore } from '@/store/useUIStore'
 import * as THREE from 'three'
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
@@ -4010,7 +4010,9 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       onClick={(e) => { e.stopPropagation(); setSelection({ type: 'furniture', ids: [f.id] }) }}
     >
       <group ref={groupRef}>
-
+        <GltfModel
+          id={f.furnitureId}
+          footprint={[M(w), M(h)]}
           fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
         />
         {(isSelected || hovered) && (
@@ -6902,20 +6904,26 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
       {!preview && embedded && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 max-w-[calc(100%-1rem)]">
           <div className="flex items-center gap-2 flex-wrap justify-center">
-            {/* View segmented control */}
-            <div className="flex items-center gap-0.5 p-0.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
-              <button
-                onClick={() => useUIStore.getState().setViewMode('2d')}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[color:var(--muted)] hover:text-[color:var(--fg)] transition-colors"
-              >2D Plan</button>
-              <button
-                onClick={() => setWalkMode(false)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!walkMode ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)]'}`}
-              >3D Ansicht</button>
-              <button
-                onClick={() => setWalkMode(true)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${walkMode ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)]'}`}
-              >Walkthrough</button>
+            {/*
+              Camera mode — and only camera mode.
+              This strip used to read "2D Plan | 3D Ansicht | Walkthrough",
+              which put two unrelated decisions in one control: the first button
+              left 3D altogether, the other two chose a camera inside it. It also
+              said "3D Ansicht" directly under a top bar already saying "3D
+              Ansicht", so the same words were lit in two places and one of them
+              did something else. Leaving the view is what the bar's Editor tab
+              is for; what belongs here is how you move through the scene.
+            */}
+            <div className="glass-hud relative rounded-xl p-0.5">
+              <SegmentedControl
+                size="sm"
+                value={walkMode ? 'walk' : 'orbit'}
+                onChange={(v) => setWalkMode(v === 'walk')}
+                options={[
+                  { value: 'orbit', label: 'Umsehen' },
+                  { value: 'walk', label: 'Rundgang' },
+                ]}
+              />
             </div>
             {/* Time-of-day pill */}
             <div

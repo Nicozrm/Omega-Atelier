@@ -25,6 +25,23 @@ export function useGlobalHotkeys() {
         return
       }
 
+      /*
+       * Rail toggles — ⌥1 / ⌥2, as advertised in the top bar's Ansicht menu.
+       *
+       * Matched on `e.code`, not `e.key`: Alt+1 emits "¡" on a Mac layout and
+       * "1" on a PC one, so testing the character would wire the shortcut to
+       * exactly one keyboard. `code` is the physical key either way. This runs
+       * before the plain-digit zoom shortcuts below, which would otherwise also
+       * fire on the same press.
+       */
+      if (e.altKey && !meta && (e.code === 'Digit1' || e.code === 'Digit2')) {
+        e.preventDefault()
+        const ui = useUIStore.getState()
+        if (e.code === 'Digit1') ui.toggleLeftRail()
+        else ui.toggleRightRail()
+        return
+      }
+
       // Undo / Redo
       if (meta && e.key.toLowerCase() === 'z') {
         e.preventDefault()

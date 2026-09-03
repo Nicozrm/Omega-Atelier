@@ -15,6 +15,17 @@ export interface TooltipProps {
 /** Distance between trigger and bubble. */
 const GAP = 8
 
+/**
+ * Open delay.
+ *
+ * 380ms was long enough that the tip usually arrived after the pointer had
+ * already moved on — which in a bar of icon buttons is the difference between
+ * "hover to find out what this is" working and not. 240ms still keeps the tips
+ * from firing while the pointer merely crosses the toolbar on its way
+ * somewhere else.
+ */
+const OPEN_DELAY = 240
+
 interface Pos { left: number; top: number; transform: string }
 
 /** Fixed-viewport coordinates for the bubble, anchored to the trigger rect. */
@@ -49,7 +60,7 @@ export function Tooltip({ label, hint, side = 'top', children, className }: Tool
 
   const open = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(compute, 380)
+    timer.current = setTimeout(compute, OPEN_DELAY)
   }, [compute])
 
   const close = useCallback(() => {
@@ -83,13 +94,11 @@ export function Tooltip({ label, hint, side = 'top', children, className }: Tool
         <span
           role="tooltip"
           style={{ position: 'fixed', left: pos.left, top: pos.top, transform: pos.transform }}
-          className="pointer-events-none z-[100] flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] border border-[color:var(--border-strong)] bg-[color:var(--surface-3)] px-2 py-1 text-xs text-[color:var(--fg)] shadow-[var(--shadow-3)] animate-fade-in"
+          className="tooltip-bubble pointer-events-none z-[100] flex items-center gap-1.5 whitespace-nowrap"
         >
           {label}
           {hint && (
-            <kbd className="rounded bg-[color:var(--surface)] px-1 font-mono text-[0.65rem] text-[color:var(--muted)]">
-              {hint}
-            </kbd>
+            <kbd className="tooltip-kbd">{hint}</kbd>
           )}
         </span>,
         document.body,
