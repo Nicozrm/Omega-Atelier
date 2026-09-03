@@ -100,6 +100,61 @@ def sofa_3seat() -> None:
     _sofa(2.20, 0.95, 3)
 
 
+@piece("sofa-corner", 280, 220)
+def sofa_corner() -> None:
+    """An L-shaped sofa: a main run along the back wall with a chaise returning
+    down one side.
+
+    Built as two plinths rather than one stretched box, because the corner is
+    the whole point — a single slab scaled to 280x220 reads as a bed. The two
+    runs overlap at the corner so no seam shows between them.
+
+    Orientation matches the straight sofas: back at +Y, so a piece dropped
+    against the top wall of a room faces into it. The chaise returns down -X.
+    """
+    width, total_depth = 2.80, 2.20
+    run_depth = 0.95
+    lift, arm_w, back_t = 0.12, 0.16, 0.17
+    seat_h = 0.28
+    top = lift + seat_h
+    run_y = total_depth / 2 - run_depth / 2
+    chaise_len = total_depth - run_depth
+    chaise_y = total_depth / 2 - run_depth - chaise_len / 2
+    chaise_x = -width / 2 + run_depth / 2
+
+    box("plinth_run", (width, run_depth, seat_h), (0, run_y, lift + seat_h / 2),
+        "fabric_beige", bevel=0.03)
+    box("plinth_chaise", (run_depth, chaise_len, seat_h),
+        (chaise_x, chaise_y, lift + seat_h / 2), "fabric_beige", bevel=0.03)
+
+    # Back along the run, stopping at the one arm; and a low back down the chaise.
+    box("back", (width - arm_w + 0.04, back_t, 0.46),
+        (-arm_w / 2, total_depth / 2 - back_t / 2, top + 0.19), "fabric_beige", bevel=0.05)
+    box("arm", (arm_w, run_depth, 0.26),
+        (width / 2 - arm_w / 2, run_y, top + 0.10), "fabric_beige", bevel=0.07)
+    box("arm_chaise", (arm_w, chaise_len, 0.26),
+        (-width / 2 + arm_w / 2, chaise_y, top + 0.10), "fabric_beige", bevel=0.07)
+
+    # Seats: three across the run, one on the chaise.
+    inner = width - arm_w - run_depth
+    seat_d = run_depth - back_t - 0.06
+    for i in range(3):
+        cw = inner / 3 - 0.02
+        x = -width / 2 + run_depth + i * (inner / 3) + cw / 2 + 0.01
+        cushion("seat", (cw, seat_d, 0.15), (x, run_y - 0.02, top + 0.05), "fabric_beige")
+        cushion("back_cushion", (cw - 0.02, 0.16, 0.36),
+                (x, total_depth / 2 - back_t - 0.06, top + 0.22), "fabric_beige", plump=0.8)
+    cushion("seat_chaise", (run_depth - arm_w - 0.06, chaise_len - 0.08, 0.15),
+            (chaise_x + arm_w / 2, chaise_y, top + 0.05), "fabric_beige")
+
+    for obj in legs_at_corners("leg", (width, run_depth), 0.14, lift, "soft_black",
+                               centre=(0, run_y)):
+        obj.name = "sofa_leg"
+    for obj in legs_at_corners("leg", (run_depth, chaise_len), 0.14, lift, "soft_black",
+                               centre=(chaise_x, chaise_y)):
+        obj.name = "sofa_leg"
+
+
 @piece("lounge-chair", 80, 80)
 def lounge_chair() -> None:
     """A moulded shell chair on tapered wooden legs — curvature, not corners.
@@ -125,8 +180,7 @@ def barstool() -> None:
     rounded_tube("footrest", 0.014, 0.30, (0, 0, 0.22), "steel", axis="X", segments=10)
 
 
-@piece("office-chair", 65, 65)
-def office_chair() -> None:
+def _office_chair(reach: float) -> None:
     cushion("seat", (0.48, 0.46, 0.09), (0, 0, 0.47), "fabric_gray")
     # Backrest tilted back — a chair that sits perfectly upright looks wrong.
     box("back", (0.44, 0.07, 0.50), (0, 0.20, 0.78), "fabric_gray", bevel=0.05,
@@ -139,7 +193,6 @@ def office_chair() -> None:
     # attempt produced a 0.48 m base where the catalog wants 0.65 m.
     import math
 
-    reach = 0.32
     for i in range(5):
         a = i * (2 * math.pi / 5)
         cylinder(
@@ -152,16 +205,46 @@ def office_chair() -> None:
                  segments=10, rot=(1.5708, 0, 0))
 
 
+@piece("office-chair", 65, 65)
+def office_chair() -> None:
+    # Spoke reach, not base diameter: the measured footprint also includes the
+    # caster radius, so 0.32 is what actually lands on the catalogue's 65 cm.
+    _office_chair(0.32)
+
+
+# The catalogue lists a desk chair under two ids at slightly different sizes.
+@piece("chair-office", 60, 60)
+def chair_office() -> None:
+    _office_chair(0.295)
+
+
 # ── Tables & desks ───────────────────────────────────────────────────────────
 
 
-@piece("table-dining-6", 180, 90)
-def table_dining_6() -> None:
-    w, d, h = 1.80, 0.90, 0.75
+def _dining_table(w: float, d: float) -> None:
+    """A four-legged dining table. Height is fixed at 75 cm — that is a standard,
+    not a proportion, so a table for eight is longer than one for four and not
+    taller."""
+    h = 0.75
     slab("top", (w, d, 0.038), (0, 0, h - 0.019), "oak", bevel=0.01)
     for obj in legs_at_corners("leg", (w, d), 0.11, h - 0.038, "oak",
                                top_radius=0.032, bottom_radius=0.022):
         obj.name = "table_leg"
+
+
+@piece("table-dining-4", 140, 80)
+def table_dining_4() -> None:
+    _dining_table(1.40, 0.80)
+
+
+@piece("table-dining-6", 180, 90)
+def table_dining_6() -> None:
+    _dining_table(1.80, 0.90)
+
+
+@piece("table-dining-8", 240, 100)
+def table_dining_8() -> None:
+    _dining_table(2.40, 1.00)
 
 
 @piece("table-side", 50, 50)
@@ -183,23 +266,59 @@ def desk_160() -> None:
              (sign * (w / 2 - 0.05), 0, (h - 0.03) / 2), "soft_black")
 
 
+@piece("desk-corner", 180, 160)
+def desk_corner() -> None:
+    """An L-shaped desk: main run along the back, return down the left.
+
+    Same two-slab reasoning as the corner sofa — one 180x160 slab would be a
+    table, not a corner desk.
+    """
+    w, total_d, h = 1.80, 1.60, 0.74
+    run_d, return_w = 0.80, 0.80
+    run_y = total_d / 2 - run_d / 2
+    return_len = total_d - run_d
+    return_x = -w / 2 + return_w / 2
+    return_y = total_d / 2 - run_d - return_len / 2
+
+    slab("top", (w, run_d, 0.03), (0, run_y, h - 0.015), "oak", bevel=0.008)
+    slab("top_return", (return_w, return_len, 0.03),
+         (return_x, return_y, h - 0.015), "oak", bevel=0.008)
+    slab("modesty", (w - 0.24, 0.022, 0.28), (0, total_d / 2 - 0.06, h - 0.20), "oak")
+    slab("side", (0.032, run_d - 0.06, h - 0.03),
+         (w / 2 - 0.05, run_y, (h - 0.03) / 2), "soft_black")
+    slab("side_return", (return_w - 0.06, 0.032, h - 0.03),
+         (return_x, total_d / -2 + 0.05, (h - 0.03) / 2), "soft_black")
+
+
 # ── Storage ──────────────────────────────────────────────────────────────────
 
 
-@piece("wardrobe-200", 200, 60)
-def wardrobe_200() -> None:
-    w, d, h = 2.00, 0.60, 2.10
+def _wardrobe(w: float, doors: int) -> None:
+    """A carcass with evenly divided doors. Door *count* rather than door width
+    is the parameter: a 3 m wardrobe is six doors, not four wide ones, and door
+    width is what tells the eye how big the piece is."""
+    d, h = 0.60, 2.10
     shell("carcass", (w, d, h - 0.06), (0, 0, 0.06 + (h - 0.06) / 2), "oak",
           thickness=0.02, open_faces=("front",))
-    # Four doors with a shadow gap between them, and slim vertical handles.
-    for i in range(4):
-        dw = (w - 0.05) / 4
+    # Doors with a shadow gap between them, and slim vertical handles.
+    for i in range(doors):
+        dw = (w - 0.05) / doors
         x = -w / 2 + 0.025 + i * dw + dw / 2
         slab("door", (dw - 0.012, 0.02, h - 0.13), (x, -d / 2 + 0.01, 0.06 + (h - 0.06) / 2), "oak")
         rounded_tube("handle", 0.008, 0.22,
                      (x + dw / 2 - 0.05, -d / 2 - 0.005, 1.15), "steel",
                      axis="Z", segments=8)
     slab("plinth", (w - 0.06, d - 0.04, 0.06), (0, 0, 0.03), "soft_black")
+
+
+@piece("wardrobe-200", 200, 60)
+def wardrobe_200() -> None:
+    _wardrobe(2.00, doors=4)
+
+
+@piece("wardrobe-300", 300, 60)
+def wardrobe_300() -> None:
+    _wardrobe(3.00, doors=6)
 
 
 @piece("bookshelf", 80, 30)
@@ -288,6 +407,16 @@ def bed_180() -> None:
     _bed(1.85, 2.10)
 
 
+@piece("bed-90", 90, 200)
+def bed_90() -> None:
+    _bed(0.90, 2.00)
+
+
+@piece("bed-200", 205, 215)
+def bed_200() -> None:
+    _bed(2.05, 2.15)
+
+
 # ── Kitchen ──────────────────────────────────────────────────────────────────
 
 
@@ -342,8 +471,7 @@ def dishwasher() -> None:
     _appliance(0.60, 0.60, 0.82, door_split=1)
 
 
-@piece("washer", 60, 60)
-def washer() -> None:
+def _washer() -> None:
     box("body", (0.60, 0.60, 0.85), (0, 0, 0.425), "warm_white", bevel=0.012)
     # The porthole: a ring plus dark glass, the one feature that makes a washing
     # machine unmistakable at a glance. Both sit flush in the front face so the
@@ -353,6 +481,18 @@ def washer() -> None:
     cylinder("glass", 0.155, 0.016, (0, -0.299, 0.44), "glass_dark", segments=28,
              rot=(1.5708, 0, 0))
     slab("panel", (0.56, 0.018, 0.09), (0, -0.294, 0.78), "steel")
+
+
+@piece("washer", 60, 60)
+def washer() -> None:
+    _washer()
+
+
+# The catalogue carries the same appliance under both names; a plan built from
+# either template has to render it, so both ids resolve to the one asset.
+@piece("washing-machine", 60, 60)
+def washing_machine() -> None:
+    _washer()
 
 
 # ── Bath ─────────────────────────────────────────────────────────────────────

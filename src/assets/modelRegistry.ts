@@ -187,6 +187,15 @@ export const MODELS: Record<string, ModelDef> = {
   'tv-sideboard':   { file: 'tv-sideboard', nominal: [2.0, 0.461] },
   'wardrobe-200':   { file: 'wardrobe-200', nominal: [2.0, 0.613] },
   'washer':         { file: 'washer', nominal: [0.6, 0.607] },
+  'bed-200':         { file: 'bed-200', nominal: [2.05, 2.15] },
+  'bed-90':          { file: 'bed-90', nominal: [0.9, 2.0] },
+  'chair-office':    { file: 'chair-office', nominal: [0.5831, 0.5811] },
+  'desk-corner':     { file: 'desk-corner', nominal: [1.8, 1.6] },
+  'sofa-corner':     { file: 'sofa-corner', nominal: [2.82, 2.2] },
+  'table-dining-4':  { file: 'table-dining-4', nominal: [1.4, 0.8] },
+  'table-dining-8':  { file: 'table-dining-8', nominal: [2.4, 1.0] },
+  'wardrobe-300':    { file: 'wardrobe-300', nominal: [3.0, 0.613] },
+  'washing-machine': { file: 'washing-machine', nominal: [0.6, 0.607] },
 }
 
 export function hasModel(id: string): boolean {

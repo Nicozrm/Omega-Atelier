@@ -171,11 +171,17 @@ def legs_at_corners(
     mat: str,
     top_radius: float = 0.018,
     bottom_radius: float = 0.014,
+    centre: tuple[float, float] = (0.0, 0.0),
 ) -> list[bpy.types.Object]:
-    """Four tapered legs inset from a footprint's corners."""
+    """Four tapered legs inset from a footprint's corners.
+
+    `centre` offsets the footprint in plan, which is what lets an L-shaped piece
+    put legs under each of its runs by calling this once per run.
+    """
     hx, hy = span[0] / 2.0 - inset, span[1] / 2.0 - inset
+    cx, cy = centre
     return [
-        leg(f"{prefix}_{i}", top_radius, bottom_radius, height, (x, y), mat)
+        leg(f"{prefix}_{i}", top_radius, bottom_radius, height, (cx + x, cy + y), mat)
         for i, (x, y) in enumerate(((-hx, -hy), (hx, -hy), (-hx, hy), (hx, hy)))
     ]
 

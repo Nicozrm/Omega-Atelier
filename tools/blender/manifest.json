@@ -61,6 +61,36 @@
         2.1
       ]
     },
+    "bed-200": {
+      "asset_id": "bed-200",
+      "triangles": 3464,
+      "materials": 4,
+      "size": [
+        2.05,
+        2.15,
+        0.95
+      ],
+      "bytes": 76280,
+      "nominal": [
+        2.05,
+        2.15
+      ]
+    },
+    "bed-90": {
+      "asset_id": "bed-90",
+      "triangles": 2696,
+      "materials": 4,
+      "size": [
+        0.9,
+        2.0,
+        0.95
+      ],
+      "bytes": 61224,
+      "nominal": [
+        0.9,
+        2.0
+      ]
+    },
     "bookshelf": {
       "asset_id": "bookshelf",
       "triangles": 668,
@@ -76,6 +106,21 @@
         0.3
       ]
     },
+    "chair-office": {
+      "asset_id": "chair-office",
+      "triangles": 1664,
+      "materials": 2,
+      "size": [
+        0.5831,
+        0.5811,
+        1.0293
+      ],
+      "bytes": 45048,
+      "nominal": [
+        0.5831,
+        0.5811
+      ]
+    },
     "desk-160": {
       "asset_id": "desk-160",
       "triangles": 432,
@@ -89,6 +134,21 @@
       "nominal": [
         1.6,
         0.8
+      ]
+    },
+    "desk-corner": {
+      "asset_id": "desk-corner",
+      "triangles": 540,
+      "materials": 2,
+      "size": [
+        1.8,
+        1.6,
+        0.74
+      ],
+      "bytes": 19524,
+      "nominal": [
+        1.8,
+        1.6
       ]
     },
     "dishwasher": {
@@ -241,6 +301,36 @@
         0.95
       ]
     },
+    "sofa-corner": {
+      "asset_id": "sofa-corner",
+      "triangles": 6268,
+      "materials": 2,
+      "size": [
+        2.82,
+        2.2,
+        0.82
+      ],
+      "bytes": 136044,
+      "nominal": [
+        2.82,
+        2.2
+      ]
+    },
+    "table-dining-4": {
+      "asset_id": "table-dining-4",
+      "triangles": 284,
+      "materials": 1,
+      "size": [
+        1.4,
+        0.8,
+        0.75
+      ],
+      "bytes": 10252,
+      "nominal": [
+        1.4,
+        0.8
+      ]
+    },
     "table-dining-6": {
       "asset_id": "table-dining-6",
       "triangles": 284,
@@ -254,6 +344,21 @@
       "nominal": [
         1.8,
         0.9
+      ]
+    },
+    "table-dining-8": {
+      "asset_id": "table-dining-8",
+      "triangles": 284,
+      "materials": 1,
+      "size": [
+        2.4,
+        1.0,
+        0.75
+      ],
+      "bytes": 10224,
+      "nominal": [
+        2.4,
+        1.0
       ]
     },
     "table-side": {
@@ -316,6 +421,21 @@
         0.613
       ]
     },
+    "wardrobe-300": {
+      "asset_id": "wardrobe-300",
+      "triangles": 1352,
+      "materials": 3,
+      "size": [
+        3.0,
+        0.613,
+        2.1
+      ],
+      "bytes": 46276,
+      "nominal": [
+        3.0,
+        0.613
+      ]
+    },
     "washer": {
       "asset_id": "washer",
       "triangles": 656,
@@ -326,6 +446,21 @@
         0.85
       ],
       "bytes": 23120,
+      "nominal": [
+        0.6,
+        0.607
+      ]
+    },
+    "washing-machine": {
+      "asset_id": "washing-machine",
+      "triangles": 656,
+      "materials": 3,
+      "size": [
+        0.6,
+        0.607,
+        0.85
+      ],
+      "bytes": 23128,
       "nominal": [
         0.6,
         0.607
