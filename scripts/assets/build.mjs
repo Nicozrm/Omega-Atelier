@@ -124,6 +124,19 @@ ${rows}
 `)
 }
 
+/** Authoritative size from the normalisation pass, if it left a report. */
+function readReport(path) {
+  if (!existsSync(path)) return null
+  try {
+    const size = JSON.parse(readFileSync(path, 'utf8')).size
+    return Array.isArray(size) && size.length === 3
+      ? size.map((n) => Number(n.toFixed(4)))
+      : null
+  } catch {
+    return null
+  }
+}
+
 async function main() {
   const only = process.argv.slice(2)
   const footprints = readFootprints()
@@ -144,8 +157,15 @@ async function main() {
 
   for (const [file, ids] of registry) {
     if (only.length > 0 && !only.includes(file)) continue
-    const source = join(SOURCE_DIR, `${file}.glb`)
-    if (!existsSync(source)) {
+    // Sources arrive either as a single GLB or, from `fetch.mjs`, as a folder
+    // holding a glTF next to its textures.
+    const candidates = [
+      join(SOURCE_DIR, `${file}.glb`),
+      join(SOURCE_DIR, file, `${file}.gltf`),
+      join(SOURCE_DIR, `${file}.gltf`),
+    ]
+    const source = candidates.find((c) => existsSync(c))
+    if (!source) {
       skipped.push(file)
       continue
     }
@@ -156,17 +176,23 @@ async function main() {
     const [w, d] = footprints.get(primary) ?? [100, 100]
 
     const normalized = join(staging, `${file}.glb`)
+    const reportPath = join(staging, `${file}.json`)
     execFileSync('python3', [
       'scripts/assets/normalize.py', source,
       '--out', normalized,
       '--fit', `${w}x${d}`,
+      '--report', reportPath,
     ], { stdio: ['ignore', 'ignore', 'inherit'] })
 
     execFileSync('node', [
       'scripts/assets/optimize.mjs', normalized, '--out', OUT_DIR,
     ], { stdio: 'inherit' })
 
-    const size = await measure(io, join(OUT_DIR, `${file}.glb`))
+    // Blender's own measurement wins. It is taken over every mesh corner in
+    // world space by the tool that did the fitting, whereas reading the built
+    // glTF back can under-report a multi-part asset — which showed up as an
+    // outdoor table set overflowing its footprint at runtime by 6 %.
+    const size = readReport(reportPath) ?? await measure(io, join(OUT_DIR, `${file}.glb`))
     built.push({ file, ids, referenceId: primary, footprintCm: [w, d], sizeM: size })
   }
 

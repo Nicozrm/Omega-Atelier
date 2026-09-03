@@ -47,6 +47,7 @@ Run through `pip install bpy` (no Blender GUI needed).
 """
 
 import argparse
+import json
 import math
 import sys
 from pathlib import Path
@@ -79,15 +80,37 @@ def mesh_objects() -> list:
 
 
 def world_bounds(objects) -> tuple[Vector, Vector]:
-    """Combined world-space AABB over every mesh corner."""
+    """
+    Combined world-space AABB over every mesh corner.
+
+    Measured from actual vertices of the *evaluated* objects, which is slower
+    than reading `Object.bound_box` and is the only way to get a tight answer.
+
+    `bound_box` is each object's **local** box, so transforming its eight corners
+    into world space gives the AABB of a rotated box rather than the AABB of the
+    geometry. For an asset whose parts sit at an angle — a table set with its
+    chairs turned in — that reads about 6 % too large, and everything downstream
+    inherits the error: the asset is fitted smaller than intended, and the size
+    handed to the runtime does not match what is in the file.
+
+    Evaluated, so modifiers count: the exporter applies them, so the measurement
+    has to as well.
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
     lo = Vector((math.inf,) * 3)
     hi = Vector((-math.inf,) * 3)
     for obj in objects:
-        for corner in obj.bound_box:
-            world = obj.matrix_world @ Vector(corner)
-            for axis in range(3):
-                lo[axis] = min(lo[axis], world[axis])
-                hi[axis] = max(hi[axis], world[axis])
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        try:
+            matrix = evaluated.matrix_world
+            for vertex in mesh.vertices:
+                world = matrix @ vertex.co
+                for axis in range(3):
+                    lo[axis] = min(lo[axis], world[axis])
+                    hi[axis] = max(hi[axis], world[axis])
+        finally:
+            evaluated.to_mesh_clear()
     return lo, hi
 
 
@@ -180,6 +203,13 @@ def main() -> None:
         action="store_true",
         help="Never turn the asset, even if its footprint runs across the target's",
     )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        help="Write the resulting size (metres) as JSON. This is the authoritative "
+             "measurement: it comes from the same tool that did the fitting, over "
+             "every mesh corner in world space.",
+    )
     args = parser.parse_args()
 
     try:
@@ -191,6 +221,19 @@ def main() -> None:
     import_asset(args.source)
     report = normalize(w_cm * CM, d_cm * CM, allow_rotate=not args.no_rotate)
     export(args.out)
+
+    if args.report:
+        # Emit in glTF axis order. Everything above works in Blender's Z-up frame
+        # (X, Y = depth, Z = height); the exported file and every consumer of this
+        # report are Y-up (X, Y = height, Z = depth). Reporting Blender's order
+        # would silently hand the runtime a height where it expects a depth.
+        bx, by, bz = report["after"]
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps({
+            "size": [round(bx, 6), round(bz, 6), round(by, 6)],
+            "scale": report["scale"],
+            "rotated": report["rotated"],
+        }) + "\n")
 
     b, a = report["before"], report["after"]
     print(

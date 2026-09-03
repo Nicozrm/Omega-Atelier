@@ -1,13 +1,13 @@
 {
-  "generated": "2026-09-03T16:51:07.505Z",
+  "generated": "2026-09-03T17:10:12.557Z",
   "assets": [
     {
-      "file": "vase-floor.glb",
-      "bytes": 163868,
-      "triangles": 9000,
+      "file": "mirror.glb",
+      "bytes": 183740,
+      "triangles": 14246,
       "drawCalls": 1,
-      "textureBytes": 132306,
-      "savedPercent": 72.6
+      "textureBytes": 137486,
+      "savedPercent": 73.3
     }
   ]
 }

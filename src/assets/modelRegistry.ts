@@ -14,6 +14,8 @@
  * models without a redistribution licence.
  */
 
+import type { ModelAnchor } from './modelFit'
+
 export interface ModelDef {
   /** File name in `public/models/`, without the `.glb` extension. */
   file: string
@@ -32,8 +34,18 @@ export interface ModelDef {
    * from the measured sizes in `modelSizes.ts`.
    */
   scale?: number
-  /** Position offset (m) applied after placement. Rarely needed — the pipeline
-   *  centres each asset on the origin and seats it on the floor. */
+  /**
+   * How the piece is mounted. The pipeline seats every asset on the floor, which
+   * is right for furniture and wrong for anything hung — a pendant lamp would
+   * lie on the carpet, a wall mirror lean against the skirting. Defaults to
+   * `'floor'`; the offset is derived from the model's fitted height.
+   */
+  anchor?: ModelAnchor
+  /** Ceiling height for `anchor: 'ceiling'`, centre height for `'wall'` (m).
+   *  Defaults to the scene's 2.5 m ceiling / 1.35 m mounting height. */
+  anchorHeight?: number
+  /** Extra position offset (m). Rarely needed — the pipeline centres each asset
+   *  on the origin, and `anchor` handles the vertical placement. */
   offset?: [number, number, number]
 }
 
@@ -51,14 +63,32 @@ export interface ModelDef {
  *  - table-coffee.glb ← modern_coffee_table_01
  */
 export const MODELS: Record<string, ModelDef> = {
-  'plant':        { file: 'plant' },
-  'plant-tall':   { file: 'plant' },
-  'plant-large':  { file: 'plant' },
-  'armchair':     { file: 'armchair' },
-  'table-coffee': { file: 'table-coffee' },
-  'chair-dining': { file: 'chair-dining' },
-  'nightstand':   { file: 'nightstand' },
-  'vase-floor':   { file: 'vase-floor' },
+  // Seating
+  'armchair':        { file: 'armchair' },
+  'lounge-chair':    { file: 'lounge-chair' },
+  'chair-dining':    { file: 'chair-dining' },
+  'barstool':        { file: 'barstool' },
+  // Tables
+  'table-coffee':    { file: 'table-coffee' },
+  'table-side':      { file: 'table-side' },
+  'outdoor-table':   { file: 'outdoor-table' },
+  'desk-office':     { file: 'desk' },
+  'desk-160':        { file: 'desk' },
+  'desk-180':        { file: 'desk' },
+  // Storage
+  'nightstand':      { file: 'nightstand' },
+  'bookshelf':       { file: 'bookshelf' },
+  'bookshelf-wide':  { file: 'shelf-wide' },
+  'tv-sideboard':    { file: 'sideboard' },
+  'tv-stand':        { file: 'sideboard' },
+  // Lighting
+  'pendant-lamp':    { file: 'pendant-lamp', anchor: 'ceiling' },
+  // Decor
+  'plant':           { file: 'plant' },
+  'plant-tall':      { file: 'plant' },
+  'plant-large':     { file: 'plant-large' },
+  'vase-floor':      { file: 'vase-floor' },
+  'mirror':          { file: 'mirror', anchor: 'wall' },
 }
 
 export function hasModel(id: string): boolean {

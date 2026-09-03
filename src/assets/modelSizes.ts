@@ -9,9 +9,20 @@
 
 export const MODEL_SIZES: Record<string, readonly [number, number, number]> = {
   'armchair': [0.7484, 0.9331, 0.9000],
+  'barstool': [0.4000, 0.9959, 0.3971],
+  'bookshelf': [0.6557, 1.2789, 0.3000],
   'chair-dining': [0.3761, 0.8443, 0.5000],
+  'desk': [1.6000, 0.6300, 0.7578],
+  'lounge-chair': [0.8000, 0.7857, 0.6779],
+  'mirror': [0.6000, 0.9178, 0.0320],
   'nightstand': [0.4500, 0.4505, 0.3682],
+  'outdoor-table': [1.8000, 0.8999, 0.7774],
+  'pendant-lamp': [0.3400, 0.7495, 0.3400],
   'plant': [0.5000, 0.7238, 0.4544],
-  'table-coffee': [1.1000, 0.3569, 0.5492],
+  'plant-large': [0.5000, 0.5998, 0.4688],
+  'shelf-wide': [0.8183, 1.3490, 0.3500],
+  'sideboard': [2.0000, 0.5575, 0.4262],
+  'table-coffee': [1.1000, 0.3570, 0.5492],
+  'table-side': [0.5000, 0.5006, 0.4091],
   'vase-floor': [0.3000, 0.5664, 0.3000],
 }

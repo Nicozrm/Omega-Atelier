@@ -24,7 +24,7 @@
  *                  win: a chair modelled as 40 separate parts becomes 2-3.
  *  4. `weld`     — merges vertices that are identical within a tolerance, so
  *                  the index buffer does real work.
- *  5. `simplify` — only when a triangle budget is given. Off by default:
+ *  5. `simplify` — only when `--simplify <ratio>` is given. Off by default:
  *                  silhouette damage is far more visible than a few thousand
  *                  triangles cost.
  *  6. `prune`    — drops whatever the previous steps orphaned.
@@ -48,7 +48,7 @@
  *
  *   node scripts/assets/optimize.mjs <in.glb…> --out public/models
  *   node scripts/assets/optimize.mjs in.glb --out dist --max-texture 512
- *   node scripts/assets/optimize.mjs in.glb --out dist --triangle-budget 8000
+ *   node scripts/assets/optimize.mjs in.glb --out dist --simplify 0.5
  *
  * Prints a before/after table; a step that would fail is reported and skipped
  * rather than taking the whole batch down.
@@ -72,12 +72,12 @@ const DEFAULT_MAX_TEXTURE = 1024
 
 function parseArgs(argv) {
   const files = []
-  const opts = { out: 'public/models', maxTexture: DEFAULT_MAX_TEXTURE, triangleBudget: 0, quality: 80 }
+  const opts = { out: 'public/models', maxTexture: DEFAULT_MAX_TEXTURE, simplifyRatio: 1, quality: 80 }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--out') opts.out = argv[++i]
     else if (a === '--max-texture') opts.maxTexture = Number(argv[++i])
-    else if (a === '--triangle-budget') opts.triangleBudget = Number(argv[++i])
+    else if (a === '--simplify') opts.simplifyRatio = Number(argv[++i])
     else if (a === '--quality') opts.quality = Number(argv[++i])
     else if (a.startsWith('--')) throw new Error(`Unknown option: ${a}`)
     else files.push(a)
@@ -122,8 +122,11 @@ async function main() {
       flatten(),
       join(),
       weld(),
-      ...(opts.triangleBudget > 0
-        ? [simplify({ simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.001 })]
+      // Only when explicitly asked for: silhouette damage is far more visible
+      // than a few thousand triangles cost. `ratio` is the fraction of triangles
+      // to keep, and `error` caps how far a vertex may move, in model units.
+      ...(opts.simplifyRatio < 1
+        ? [simplify({ simplifier: MeshoptSimplifier, ratio: opts.simplifyRatio, error: 0.001 })]
         : []),
       prune({ keepAttributes: false, keepLeaves: false }),
       textureCompress({

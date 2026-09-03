@@ -15,7 +15,7 @@
 import { useGLTF, Clone } from '@react-three/drei'
 import { modelUrl, type ModelDef } from '@/assets/modelRegistry'
 import { MODEL_SIZES } from '@/assets/modelSizes'
-import { fitScale } from '@/assets/modelFit'
+import { fitScale, anchorOffsetY } from '@/assets/modelFit'
 
 /** Self-hosted Draco decoder directory. Trailing slash required by DRACOLoader. */
 const DRACO_DECODER_PATH = `${import.meta.env.BASE_URL}draco/`
@@ -29,11 +29,17 @@ export default function GltfModelImpl({ def, footprint }: {
   // An explicit `scale` in the registry is an override for assets the pipeline
   // cannot fit automatically; otherwise the model is fitted to the footprint the
   // plan reserved for this instance.
+  const size = MODEL_SIZES[def.file]
   const s = def.scale ?? (footprint
-    ? fitScale(MODEL_SIZES[def.file], footprint[0] / 100, footprint[1] / 100)
+    ? fitScale(size, footprint[0] / 100, footprint[1] / 100)
     : 1)
+  // Hung pieces are lifted by their fitted height, not by a baked-in offset:
+  // the same asset is fitted differently per instance, and a pendant scaled to a
+  // smaller footprint still has to reach the same ceiling.
+  const [ox, oy, oz] = def.offset ?? [0, 0, 0]
+  const y = oy + anchorOffsetY(size, s, def.anchor, def.anchorHeight)
   return (
-    <group position={def.offset ?? [0, 0, 0]} rotation={[0, def.rotationY ?? 0, 0]} scale={[s, s, s]}>
+    <group position={[ox, y, oz]} rotation={[0, def.rotationY ?? 0, 0]} scale={[s, s, s]}>
       <Clone object={gltf.scene} />
     </group>
   )
