@@ -46,17 +46,43 @@ export type TuyaRegion = keyof typeof TUYA_ENDPOINTS
 export class HttpTuyaTransport implements TuyaTransport {
   private readonly base: string
   constructor(regionOrUrl: TuyaRegion | string = 'eu') {
-    this.base = regionOrUrl in TUYA_ENDPOINTS
+    const direct = regionOrUrl in TUYA_ENDPOINTS
+    this.base = direct
       ? TUYA_ENDPOINTS[regionOrUrl as TuyaRegion]
       : regionOrUrl.replace(/\/$/, '')
+    this.relayed = !direct
   }
 
+  /** True when this instance talks to the relay rather than a data centre. */
+  private readonly relayed: boolean
+
   async request<T = unknown>(req: TuyaRequest): Promise<TuyaApiResponse<T>> {
-    const res = await fetch(this.base + req.path, {
-      method: req.method,
-      headers: { 'Content-Type': 'application/json', ...req.headers },
-      body: req.body,
-    })
+    let res: Response
+    try {
+      res = await fetch(this.base + req.path, {
+        method: req.method,
+        headers: { 'Content-Type': 'application/json', ...req.headers },
+        body: req.body,
+      })
+    } catch (e) {
+      /*
+       * A browser reports a blocked cross-origin request as a bare `TypeError`
+       * ("Load failed" / "Failed to fetch") — indistinguishable from the server
+       * being down, and useless to someone staring at valid credentials. Since
+       * Tuya's signed headers guarantee a preflight and the data centre answers
+       * none, the missing relay is by far the likeliest cause and the one worth
+       * naming.
+       */
+      if (e instanceof TypeError) {
+        return {
+          success: false,
+          msg: this.relayed
+            ? 'Relay nicht erreichbar — URL prüfen und ob die Function mit --no-verify-jwt deployt ist'
+            : 'Tuya ist ohne Relay nicht aus dem Browser erreichbar (CORS) — Relay-URL eintragen',
+        }
+      }
+      return { success: false, msg: e instanceof Error ? e.message : 'Tuya-Anfrage fehlgeschlagen' }
+    }
     if (!res.ok) {
       return { success: false, code: res.status, msg: `HTTP ${res.status}` }
     }

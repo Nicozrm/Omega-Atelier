@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTier } from '@/hooks/useTier'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
@@ -17,7 +18,7 @@ import { ModesPanel } from '@/components/modes/ModesPanel'
 import { WorkspaceRail, RailReopenTab, InspectorPanel, LibraryPanel } from '@/features/workspace'
 import { OnboardingTour } from '@/components/ui/OnboardingTour'
 import { ShortcutsHelp } from '@/components/ui/ShortcutsHelp'
-import { usePlanStore } from '@/store/usePlanStore'
+import { usePlanStore, loadLocalPlan } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
 import { useGlobalHotkeys } from '@/hooks/useHotkeys'
 import { useRealtimePlan } from '@/hooks/useRealtimePlan'
@@ -27,6 +28,7 @@ import type { PlanRow } from '@/types'
 import { X } from 'lucide-react'
 import { createDemoPlan } from '@/data/demoPlan'
 import { coercePlan } from '@/lib/planSchema'
+import { shouldAutoSave } from '@/lib/autoSave'
 
 // Heavy & seldom-needed → split out into their own chunks.
 const ExportDialog = lazy(() =>
@@ -56,6 +58,7 @@ import { MobilePlacement } from '@/components/editor/MobilePlacement'
 export function EditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { can } = useTier()
   useGlobalHotkeys()
 
   const doc = usePlanStore((s) => s.doc)
@@ -107,25 +110,58 @@ export function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planRowId])
 
-  // Bug #1 Fix: Load demo plan for /plan/new or /plan/local
+  /**
+   * Seed the editor when the store is empty — which is every direct navigation
+   * and every page reload, since the store lives in memory only.
+   *
+   * `/plan/local` **is** the local document, so it restores what was saved.
+   * Previously both routes built a fresh demo plan, and because the store
+   * debounce-writes every document back to `omega.plan.current`, that demo
+   * then overwrote the saved one: a plain browser refresh silently replaced the
+   * user's work with the demo flat. The same overwrite is why a plan's
+   * real-world anchor never survived a reload, so the aerial-photo ground and
+   * the cadastre neighbourhood were unreachable on this route.
+   *
+   * `/plan/new` keeps starting fresh — that is what it is for.
+   */
   useEffect(() => {
-    if (!doc && !planRowId) {
-      const demo = createDemoPlan()
-      loadDocument(demo, false)
-    }
+    if (doc || planRowId) return
+    const restored = id === 'local' ? loadLocalPlan() : null
+    loadDocument(restored ?? createDemoPlan(), false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, planRowId])
+  }, [doc, planRowId, id])
 
-  // Auto-save: when authenticated and planRowId is set, debounce-save the doc
-  // 1.5s after the last change. Skips local-only / new sessions.
+  /*
+   * Auto-save: debounce-save the doc 1.5 s after the last *edit*.
+   *
+   * The dependency list is deliberately narrow. `doc` itself must not appear
+   * here: `saveToCloud` replaces the document object when it stamps the new
+   * `docVersion`, so depending on its identity made every save re-arm the timer
+   * that had just fired — a cloud write every 1.5 seconds, indefinitely, on a
+   * plan nobody was editing. `updatedAt` is the value that tracks edits, and
+   * `shouldAutoSave` re-checks it at fire time so a save can never chain into
+   * the next one.
+   */
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSavedUpdatedAt = useRef<string | null>(null)
   const pushToast = useUIStore((s) => s.pushToast)
-  const reloadFromCloud = usePlanStore((s) => s.reloadFromCloud)
+  const docUpdatedAt = doc?.updatedAt
   useEffect(() => {
-    if (!doc || !planRowId || !supabaseReady || !user) return
+    if (!shouldAutoSave({
+      updatedAt: docUpdatedAt,
+      lastSavedUpdatedAt: lastSavedUpdatedAt.current,
+      planRowId,
+      cloudReady: supabaseReady,
+      signedIn: !!user,
+    })) return
+
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(async () => {
-      const result = await saveToCloud(planRowId)
+      // Claim this revision before the write: a failed save leaves it claimed,
+      // and the next real edit (a new `updatedAt`) retries. Without the claim a
+      // save that races its own result can re-enter here.
+      lastSavedUpdatedAt.current = docUpdatedAt ?? null
+      const result = await saveToCloud(planRowId!)
       if (result && typeof result === 'object' && 'conflict' in result) {
         pushToast({
           kind: 'warning',
@@ -138,7 +174,7 @@ export function EditorPage() {
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     }
-  }, [doc?.updatedAt, planRowId, user, saveToCloud, doc, pushToast, reloadFromCloud])
+  }, [docUpdatedAt, planRowId, user, saveToCloud, pushToast])
 
   if (loading) {
     return (
@@ -180,8 +216,8 @@ export function EditorPage() {
         onOpenExport={() => setExportOpen(true)}
         onOpenShare={() => setShareOpen(true)}
         onOpenDevices={() => setDevicesOpen(true)}
-        onOpenConnectors={() => setConnectorsOpen(true)}
-        onOpenVacuum={() => setVacuumOpen(true)}
+        onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
+        onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
       />
 
       {/* Toolbar — responsive, not overlapping */}
@@ -294,8 +330,12 @@ export function EditorPage() {
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {shareOpen && <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} planRowId={planRowId} />}
         {devicesOpen && <DeviceInspector onClose={() => setDevicesOpen(false)} />}
-        {connectorsOpen && <ConnectorManager onClose={() => setConnectorsOpen(false)} />}
-        {vacuumOpen && (
+        {/* Gated at the mount as well as at the opener: the opener is the
+            courteous path (it explains itself by going to the pricing page),
+            this is the one that actually holds if some other route ever sets
+            the flag. */}
+        {connectorsOpen && can('live-connectors') && <ConnectorManager onClose={() => setConnectorsOpen(false)} />}
+        {vacuumOpen && can('robot-map') && (
           <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0c0d10]"><div className="w-12 h-12 rounded-full border-2 border-[color:var(--border)] border-t-[color:var(--accent)] animate-spin" /></div>}>
             <VacuumRobotView onClose={() => setVacuumOpen(false)} />
           </Suspense>

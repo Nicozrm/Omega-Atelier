@@ -19,6 +19,7 @@
  */
 
 import type { ISODateTime } from '@/types'
+import type { Provenance } from './provenance'
 
 // ───────────────────────── Geo & map ─────────────────────────
 
@@ -112,6 +113,39 @@ export interface BuildingFeature {
   stories: number
   areaSqm: number
   confidence: number
+  /**
+   * Where each fact about this building came from, tracked separately.
+   *
+   * A single confidence number for "the building" would blur the case that
+   * actually occurs: an OSM footprint is *measured* while its storey count is
+   * an *assumption* from the regional average. Optional, because the offline
+   * detectors synthesise buildings rather than observing them and have nothing
+   * honest to put here.
+   */
+  provenance?: {
+    footprint: Provenance
+    stories: Provenance
+    height: Provenance
+  }
+}
+
+/**
+ * Real-world parcel geometry, in the parcel's own axes.
+ *
+ * Measured plots are rotated and irregular; siting a house on one needs its
+ * true width, depth and orientation rather than the compass-aligned bounding
+ * box, which over-states both dimensions on any plot not facing north.
+ */
+export interface ParcelInput {
+  /** Outline in local metres, bounding box anchored at (0, 0). */
+  polygon: LocalPolygon
+  /** True area by the shoelace formula — not the bounding box's. */
+  areaSqm: number
+  /** Extent along the parcel's own axes. */
+  widthM: number
+  depthM: number
+  /** Rotation of those axes against north, degrees. */
+  orientationDeg: number
 }
 
 export type RoofShape = 'gable' | 'hip' | 'flat' | 'pent'

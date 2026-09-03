@@ -20,17 +20,13 @@ class ModelErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
-export function GltfModel({ id, fallback, footprint }: {
-  id: string
-  fallback: ReactNode
-  /** Instance footprint in centimetres, `[width, depth]`. */
-  footprint?: readonly [number, number]
+
 }) {
   if (!hasModel(id)) return <>{fallback}</>
   return (
     <ModelErrorBoundary fallback={fallback}>
       <Suspense fallback={fallback}>
-        <Impl def={MODELS[id]} footprint={footprint} />
+
       </Suspense>
     </ModelErrorBoundary>
   )

@@ -1,193 +1,373 @@
-# OMEGA Atelier 2.0
+# OMEGA Atelier
 
-> Das ultimative Smart-Home-Planungstool – cloud-basiert, mobile-first, produktionsreif.
+<p align="center"><strong>Design your space. Visualize it in 3D. Connect it to the real world.</strong></p>
 
-Edles Dark-Theme, Canvas-basierter Grundriss-Editor, 324+ Geräte aus 25 Ökosystemen, 9 Omega-Modi, Multi-Floor, Realtime-Kollaboration via Supabase.
+<p align="center">OMEGA Atelier is a spatial design and smart-home platform built around one idea:<br><em>your digital space should become the control layer for the real one.</em></p>
 
-## Repository-Überblick
+<p align="center"><img src="./docs/assets/01-quick-demo.gif" alt="OMEGA Atelier product preview" width="360"></p>
 
-| Pfad | Inhalt |
+---
+
+## The Product
+
+OMEGA Atelier combines <strong>spatial planning, 3D visualization, digital-twin state, and smart-home connectivity</strong> in one environment.
+
+Instead of treating a floor plan, a 3D scene and connected devices as separate tools, OMEGA Atelier brings them together into a shared model of the space.
+
+You can design rooms, place and configure objects, visualize the result, connect real devices and reflect their live state back into the environment.
+
+The result is not just a room planner.
+
+It is a <strong>spatial operating layer for a connected home.</strong>
+
+## A Product Experience, Not a Collection of Tools
+
+### Design
+Build and refine a spatial plan with rooms, walls, furniture and visual elements.
+
+### Visualize
+Move from a conventional floor plan into an interactive 3D representation of the space.
+
+<p align="center"><img src="./docs/assets/02-product-flow.gif" alt="OMEGA Atelier design and visualization flow" width="360"></p>
+
+### Connect
+Bring real devices into the same model through a connector-based architecture.
+
+### Operate
+Control compatible devices from the Digital Twin and see live state changes reflected in the application.
+
+<p align="center"><img src="./docs/assets/03-digital-twin.gif" alt="OMEGA Atelier Digital Twin" width="360"></p>
+
+# Digital Twin
+
+At the heart of OMEGA Atelier is a vendor-agnostic <strong>Digital Twin Runtime</strong>.
+
+The application does not render individual vendor APIs directly. Devices are normalized into a common model consisting of:
+
+- Devices
+- Capabilities
+- Connectors
+- Room bindings
+- Device state
+- Health and synchronization state
+
+The UI therefore remains independent from the underlying ecosystem.
+
+A light can expose `OnOff`, `Brightness`, `Color` and `ColorTemperature`.
+
+A lock can expose `Lock`. A blind can expose `Position`. A sensor can expose `Temperature` and `Humidity`. A camera can expose streaming and PTZ capabilities where supported.
+
+The result is one interface for heterogeneous hardware.
+
+# One Twin. Multiple Ecosystems.
+
+OMEGA Atelier is built around a <strong>connector-first architecture</strong>.
+
+Connectors translate vendor-specific APIs and transports into the neutral device model. The Digital Twin becomes the common layer consumed by the UI, scenes, automation logic and future integrations.
+
+| Integration | Mode |
 |---|---|
-| `src/`, `public/`, `supabase/` | Die OMEGA-Atelier-App (Vite + React + Supabase) |
-| `nobleframe/` | Statische NobleFrame-Website (Cloudflare Pages, eigenständig — siehe `nobleframe/DEPLOY.md`) |
-| `docs/` | Setup-Guides, Roadmap, Design-Notizen |
-| `docs/changelog/` | Historische Feature-Changelogs (v11–v43+) |
-| `docs/reports/` | Sprint-/Verifikations-Berichte |
+| Home Assistant | Live |
+| Tuya Cloud | Live |
+| SwitchBot Cloud | Live |
+| Govee Cloud | Live |
+| ONVIF cameras | Live / local bridge |
+| MQTT | Connector architecture |
+| Additional ecosystems | Extensible connector catalog |
 
-## Tech-Stack
+Simulated ecosystems are also available for development, demonstrations and UI testing without physical hardware.
 
-- **Build**: Vite 5 + React 18 + TypeScript 5
-- **Styling**: Tailwind CSS 4 (via `@theme`), Inter / JetBrains Mono
-- **State**: Zustand (per-slice) + persist middleware
-- **Backend**: Supabase (Auth + Postgres + Realtime + Storage)
-- **Canvas**: Reines HTML5 Canvas mit custom Hooks (keine Library – maximale Performance)
-- **3D**: three.js + React Three Fiber (+ Postprocessing)
-- **Routing**: React Router 6
-- **Deployment**: GitHub Pages (CI, `deploy-pages.yml`) oder Vercel (`vercel.json`)
+# Real Device Control
 
-## Quick Start
+OMEGA Atelier is not limited to visualization. For supported live integrations, commands can travel from the interface through the connector layer to the actual device.
 
-### 1. Dependencies
+Examples include:
 
-```bash
-pnpm install     # oder npm / yarn
+- Turn devices on or off
+- Lock / unlock supported locks
+- Adjust brightness
+- Change color temperature
+- Change color
+- Position blinds / curtains
+- Control supported camera PTZ functions
+- Execute multi-device scenes
+
+```text
+OMEGA UI
+   ↓
+Digital Twin
+   ↓
+Connector
+   ↓
+Vendor transport / API
+   ↓
+Real device
 ```
 
-### 2. Supabase einrichten
+Device updates return through the same abstraction and update the Digital Twin.
 
-1. Projekt auf [supabase.com](https://supabase.com) anlegen.
-2. In der SQL-Konsole die Migration aus `supabase/migrations/20260101000000_init.sql` ausführen.
-3. Unter **Authentication → Providers** Google und Apple aktivieren (OAuth-Keys in Supabase Dashboard eintragen).
-4. Unter **Authentication → URL Configuration** die Redirect-URL auf deine Vercel-Domain setzen (und `http://localhost:5173` für local dev).
-5. `.env.example` zu `.env.local` kopieren und befüllen:
+# Live State
 
-```bash
-cp .env.example .env.local
+The Digital Twin distinguishes between connected, connecting, disconnected and error states, as well as pending commands and confirmed state changes.
+
+Commands use a predictive state layer so the interface can communicate that an action has been sent without pretending that a physical device has already confirmed it.
+
+If confirmation arrives, the temporary command state disappears. If the transport fails or confirmation times out, the UI transitions into a controlled failure state instead of silently pretending everything worked.
+
+# Smart-Home Scenes
+
+OMEGA Atelier can operate devices across multiple connectors as one environment.
+
+A scene represents a <strong>space-level intention</strong>, rather than a vendor-specific automation.
+
+```text
+"Evening"
+
+Living room lights
+      ↓
+Curtains
+      ↓
+Connected devices
+      ↓
+Multiple ecosystems
+      ↓
+One coordinated scene
 ```
 
-```env
-VITE_SUPABASE_URL=https://xxxxxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+The scene engine operates on the neutral device model while individual connectors handle vendor-specific execution.
+
+# Spatial Intelligence
+
+The Digital Twin is connected to the actual floor-plan structure. Devices can be associated with rooms and visualized in the context of the space.
+
+This enables the application to work with:
+
+- Device-to-room assignments
+- Live device state
+- Available capabilities
+- Active sources
+- Unassigned devices
+- Energy information where available
+- Scene participation
+- Spatial visualization
+
+The floor plan becomes more than geometry.
+
+<strong>It becomes an interface to the living system behind it.</strong>
+
+# 3D Visualization
+
+The 3D layer turns the plan into an interactive spatial representation for spatial exploration, furniture placement, material and texture visualization, architectural presentation, smart-home visualization and Digital Twin representation.
+
+The 3D environment belongs to the same underlying project model rather than existing as a separate tool.
+
+```text
+Plan
+ ↓
+2D spatial representation
+ ↓
+3D visualization
+ ↓
+Digital Twin
+ ↓
+Connected environment
 ```
 
-### 3. Lokal starten
+# Smart-Home Connectivity
 
-```bash
-pnpm dev
-# → http://localhost:5173
+OMEGA Atelier is designed as a <strong>connector platform</strong>, rather than locking the application to one hardware ecosystem.
+
+```text
+UI
+│
+├── Digital Twin
+├── Connector Manager
+└── Vendor Connectors
+      ├── Home Assistant
+      ├── Tuya
+      ├── SwitchBot
+      ├── Govee
+      ├── ONVIF
+      ├── MQTT
+      └── Future integrations
 ```
 
-### 4. Build & Preview
+<p align="center"><img src="./docs/assets/04-smart-home.gif" alt="OMEGA Atelier smart-home connectivity" width="360"></p>
 
-```bash
-pnpm build
-pnpm preview
+# ONVIF Camera Integration
+
+OMEGA Atelier can integrate ONVIF-compatible cameras through a local bridge. The bridge keeps LAN-specific ONVIF/SOAP communication outside the browser while exposing a controlled HTTP interface to the application.
+
+```text
+OMEGA Atelier
+      ↓
+Local ONVIF Bridge
+      ↓
+ONVIF / SOAP
+      ↓
+Camera
 ```
 
-## Deployment (Vercel + Supabase)
+Depending on the camera, the Digital Twin can expose camera availability, snapshot support, stream information and PTZ support.
 
-1. Repo nach GitHub pushen.
-2. Auf [vercel.com](https://vercel.com) importieren.
-3. Environment Variables setzen (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
-4. Framework Preset: **Vite** – Build Command `pnpm build`, Output Directory `dist`.
-5. Deploy. Die Vercel-Domain in Supabase unter **Authentication → URL Configuration** ergänzen.
+PTZ controls are only presented when the connected camera actually exposes the required PTZ service.
 
-## Feature-Matrix
+# Security Model
 
-| Feature | Status | Phase |
-|---|---|---|
-| E-Mail-Auth + Google/Apple OAuth | ✅ | 1 |
-| Cloud-Speicherung (`plans` Tabelle, JSONB) | ✅ | 1 |
-| Row Level Security | ✅ | 1 |
-| Multi-Floor Editor | ✅ | 1 |
-| Geräte-/Möbel-Bibliothek | ✅ | 1 |
-| 9 Omega-Modi mit Readiness-Score | ✅ | 1 |
-| Undo/Redo Stack | ✅ | 1 |
-| Responsive + PWA | ✅ | 1 |
-| Realtime-Sync (Live-Cursor, Presence) | 🔶 | 2 |
-| Version-History | 🔶 | 2 |
-| Share-Links (view/edit) | 🔶 | 2 |
-| Export PNG/PDF/YAML/glTF/Shortcut | 🔶 | 2 |
-| Kommentare | 🔶 | 2 |
-| 25+ Templates | 🔶 | 2 |
-| Globale Suche (⌘K) | 🔶 | 3 |
-| Image Blaster 3D (Bild → 3D-Asset, GLB/USDZ/OBJ/PLY/STL) | ✅ | 3 |
-| Auto-Layout-Vorschläge | 🔶 | 3 |
-| Multi-User-Haushalte | 🔶 | 3 |
+Credentials are treated as connector configuration rather than application-wide state.
 
-## Projektstruktur
+Where appropriate, credentials are kept locally in the browser and are sent only to the configured integration endpoint. Sensitive ONVIF camera passwords are intentionally excluded from local persistence.
 
-```
-src/
-  components/
-    auth/            Login, Signup, OAuth-Buttons
-    layout/          AppShell, Topbar, MobileNav
-    editor/          Canvas, Toolbar, FloorTabs, LayerPanel, PropertyPanel
-    library/         DeviceLibrary, FurnitureLibrary
-    modes/           ModesPanel mit Readiness-Score
-    export/          Export-Dialog (PNG/JSON/YAML/Shortcut)
-    plans/           Plans-Liste, Templates
-    ui/              Atomic UI (Button, Input, Dialog, Toast)
-  connectors/        Geräte-Ökosystem-Anbindungen (Home Assistant, MQTT, Tuya, …)
-  design-system/     Typisierte Design-Tokens
-  domain/            Geräte-/Capability-Domänenmodell
-  features/          Workspace-Komposition (Rail, Inspector, Library)
-  twin/              Digitaler Zwilling / Reflection-Logik
-  pages/             Login, Plans, Editor, Settings
-  store/             Zustand stores (plan, auth, ui)
-  hooks/             useAuth, useCanvas, useRealtimePlan, useHotkeys
-  lib/               Domänenlogik: Licht, Schatten, Solar, Sound, DayCycle, …
-  data/              devices, furniture, templates (statisch)
-  types/             Alle TS-Typen zentral
-  styles/            index.css mit @theme
-supabase/
-  migrations/        SQL-Schema + RLS-Policies
-nobleframe/          Statische NobleFrame-Site (eigenes Deployment)
+Cloud integrations use their respective authentication and signing mechanisms. Vendor credentials do not need to become part of the Digital Twin itself.
+
+# Offline-First Foundation
+
+OMEGA Atelier is designed around an offline-first philosophy. The application should remain useful as a design environment even when live integrations are unavailable.
+
+```text
+Design state
+     ≠
+Cloud availability
+     ≠
+Device availability
 ```
 
-## Design-System — OMEGA Design Language v2 „Quiet Luxury"
+A missing cloud connector should not destroy the spatial project. A disconnected device should not invalidate the floor plan. The Digital Twin simply reflects the current health of the connected source.
 
-| Token | Wert |
-|---|---|
-| `--bg` (Void) | `#0B0F14` |
-| Surface L1 / L2 / L3 | `#111823` / `#161F2B` / `#1C2836` |
-| `--accent` (Electric Indigo) | `#4C7DFF` |
-| `--cyan` (Secondary Glow) | `#35D3FF` |
-| `--color-omega-danger` | `#FF4D4D` |
-| `--color-omega-success` | `#2EE59D` |
-| Display / Body / Mono | Inter · Inter · JetBrains Mono |
-| Spacing | 8px-Grid (4/8/12/16/24/32/48/64) |
-| Radien | 8 · 12 · 16 · 20–24 |
+# Architecture
 
-Dark-First, theme-aware (kühles Light-Companion inklusive). Alle Farben über
-CSS-Variablen; typisierte Spiegelung in `src/design-system/tokens.ts`.
-
-**Wiederverwendbare UI-Primitives** (`src/ui/`): Button, IconButton, Panel,
-Card, Badge, Divider, SegmentedControl, InspectorSection, Tooltip, Toolbar.
-**Workspace-Komposition** (`src/features/workspace/`): WorkspaceRail,
-InspectorPanel, LibraryPanel.
-
-## Tastaturkürzel
-
-| Shortcut | Aktion |
-|---|---|
-| `⌘/Ctrl + Z` | Undo |
-| `⌘/Ctrl + Shift + Z` | Redo |
-| `⌘/Ctrl + S` | Speichern (Cloud) |
-| `⌘/Ctrl + K` | Globale Suche |
-| `V` | Select-Tool |
-| `W` | Wall-Tool |
-| `D` | Device-Platzier-Modus |
-| `Del` | Löschen |
-| `+ / -` | Zoom |
-| `Space + Drag` | Pan |
-
-## Supabase SQL
-
-Siehe `supabase/migrations/20260101000000_init.sql`. Enthält:
-- `profiles`, `plans`, `plan_versions`, `plan_collaborators`, `comments`
-- RLS-Policies: Eigentümer sehen alles, Collaborators je nach Rolle
-- Realtime-Kanäle auf `plans` und `plan_cursors`
-- Trigger für `updated_at` und automatisches Versioning
-
-## Lizenz
-
-Proprietär – OMEGA Atelier © 2026.
-
-## Tests & Qualität
-
-```bash
-npm run lint        # ESLint — 0 Errors, 0 Warnings (--max-warnings 0)
-npm run typecheck   # tsc --noEmit (App + vite.config.ts)
-npm run test        # Vitest — 477 Unit-Tests in 49 Dateien
-npm run test:watch  # Vitest Watch-Modus
-npm run test:coverage
+```text
+┌─────────────────────────────────────────┐
+│                UI / UX                  │
+│  Planner · 3D · Digital Twin · Scenes │
+└───────────────────┬─────────────────────┘
+                    │
+┌───────────────────▼─────────────────────┐
+│              Twin Manager               │
+│   Sessions · Commands · Bindings        │
+└───────────────────┬─────────────────────┘
+                    │
+┌───────────────────▼─────────────────────┐
+│         Digital Twin Runtime            │
+│ Devices · Capabilities · State · Health│
+└───────────────────┬─────────────────────┘
+                    │
+┌───────────────────▼─────────────────────┐
+│              Connectors                 │
+│ HA · Tuya · SwitchBot · Govee · ONVIF │
+│ MQTT · Ecosystems · Future adapters    │
+└─────────────────────────────────────────┘
 ```
 
-**Test-Stack:** Vitest 2.1 + jsdom + Testing Library. Unit-Tests decken die
-pure Domänenlogik (`src/lib`, `src/domain`, `src/twin`), die Connector-
-Mappings und den Plan-Store ab — Geometrie, Readiness-Scoring, Mode-Szenen,
-Licht-/Schatten-Berechnung, Day-Cycle, RadioMesh sowie Undo/Redo.
+The key architectural boundary is the Digital Twin. The core does not need to know which vendor owns a device.
 
-CI (`.github/workflows/ci.yml`) führt bei jedem Push/PR lint → typecheck →
-test → build aus.
+# Technology
+
+OMEGA Atelier is built as a modern web application using technologies including:
+
+- React
+- TypeScript
+- Vite
+- Three.js / 3D rendering
+- Supabase
+- PWA capabilities
+- Vitest
+- Playwright
+- Connector-based integration architecture
+
+The project separates application logic, domain models, transports and UI concerns.
+
+# Quality Gates
+
+The development workflow includes:
+
+- TypeScript validation
+- ESLint
+- Unit tests
+- Build verification
+- UI / browser testing
+- Connector-specific tests
+
+The objective is simple: <strong>new integrations should extend the system without destabilizing the existing Digital Twin.</strong>
+
+# Design Philosophy
+
+### Connector First
+Hardware integrations belong behind connectors.
+
+### Digital Twin First
+The application works with normalized device state rather than vendor-specific UI logic.
+
+### Offline First
+Design functionality should not depend on cloud availability.
+
+### Spatial First
+Rooms and devices belong to a physical context.
+
+### Vendor Agnostic
+The core should not care whether a device comes from SwitchBot, Tuya, Govee, Home Assistant or another ecosystem.
+
+### Product First
+The interface is designed as a coherent product experience rather than exposing the underlying architecture to the user.
+
+# What OMEGA Atelier Is Becoming
+
+OMEGA Atelier sits at the intersection of several traditionally separate products:
+
+```text
+Interior / Space Planner
+          +
+3D Visualization
+          +
+Smart Home Control
+          +
+Digital Twin
+          +
+Device Integration Platform
+```
+
+The long-term direction is a system where the digital representation of a home and the physical home are continuously connected.
+
+You design the environment.
+
+You visualize it.
+
+You connect it.
+
+You operate it.
+
+And the same model remains the source of truth.
+
+# Status
+
+OMEGA Atelier is an actively developed platform.
+
+The current architecture provides the foundation for:
+
+- Spatial planning
+- 3D visualization
+- Digital Twin state
+- Room/device binding
+- Multi-connector operation
+- Live integrations
+- Device control
+- Scenes
+- Energy information
+- Camera integration
+- Extensible vendor connectors
+
+The architecture is intentionally built to allow additional ecosystems and capabilities without replacing the core.
+
+# Vision
+
+> **OMEGA Atelier turns a digital floor plan into a living interface for the physical space.**
+
+Not another smart-home dashboard.
+
+Not another 3D planner.
+
+Not another device-management panel.
+
+A single spatial system connecting **design, visualization and reality**.
+
+<p align="center"><strong>OMEGA Atelier</strong><br><sub>Design the space. Connect the space. Live the space.</sub></p>

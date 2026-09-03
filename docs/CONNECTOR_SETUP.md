@@ -34,13 +34,44 @@ Einrichtung auf der Tuya IoT Platform:
    die brauchst du unten.
 3. Projekt → **Service API**: „IoT Core" (und ggf. „Device Control") dem Projekt
    hinzufügen, sonst liefert die API keine Geräte.
-4. In OMEGA (Connectors → „Hersteller-Clouds"): **Access ID, Access Secret,
-   UID, Region** eintragen + Relay-URL → „Live verbinden". Die App signiert
-   jede Anfrage lokal (HMAC-SHA256, Tuya v2). Sauger erscheinen mit
-   Start/Stopp/Zur-Basis, Lichter/Steckdosen mit An-Aus/Dimmen/Verbrauch.
+4. In OMEGA (Connectors → Karte **„Tuya Cloud · Live"**): **Rechenzentrum,
+   Relay-URL, Access ID, Access Secret** und optional die **UID** eintragen →
+   „Verbinden". Die App signiert jede Anfrage lokal (HMAC-SHA256, Tuya v2).
+   Sauger erscheinen mit Start/Stopp/Zur-Basis, Lichter/Steckdosen mit
+   An-Aus/Dimmen/Verbrauch.
+
+**Welchen Endpunkt OMEGA abfragt.** Mit eingetragener UID
+`GET /v1.0/users/{uid}/devices` — genau die Geräte dieses App-Accounts. Ohne
+UID `GET /v1.0/iot-01/associated-users/devices`, also alle dem Cloud-Projekt
+zugeordneten Geräte (seitenweise). Liefert das nichts und hat der Token-Grant
+eine UID mitgeschickt, wird diese einmal als Rückfallebene versucht, bevor das
+Konto als leer gemeldet wird.
+
+Das ist der Grund, warum Tuya sich früher erfolgreich anmeldete und trotzdem
+keine Geräte zeigte: ohne UID fragte der Connector `GET /v1.0/devices` ab, und
+das ist keine Kontoauflistung — Tuya verlangt dort `device_ids` bzw. `schema`.
+Da das UID-Feld als optional ausgewiesen ist, war das für ein frisches Projekt
+der Normalfall.
+
+**Geräte ohne bekannte Datenpunkte.** Geräte, deren DP-Codes OMEGA (noch) nicht
+kennt, werden nicht mehr verworfen, sondern ohne Bedienelemente angezeigt und in
+der Karte gezählt. Vorher verschwanden sie stillschweigend — eine erfolgreiche
+Erkennung konnte so als leere Liste enden.
+
+**Die Relay-URL ist für Tuya Pflicht**, dieselbe Function wie bei SwitchBot.
+Grund ist nicht die Signatur, sondern CORS: jede Anfrage trägt `client_id`,
+`sign`, `t`, `sign_method`, `nonce` und `access_token`, keiner davon ist ein
+CORS-safelisted Header, also gibt es immer einen Preflight — und
+`openapi.tuya*.com` beantwortet weder den Preflight noch setzt es
+`access-control-allow-origin`. Ohne Relay meldet die App genau das, statt ein
+nacktes „Load failed" zu zeigen. Ist bereits eine Relay-URL für
+Govee/SwitchBot eingetragen, übernimmt die Tuya-Karte sie als Vorgabe — eine
+Deployment genügt für alle drei.
 
 **Region** muss zum Rechenzentrum deines Smart-Life-Kontos passen (meist
-Europa/Central). Roborock läuft NICHT über Tuya — dafür der HA-Weg.
+Europa/Central) und bestimmt auch, welchen Upstream das Relay anspricht
+(`/vendor-relay/tuya-eu` usw.). Roborock läuft NICHT über Tuya — dafür der
+HA-Weg.
 
 **Saugroboter-Details (Kategorie `sd`).** OMEGA liest den Live-Zustand aus dem
 `status`-Datenpunkt (`cleaning`/`zone_clean`/… → reinigt, `goto_charge`/
@@ -79,3 +110,57 @@ Relay-URL für die App:
 - API-Keys/Token/Secret bleiben **nur im Browser** (localStorage) und gehen
   ausschließlich an die jeweilige Hersteller-API (durch dein eigenes Relay).
 - Das Relay lässt nur die von Govee/SwitchBot benötigten Header durch.
+
+
+## 4. ONVIF / PTZ-Kameras — Arenti und andere ONVIF-Geräte
+
+OMEGA enthält einen generischen ONVIF-Connector. Er ist nicht an Arenti gekoppelt:
+Kamera-Discovery/Media/PTZ werden über ONVIF angesprochen, während die Domain nur
+die neutrale `Camera`-Capability sieht.
+
+Wichtig: Der Browser spricht ONVIF nicht direkt. Dafür läuft ein kleiner lokaler
+Bridge-Prozess auf einem Rechner im selben LAN wie die Kamera:
+
+```bash
+cd tools/onvif-bridge
+npm install
+OMEGA_ONVIF_BRIDGE_TOKEN="change-this" node server.mjs
+```
+
+Standard-Bridge: `http://127.0.0.1:8787`.
+
+In OMEGA → Connectors → Echte Verbindung → „Arenti & ONVIF Kameras":
+
+- Bridge-URL
+- Kamera-IP
+- ONVIF-Port
+- ONVIF-Benutzer
+- ONVIF-Passwort
+
+Das Kamera-Passwort wird vom UI nicht in `localStorage` gespeichert.
+
+**Nach der Anmeldung.** Die Karte listet die tatsächlich erkannten Kameras
+(Name, Auflösung, Erreichbarkeit, PTZ) und bietet pro Kamera „Kamera öffnen".
+Zusätzlich erscheint im Kopf des Digital Twin der Knopf **„Kameras"** — aber nur,
+solange mindestens ein Gerät im Twin wirklich eine `Camera`-Capability meldet.
+Wird keine Kamera gefunden, sagt die Karte das und bietet „Erneut prüfen" an,
+statt nur „verbunden" anzuzeigen.
+
+Der Connector unterstützt:
+
+- ONVIF-Geräteinitialisierung
+- Media-Profile
+- von ONVIF gelieferte RTSP-URI
+- Snapshot-Fähigkeit
+- PTZ ContinuousMove
+- PTZ Stop
+- PTZ Status
+- Presets
+- GotoPreset
+- Home Position
+
+PTZ wird als neutraler `Camera`-Command an den bestehenden Twin geroutet;
+der Core benötigt dadurch keine Hersteller-/ONVIF-Sonderlogik.
+
+Für den Arenti-Test wird als Startwert `192.168.0.107` und Benutzer `admin`
+verwendet. Den tatsächlichen ONVIF-Port bitte aus der Kamera-App übernehmen.

@@ -20,6 +20,7 @@
  */
 
 import * as THREE from 'three'
+import { activeProfile } from '@/lib/render/quality'
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
@@ -28,10 +29,101 @@ import * as THREE from 'three'
 const SIZE = 256          // default texture size
 const SIZE_LARGE = 512    // for floor parquet (more plank detail)
 
+/**
+ * Resolution multiplier for this generation run, from the render profile.
+ *
+ * Resolved **once per bundle** rather than per canvas: a bundle whose maps were
+ * generated at two different scales would have mismatched colour and normal
+ * maps on the same material, and the IndexedDB cache below would have no single
+ * answer to record. `beginGeneration()` pins it; everything downstream reads it.
+ */
+let _scale = 1
+let _max = 512
+
+/** Pin the resolution budget for a bundle build. */
+function beginGeneration(): void {
+  const p = activeProfile()
+  _scale = p.textureScale
+  _max = p.textureMaxSize
+}
+
+/**
+ * The multiplier a map of a given authored size actually gets.
+ *
+ * Not simply `scale`, because the profile also caps absolute size — see
+ * `textureMaxSize` for why the two authored sizes are not equally worth
+ * enlarging. So the 256² maps can double while the 512² ones stay put, and the
+ * two ends of the bundle move independently.
+ *
+ * Never returns less than 1: a cap below the authored size would *blur* the
+ * material, which is the opposite of what this knob is for.
+ */
+export function effectiveTextureScale(logical: number, scale: number, max: number): number {
+  const target = Math.min(logical * Math.max(1, scale), Math.max(logical, max))
+  return target / logical
+}
+
+/**
+ * The scale each canvas was built at.
+ *
+ * A WeakMap rather than a module-level number because, with the cap in play,
+ * two canvases in the same run can have different scales — and the Sobel pass
+ * needs the scale of *its own* source to compensate correctly.
+ */
+const canvasScale = new WeakMap<HTMLCanvasElement, number>()
+
+/**
+ * A drawing surface whose *logical* size is unchanged, whatever the scale.
+ *
+ * This is the whole trick, and the reason none of the ~40 generators below
+ * needed touching. The canvas is allocated at `size × scale` physical pixels,
+ * and the context is pre-scaled by the same factor — so every `fillRect`,
+ * `lineWidth`, gradient stop and random coordinate in the generators keeps
+ * meaning what it meant at 256, and simply lands on more pixels.
+ *
+ * The alternative — multiplying every constant in every generator by the scale
+ * — would have been a hundred edits, each of them an opportunity to change a
+ * material's *proportions* rather than its sharpness. Plank widths, mortar
+ * joints and weave density are hand-tuned here; they must come out identical.
+ *
+ * Safe because no generator touches the transform (no `setTransform`,
+ * `translate` or `rotate` anywhere in this file) — nothing resets the scale
+ * after `getContext` hands back the same pre-scaled context.
+ */
 function makeCanvas(size = SIZE): HTMLCanvasElement {
+  const eff = effectiveTextureScale(size, _scale, _max)
+  const c = document.createElement('canvas')
+  c.width = c.height = size * eff
+  if (eff !== 1) c.getContext('2d')!.scale(eff, eff)
+  canvasScale.set(c, eff)
+  return c
+}
+
+/**
+ * A surface sized in *physical* pixels, with no context scale.
+ *
+ * For the pixel-level passes below, which read a finished canvas with
+ * `getImageData` and write a same-sized result. Those already work in device
+ * pixels, so a pre-scaled context would scale the output a second time.
+ */
+function makeRawCanvas(size: number): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = c.height = size
   return c
+}
+
+/**
+ * How hard to push the Sobel gradient at a given scale.
+ *
+ * A normal map derived from a height field measures slope *per pixel*. Double
+ * the resolution and the same physical ramp is spread over twice as many
+ * pixels, so each step is half as steep and the surface comes out visibly
+ * flatter — the grain would soften exactly when it was supposed to sharpen.
+ * Multiplying the strength by the scale cancels that, so a material's relief
+ * reads the same at 1× and 2× and only its detail gets finer.
+ */
+export function sobelStrengthFor(strength: number, scale: number): number {
+  return strength * Math.max(1, scale)
 }
 
 /** Seeded PRNG (mulberry32) — deterministic textures across reloads. */
@@ -49,10 +141,12 @@ function rng(seed: number) {
 function heightToNormal(heightCanvas: HTMLCanvasElement, strength = 1.0): HTMLCanvasElement {
   const w = heightCanvas.width, h = heightCanvas.height
   const src = heightCanvas.getContext('2d')!.getImageData(0, 0, w, h)
-  const out = makeCanvas(w)
+  const out = makeRawCanvas(w)
   if (out.height !== h) out.height = h
   const dstCtx = out.getContext('2d')!
   const dst = dstCtx.createImageData(w, h)
+  // Compensated for the scale of *this* height map — see `sobelStrengthFor`.
+  strength = sobelStrengthFor(strength, canvasScale.get(heightCanvas) ?? 1)
   const get = (x: number, y: number) => {
     x = ((x % w) + w) % w
     y = ((y % h) + h) % h
@@ -90,7 +184,10 @@ function heightToNormal(heightCanvas: HTMLCanvasElement, strength = 1.0): HTMLCa
 function heightToRoughness(heightCanvas: HTMLCanvasElement, variation = 0.2): HTMLCanvasElement {
   const w = heightCanvas.width, h = heightCanvas.height
   const src = heightCanvas.getContext('2d')!.getImageData(0, 0, w, h)
-  const out = makeCanvas(w)
+  // Raw, not `makeCanvas`: a per-pixel value remap, already in device pixels.
+  // Needs no scale compensation either — unlike the Sobel above it reads one
+  // pixel at a time, so resolution does not enter the maths.
+  const out = makeRawCanvas(w)
   if (out.height !== h) out.height = h
   const dstCtx = out.getContext('2d')!
   const dst = dstCtx.createImageData(w, h)
@@ -116,10 +213,17 @@ export function makeTex(
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
   tex.repeat.set(repeat[0], repeat[1])
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace
-  // Anisotropic filtering keeps tiled surfaces (floors/walls) crisp at the
-  // grazing angles they are almost always viewed at. three clamps this to the
-  // GPU's getMaxAnisotropy() at upload, so 16 is safe on mobile (auto-reduced).
-  tex.anisotropy = 16
+  // Anisotropic filtering keeps tiled surfaces (floors, walls) crisp at the
+  // grazing angles they are almost always viewed at — without it a floor
+  // dissolves into shimmer a few metres from the camera, which is the single
+  // most visible sampling artefact in an interior.
+  //
+  // It is not free, though: each sample multiplies texture-fetch bandwidth, and
+  // the floor is usually the largest surface on screen. Asking for 16 (three
+  // clamps to `getMaxAnisotropy()`) means always requesting the GPU's maximum,
+  // which is exactly what a phone on the performance profile must not do — so
+  // the level comes from the render profile.
+  tex.anisotropy = activeProfile().anisotropy
   tex.needsUpdate = true
   return tex
 }
@@ -1070,8 +1174,17 @@ async function blobToCanvas(blob: Blob): Promise<HTMLCanvasElement | null> {
 async function tryLoadFromCache(): Promise<boolean> {
   const db = await openDB()
   if (!db) return false
-  const meta = await dbGet(db, '__meta__') as { version?: number } | undefined
-  if (!meta || meta.version !== CACHE_VERSION) {
+  // The scale is part of the cache identity, not just the generator version:
+  // a user who switches from Ausgewogen to Hoch must not be handed back the
+  // 256² bundle they cached yesterday, or the profile change would silently do
+  // nothing to sharpness. Same in reverse — a downgrade must free the VRAM.
+  const p = activeProfile()
+  const meta = await dbGet(db, '__meta__') as
+    { version?: number; scale?: number; max?: number } | undefined
+  if (
+    !meta || meta.version !== CACHE_VERSION ||
+    (meta.scale ?? 1) !== p.textureScale || (meta.max ?? 512) !== p.textureMaxSize
+  ) {
     db.close()
     return false
   }
@@ -1104,7 +1217,23 @@ async function tryLoadFromCache(): Promise<boolean> {
   }
   db.close()
   _bundle = partial as TextureBundle
+  // Keep the pinned budget truthful about what is actually in memory.
+  _scale = meta.scale ?? 1
+  _max = meta.max ?? 512
   return true
+}
+
+/**
+ * Drop the generated bundle so the next call rebuilds it.
+ *
+ * Called when the render profile changes. Without it a switch to a higher
+ * profile would rebuild every *material* — and hand each one the same 256²
+ * canvases the old profile generated, so the resolution step would do nothing
+ * until the page was reloaded. The IndexedDB copy survives and is keyed by
+ * scale, so switching back and forth costs a decode, not a regeneration.
+ */
+export function resetTextureBundle(): void {
+  _bundle = null
 }
 
 /** Store the freshly generated bundle into IndexedDB (best-effort, non-blocking). */
@@ -1116,7 +1245,7 @@ async function saveToCache(bundle: TextureBundle): Promise<void> {
     const blob = await canvasToBlob(bundle[k])
     if (blob) await dbPut(db, k, blob)
   }
-  await dbPut(db, '__meta__', { version: CACHE_VERSION })
+  await dbPut(db, '__meta__', { version: CACHE_VERSION, scale: _scale, max: _max })
   db.close()
 }
 
@@ -1140,6 +1269,8 @@ export function getTextures(): TextureBundle {
   if (typeof document === 'undefined') {
     throw new Error('getTextures() called in non-browser environment')
   }
+  // Pin the resolution for the whole bundle before the first canvas exists.
+  beginGeneration()
 
   const woodOakC     = drawWoodColor({ base: '#b6a181', dark: '#6e5c46', highlight: '#dccbb0' }, 1)
   const woodOakH     = drawWoodHeight(1)

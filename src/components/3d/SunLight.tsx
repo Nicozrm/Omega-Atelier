@@ -32,8 +32,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { EnvironmentState } from '@/lib/environment'
-import { readTier } from '@/lib/render/tier'
-import { shadowRadius, sunDistance } from '@/lib/render/shadowFrustum'
+import { activeProfile } from '@/lib/render/quality'
+import { shadowBiasFor, shadowRadius, sunDistance } from '@/lib/render/shadowFrustum'
 
 export function SunLight({ env, wM, hM, cx, cz }: {
   env: EnvironmentState
@@ -59,7 +59,16 @@ export function SunLight({ env, wM, hM, cx, cz }: {
   const radius = shadowRadius(wM, hM)
   const distance = sunDistance(radius)
   const { x, y, z } = env.sun.direction
-  const mapSize = readTier() === 'high' ? 4096 : 2048
+  // The render profile is the single source for quality budgets (see
+  // `lib/render/quality`). This used to read the coarse `readTier()` class and
+  // resolve to 4096 or 2048, which both over-spent on the performance tier —
+  // 2048² of depth on a phone — and under-spent on ultra, where the profile
+  // asks for the full 4096 the frustum's texel density was designed around.
+  const mapSize = activeProfile().shadowMapSize
+  // Both biases follow the texel size rather than being constants — see
+  // `shadowBiasFor`. The old fixed pair was under-biased on `performance`
+  // (acne) and over-biased on `ultra` (contact shadows lifting off the floor).
+  const { bias, normalBias } = shadowBiasFor(radius, mapSize)
 
   return (
     <directionalLight
@@ -79,9 +88,17 @@ export function SunLight({ env, wM, hM, cx, cz }: {
       // Small constant bias plus a normal-offset: the normal offset does the
       // real work (it pushes the lookup along the surface normal, which scales
       // with slope), letting the constant bias stay low so contact shadows keep
-      // touching their casters.
-      shadow-bias={-0.0002}
-      shadow-normalBias={0.02}
+      // touching their casters. Both are derived from the frustum's texel size,
+      // which is the unit the error they correct is actually measured in.
+      shadow-bias={bias}
+      shadow-normalBias={normalBias}
+      // Read by the PCSS patch as the *minimum* filter radius, in texels: the
+      // floor that keeps a hard contact edge from aliasing into stair-steps
+      // where the penumbra estimate collapses to zero. Because it is counted in
+      // texels it tracks `mapSize` automatically — a smaller map gets a wider
+      // world-space floor, which is exactly what hides its coarser texels.
+      // Stock three ignores it on the PCF_SOFT path, so on profiles without
+      // PCSS this is inert rather than wrong.
       shadow-radius={4}
     />
   )

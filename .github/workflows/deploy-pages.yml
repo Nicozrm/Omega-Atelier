@@ -52,8 +52,8 @@ jobs:
           GITHUB_PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
           # Supabase anon (publishable) key — public by design (RLS-protected),
           # shipped in the client bundle. Prefer repo secrets/vars if set.
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://jaeufqmehslmqvzosrum.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphZXVmcW1laHNsbXF2em9zcnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NTMxMjMsImV4cCI6MjA5ODMyOTEyM30.tSFX5KWsO1FvwJEFsggWNIPzEcr_a7imZfL4cSYUUIA' }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://suqbnksyfmzfhrfwuhrw.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1cWJua3N5Zm16ZmhyZnd1aHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0OTA2MjcsImV4cCI6MjEwMjA2NjYyN30.8oIT-HV7fOND5ucqCW3hAe9spjCsS97aSPS0VAoeqN8' }}
 
       - name: SPA + PWA deep-link fallback
         run: cp dist/index.html dist/404.html

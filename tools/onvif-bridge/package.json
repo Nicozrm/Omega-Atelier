@@ -1,0 +1,9 @@
+{
+  "name": "omega-atelier-onvif-bridge",
+  "private": true,
+  "type": "module",
+  "description": "Local LAN bridge for Omega Atelier ONVIF/PTZ cameras",
+  "dependencies": {
+    "onvif": "^0.8.1"
+  }
+}

@@ -6,7 +6,7 @@
 export { createBrandConnector } from './brandConnector'
 export type { BrandClient, BrandConnectorOptions } from './brandConnector'
 export { createSimulatedBrandClient, BRAND_FLEETS } from './simulatedBrandClient'
-export { createGoveeClient, goveeControlBody, goveeCapsFor, hexToRgbInt } from './goveeClient'
+export { createGoveeClient, goveeControlBody, goveeCapsFor, hexToRgbInt, parseGoveeDevices } from './goveeClient'
 export type { GoveeClientOptions } from './goveeClient'
 export { createSwitchBotClient, switchbotSign, switchbotCommand, switchbotCapsFor } from './switchbotClient'
 export type { SwitchBotClientOptions } from './switchbotClient'

@@ -5,7 +5,7 @@
  * Content is adapted from the operator's source documents — rebranded to
  * OMEGA Atelier, dated 2026, TMG references updated to the DDG (which replaced
  * the TMG in 2024), and the hosting / data-processing sections aligned with the
- * app's real stack (Vercel hosting, Supabase auth + database, Google/Apple
+ * app's real stack (GitHub Pages hosting, Supabase auth + database, Google
  * sign-in, Google Fonts). Styled in the app's own design system rather than the
  * source's standalone theme, and mounted as public routes.
  */
@@ -174,12 +174,12 @@ export function DatenschutzPage() {
         ]} />
       </Section>
       <Section title="4. Nutzerkonto & Cloud-Speicherung">
-        <p>Für die Nutzung der Cloud-Funktionen (Speichern und Synchronisieren Ihrer Grundriss-Projekte) können Sie ein Nutzerkonto anlegen. Die Anmeldung ist per E-Mail/Passwort sowie optional über Google oder Apple (OAuth) möglich.</p>
+        <p>Für die Nutzung der Cloud-Funktionen (Speichern und Synchronisieren Ihrer Grundriss-Projekte) können Sie ein Nutzerkonto anlegen. Die Anmeldung ist per E-Mail/Passwort sowie optional über Google (OAuth) möglich.</p>
         <Sub>Verarbeitete Daten</Sub>
         <UL items={[
           'E-Mail-Adresse und Authentifizierungsdaten',
           'Ihre gespeicherten Projekte (Grundrisse, Geräte, Szenen)',
-          'Bei OAuth: die von Google bzw. Apple bereitgestellte Kennung und E-Mail-Adresse',
+          'Bei OAuth: die von Google bereitgestellte Kennung und E-Mail-Adresse',
         ]} />
         <Sub>Rechtsgrundlage</Sub>
         <p>Art. 6 Abs. 1 lit. b DSGVO (Bereitstellung der vertraglich vereinbarten Funktionen).</p>
@@ -189,7 +189,7 @@ export function DatenschutzPage() {
       <Section title="5. Hosting & Server">
         <p>Unsere Anwendung wird bei folgenden Anbietern betrieben:</p>
         <UL items={[
-          <><strong className="text-[color:var(--fg)]">Vercel Inc.</strong> – Hosting und Auslieferung der Web-Anwendung</>,
+          <><strong className="text-[color:var(--fg)]">GitHub, Inc.</strong> – Hosting und Auslieferung der Web-Anwendung (GitHub Pages)</>,
           <><strong className="text-[color:var(--fg)]">Supabase</strong> – Authentifizierung und Datenbank (Speicherung der Nutzerkonten und Projekte)</>,
           <><strong className="text-[color:var(--fg)]">Google Fonts</strong> – Schriftarten (extern geladen; IP-Adresse wird an Google-Server übertragen)</>,
         ]} />

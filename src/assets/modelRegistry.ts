@@ -14,6 +14,18 @@
  * models without a redistribution licence.
  */
 
+/**
+ * How a model adapts when the placed item's footprint differs from the size the
+ * asset was authored at.
+ *
+ *  `stretch`  scale X and Z to the placed footprint, keep the height. What a
+ *             planner wants: a sofa dragged to 2.6 m gets wider, not taller.
+ *  `uniform`  one scale factor for all three axes — for anything whose
+ *             proportions must not change (a plant, a vase).
+ *  `none`     render at the authored size and ignore the footprint.
+ */
+export type ModelFit = 'stretch' | 'uniform' | 'none'
+
 export interface ModelDef {
   /** File name in `public/models/`, without the `.glb` extension. */
   file: string
@@ -35,8 +47,7 @@ export interface ModelDef {
   /** Position offset (m) applied after placement. Rarely needed — the pipeline
    *  centres each asset on the origin and seats it on the floor. */
   offset?: [number, number, number]
-}
-
+  
 /**
  * id (furnitureId or deviceId) → local GLB.
  *
@@ -51,6 +62,9 @@ export interface ModelDef {
  *  - table-coffee.glb ← modern_coffee_table_01
  */
 export const MODELS: Record<string, ModelDef> = {
+  /* ── CC0 assets (Poly Haven) ──────────────────────────────────────────────
+   * No `nominal`, so these keep rendering at their authored size exactly as
+   * before. Measuring them is a separate job from generating our own. */
   'plant':        { file: 'plant' },
   'plant-tall':   { file: 'plant' },
   'plant-large':  { file: 'plant' },
@@ -58,7 +72,7 @@ export const MODELS: Record<string, ModelDef> = {
   'table-coffee': { file: 'table-coffee' },
   'chair-dining': { file: 'chair-dining' },
   'nightstand':   { file: 'nightstand' },
-  'vase-floor':   { file: 'vase-floor' },
+
 }
 
 export function hasModel(id: string): boolean {

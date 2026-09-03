@@ -39,6 +39,3 @@ supabase/.temp
 .shot*.mjs
 .texdump.mjs
 
-# Asset pipeline: sources are re-downloadable CC0 originals, builds are staging
-assets-src/
-.assets-build/
