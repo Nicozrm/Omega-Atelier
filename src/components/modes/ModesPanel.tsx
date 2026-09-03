@@ -77,22 +77,29 @@ export function ModesPanel() {
                   : 'Alle Kategorien vorhanden'
               }
               className={cn(
-                'group relative flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border p-2',
+                'group relative flex aspect-square flex-col items-center justify-center gap-1 rounded-[var(--radius-lg)] border p-2',
                 'transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]',
                 'hover:-translate-y-0.5',
                 active
-                  ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.12)] scale-[1.02]'
-                  : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-2)]',
+                  ? 'border-[color:var(--border-accent)] bg-[color:var(--fill-active)] scale-[1.02]'
+                  : 'border-[color:var(--hairline-soft)] hover:border-[color:var(--hairline-strong)] hover:bg-[color:var(--fill-quiet)]',
               )}
               style={active ? { boxShadow: `0 0 22px ${m.accent}33, 0 4px 14px ${m.accent}1f` } : undefined}
             >
               <Icon size={20} style={{ color: m.accent }} />
               <div className="text-[11px] font-medium leading-tight text-center">{m.name}</div>
+              {/*
+                Colour marks the exceptions, not the rule. Nine tiles each
+                printing a green "100%" is nine pieces of ink saying nothing —
+                and it left the one mode that actually needs devices looking
+                like all the others. A ready mode now reads in the muted tone,
+                and only a gap in coverage takes a colour.
+              */}
               <div
                 className={cn(
                   'font-mono text-[10px]',
-                  score >= 80 ? 'text-[color:var(--color-omega-success)]' :
-                  score >= 40 ? 'text-[color:var(--accent)]' :
+                  score >= 80 ? 'text-[color:var(--muted)]' :
+                  score >= 40 ? 'text-[color:var(--color-omega-warn)]' :
                                 'text-[color:var(--color-omega-danger)]',
                 )}
               >

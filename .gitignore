@@ -38,3 +38,4 @@ supabase/.temp
 # local headless-verification tooling (not shipped)
 .shot*.mjs
 .texdump.mjs
+

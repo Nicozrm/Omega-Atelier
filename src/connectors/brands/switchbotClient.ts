@@ -29,8 +29,14 @@
 
 import type { Capability, Device, DeviceCommand, DeviceUpdate, Unsubscribe } from '@/domain'
 import type { BrandClient } from './brandConnector'
+import { errorBody, vendorHttpError } from './vendorErrors'
+import { isRelayHealthResponse, RELAY_HEALTH_MESSAGE } from '../relayUrl'
+import { trace, traceError } from '../diagnostics'
 
 const SB_BASE = 'https://api.switch-bot.com'
+
+/** Trace/diagnostics key for this vendor. */
+const TRACE = 'switchbot'
 
 /**
  * Status poll interval, ms. SwitchBot allows 10 000 calls/day per token and has
@@ -99,6 +105,9 @@ function switchbotStatusMessage(code: number, message?: string): string {
  * them in `infraredRemoteList`, not `deviceList`. Those were dropped entirely.
  */
 export function parseSwitchBotDevices(json: SbEnvelope): SbDevice[] {
+  // Arrives as HTTP 200 with valid JSON and no `statusCode`, so the check below
+  // waves it through and the empty `body` reads as an empty account.
+  if (isRelayHealthResponse(json)) throw new Error(RELAY_HEALTH_MESSAGE)
   const code = json?.statusCode
   if (typeof code === 'number' && code !== 100) {
     throw new Error(switchbotStatusMessage(code, json.message))
@@ -180,6 +189,17 @@ function transportError(e: unknown, relayed: boolean): Error {
   return e instanceof Error ? e : new Error('SwitchBot-Anfrage fehlgeschlagen')
 }
 
+/**
+ * What a non-2xx answer actually said.
+ *
+ * Govee has the identical problem, so the diagnosis lives in `vendorErrors` and
+ * both clients share it — see that module for why each status means what it
+ * means. This wrapper only fixes the vendor name.
+ */
+export function switchbotHttpError(status: number, body: unknown): string {
+  return vendorHttpError('SwitchBot', status, body)
+}
+
 export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient {
   const base = (opts.baseUrl?.replace(/\/+$/, '') || SB_BASE)
   const relayed = !!opts.baseUrl
@@ -226,21 +246,46 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
 
   const list = async (): Promise<Device[]> => {
     let res: Response
+    trace(TRACE, 'request', 'Geräteliste angefragt', { relayed, path: '/v1.1/devices' })
     try {
       res = await doFetch(`${base}/v1.1/devices`, { headers: await authedHeaders() })
     } catch (e) {
-      throw transportError(e, relayed)
+      const err = transportError(e, relayed)
+      traceError(TRACE, 'request', err.message, { relayed })
+      throw err
     }
-    if (!res.ok) throw new Error(`SwitchBot-API ${res.status} — Token/Secret/Relay prüfen`)
+    if (!res.ok) {
+      const reason = switchbotHttpError(res.status, await errorBody(res))
+      traceError(TRACE, 'request', reason, { status: res.status, relayed })
+      throw new Error(reason)
+    }
 
     // Throws with SwitchBot's own reason when the envelope says "no", even
     // though the HTTP layer said 200.
-    const raw = parseSwitchBotDevices((await res.json()) as SbEnvelope)
+    const envelope = (await res.json()) as SbEnvelope
+    let raw: SbDevice[]
+    try {
+      raw = parseSwitchBotDevices(envelope)
+    } catch (e) {
+      traceError(TRACE, 'parse', e instanceof Error ? e.message : 'Antwort abgelehnt', {
+        statusCode: envelope?.statusCode ?? -1,
+      })
+      throw e
+    }
+    trace(TRACE, 'parse', 'SwitchBot-Envelope gelesen', {
+      statusCode: envelope?.statusCode ?? 100,
+      physical: envelope?.body?.deviceList?.length ?? 0,
+      infrared: envelope?.body?.infraredRemoteList?.length ?? 0,
+    })
     for (const d of raw) known.add(d.deviceId)
 
     // IR remotes are write-only — SwitchBot has no `/status` for them, and
     // asking burns a call per device against the 10 000/day budget.
     const states = await Promise.all(raw.map((d) => (d.infrared ? Promise.resolve(null) : readStatus(d.deviceId))))
+    trace(TRACE, 'normalize', 'Geräte in neutrale Domain übersetzt', {
+      devices: raw.length,
+      withLiveStatus: states.filter((s) => s !== null).length,
+    })
 
     return raw.map((d, i) => {
       const { category, caps } = switchbotCapsFor(d.deviceType ?? d.remoteType ?? '')
@@ -291,6 +336,7 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
      */
     probe: async () => {
       const devices = await listShared()
+      trace(TRACE, 'auth', 'Signatur akzeptiert, Konto gelesen', { devices: devices.length })
       if (devices.length === 0) {
         return {
           message: 'Verbunden, aber das SwitchBot-Konto liefert keine Geräte — '
@@ -310,7 +356,12 @@ export function createSwitchBotClient(opts: SwitchBotClientOptions): BrandClient
       } catch (e) {
         throw transportError(e, relayed)
       }
-      if (!res.ok) throw new Error(`SwitchBot-Steuerung fehlgeschlagen (${res.status})`)
+      if (!res.ok) {
+        const reason = switchbotHttpError(res.status, await errorBody(res))
+        traceError(TRACE, 'command', reason, { status: res.status })
+        throw new Error(reason)
+      }
+      trace(TRACE, 'command', 'Befehl angenommen', { capability: cmd.capability })
     },
 
     /** Same reasoning as Govee: no push channel, so the live path is a poll. */

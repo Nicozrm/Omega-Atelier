@@ -22,6 +22,7 @@ import {
   restoredDevices, TWIN_STATE_VERSION,
   type SavedConnector, type TwinPersistedState,
 } from './twinPersistence'
+import type { DiscoveryState } from './integrationState'
 
 export interface TwinSession {
   /** Connector id (= `connector.info.id`). */
@@ -30,6 +31,17 @@ export interface TwinSession {
   /** Opaque UI grouping/badge hint (e.g. 'home-assistant', 'mqtt'). */
   kind: string
   health: ConnectorHealth
+  /**
+   * The outcome of the last device discovery, tracked separately from the
+   * transport health.
+   *
+   * These are two independent failures and the UI has to be able to tell them
+   * apart: a connector can hold a perfectly valid session and still fail to
+   * enumerate anything (wrong project scope, missing API subscription, an empty
+   * account). Folding both into `health.status` is what made "verbunden" appear
+   * over an empty device list with nothing to act on.
+   */
+  discovery: DiscoveryState
 }
 
 /**
@@ -185,27 +197,106 @@ export class TwinManager {
     const id = connector.info.id
     if (this.connectors.has(id)) return
     this.connectors.set(id, connector)
-    this.sessions.set(id, { id, label: descriptor.label, kind: descriptor.kind, health: { status: 'connecting' } })
+    this.sessions.set(id, {
+      id, label: descriptor.label, kind: descriptor.kind,
+      health: { status: 'connecting' },
+      discovery: { phase: 'idle', count: 0 },
+    })
     this.emit()
     // Pushed status during connect (before adoption hands the channel to the runtime).
     connector.onStatus?.((h) => this.updateHealth(id, h))
+
     try {
       await connector.connect()
-      const devices = await connector.discover()
-      this.runtime.adoptConnector(connector, devices)
     } catch (e) {
+      /*
+       * The handshake itself failed, so this connector never became live. It
+       * has to leave the registry again — otherwise `isActive` reports true for
+       * something the runtime never adopted, a second connect attempt returns
+       * silently at the guard above, and `removeConnector` skips
+       * `connector.disconnect()` because the runtime does not know it either.
+       * The session stays, carrying the reason.
+       */
+      this.connectors.delete(id)
+      try { await connector.disconnect() } catch { /* best effort */ }
       this.updateHealth(id, { status: 'error', message: e instanceof Error ? e.message : 'Verbindung fehlgeschlagen' })
+      return
+    }
+
+    /*
+     * Discovery is adopted either way. A connector that authenticated but could
+     * not enumerate devices is still a live session: it owns a valid token, it
+     * can poll itself back to health, and the user must be able to retry the
+     * *discovery* without re-entering credentials. Previously a throw here left
+     * the connector half-registered — in the manager, absent from the runtime,
+     * never subscribed, and impossible to recover except by disconnecting.
+     */
+    this.setDiscovery(id, { phase: 'running', count: 0 })
+    let devices: Device[] = []
+    try {
+      devices = await connector.discover()
+      this.setDiscovery(id, { phase: 'ok', count: devices.length, at: new Date().toISOString() })
+    } catch (e) {
+      this.setDiscovery(id, {
+        phase: 'failed',
+        count: 0,
+        error: e instanceof Error ? e.message : 'Geräteabfrage fehlgeschlagen',
+        at: new Date().toISOString(),
+      })
+    }
+    this.runtime.adoptConnector(connector, devices)
+  }
+
+  /**
+   * Re-run discovery for a live connector — the "Prüfen" action.
+   *
+   * This is a real device re-read, not a UI reset: it asks the connector for a
+   * fresh snapshot, replaces that connector's devices in the twin (so devices
+   * that disappeared actually disappear) and records the outcome.
+   */
+  async refreshConnector(id: string): Promise<void> {
+    const connector = this.connectors.get(id)
+    if (!connector) return
+    const previous = this.sessions.get(id)?.discovery.count ?? 0
+    this.setDiscovery(id, { phase: 'running', count: previous })
+    try {
+      const devices = await connector.synchronize()
+      const keep = new Set(devices.map((d) => d.id))
+      for (const device of this.runtime.listDevices()) {
+        if (device.connectorId === id && !keep.has(device.id)) this.runtime.removeDevice(device.id)
+      }
+      this.runtime.adoptConnector(connector, devices)
+      this.setDiscovery(id, { phase: 'ok', count: devices.length, at: new Date().toISOString() })
+    } catch (e) {
+      this.setDiscovery(id, {
+        phase: 'failed',
+        count: 0,
+        error: e instanceof Error ? e.message : 'Geräteabfrage fehlgeschlagen',
+        at: new Date().toISOString(),
+      })
     }
   }
 
-  /** Remove one connector; the others (and their devices) stay live. */
+  /**
+   * Remove one connector; the others (and their devices) stay live.
+   *
+   * Tolerant of a session without a live connector on purpose: a failed connect
+   * leaves exactly that, and the user still has to be able to dismiss it.
+   */
   async removeConnector(id: string): Promise<void> {
-    if (!this.connectors.has(id)) return
-    await this.runtime.removeConnector(id)
+    if (!this.connectors.has(id) && !this.sessions.has(id)) return
+    if (this.connectors.has(id)) await this.runtime.removeConnector(id)
     this.connectors.delete(id)
     this.sessions.delete(id)
     // Disconnecting is deliberate: it should not come back on the next reload.
     this.savedConnectors = this.savedConnectors.filter((c) => c.id !== id)
+    this.emit()
+  }
+
+  private setDiscovery(id: string, discovery: DiscoveryState): void {
+    const session = this.sessions.get(id)
+    if (!session) return
+    session.discovery = discovery
     this.emit()
   }
 

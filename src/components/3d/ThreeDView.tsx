@@ -43,6 +43,7 @@ import { seasonFromDate } from '@/lib/season'
 import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
+import { SegmentedControl } from '@/ui'
 import { QualityMenu } from './QualityMenu'
 import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
@@ -67,7 +68,11 @@ import { FURNITURE } from '@/data/furniture'
 import { DEVICE_COLORS } from '@/lib/canvasGlyphs'
 import { getTextures, getTexturesAsync, makeTex, resetTextureBundle, type TextureBundle } from '@/lib/textures'
 import { resetProceduralTextures } from '@/lib/proceduralTextures'
+import { applyPhotoTextures, resetPhotoTextures } from '@/lib/photoTextureLoader'
+import { useOutdoorTextures } from '@/hooks/useOutdoorTextures'
+import { resetOutdoorTextures } from '@/lib/outdoorTextureLoader'
 import { canopyGeometry } from '@/lib/render/canopy'
+import { eavesDrop, gableSlope, hipRoofGeometry } from '@/lib/render/roofGeometry'
 import {
   X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
   ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture,
@@ -82,7 +87,6 @@ import {
   DEFAULT_HOUSE_STYLE, loadHouseStyle, saveHouseStyle,
 } from '@/lib/houseStyle'
 import { cinematicReact } from '@/lib/cinematic'
-import { useUIStore } from '@/store/useUIStore'
 import * as THREE from 'three'
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
@@ -577,6 +581,15 @@ function ensureMat(): MatCache {
   if (!_mat) {
     _mat = buildMaterials()
     if (!activeProfile().richMaterials) leanizeForPerf(_mat)
+    /*
+     * The photographic PBR maps in `public/textures/` are swapped onto these
+     * same instances once they decode. Deliberately not awaited: the canvas
+     * materials above are complete and correct on their own, so the first frame
+     * is immediate and the scene works with no files at all — this only ever
+     * improves what is already on screen. A missing or undecodable file leaves
+     * the canvas texture in place.
+     */
+    void applyPhotoTextures(_mat as unknown as Record<string, THREE.Material>)
   }
   return _mat
 }
@@ -606,6 +619,11 @@ function resetMaterialCaches(): void {
   // Same for the outdoor library: brick, roofs, asphalt and lawn read their
   // anisotropy and resolution once, at creation, and are cached module-wide.
   resetProceduralTextures()
+  // And the photographic sets, which bake the profile's anisotropy into every
+  // decoded texture and are skipped entirely below the detail-map threshold.
+  resetPhotoTextures()
+  // Same for the Blender-baked outdoor library.
+  resetOutdoorTextures()
 }
 
 /** Floor variants the UI can switch between. */
@@ -676,6 +694,43 @@ const CATALOG_TO_LEGACY: Record<string, () => THREE.Material> = {
   'wall-wallpaper':    () => ensureMat().wallWallpaper,
 }
 const catalogMatCache = new Map<string, THREE.Material>()
+
+/**
+ * A catalog material that always wins where it lies **flush** with another
+ * surface using the same material.
+ *
+ * Two coplanar faces at the same depth are a coin toss decided per fragment by
+ * floating-point rounding, and the coin lands differently as the camera moves —
+ * which is what shimmering seams are. The plan geometry has two such pairs by
+ * construction, and neither can be separated by moving anything:
+ *
+ *  - **Corner pillars.** The pillar is a box of the corner's wall thickness
+ *    centred on the corner, so its side faces sit in exactly the planes of the
+ *    faces of the walls meeting there. Making it smaller stops it covering the
+ *    seam it exists for; making it larger leaves a ridge at every corner.
+ *  - **Per-room floors.** They overlay the plan-wide floor, which spans the
+ *    whole extent underneath them.
+ *
+ * `polygonOffset` is the tool for exactly this: a negative factor biases the
+ * depth *written* by this material toward the camera, so the overlay resolves in
+ * front deterministically while the geometry stays where it belongs. Everything
+ * else in the catalog carries `+1`, which is what these have to beat.
+ */
+function matFromCatalogInFront(material: Material, opts?: { doubleSide?: boolean }): THREE.Material {
+  const key = `${material.id}:front${opts?.doubleSide ? ':double' : ''}`
+  let cached = catalogMatCache.get(key)
+  if (!cached) {
+    cached = matFromCatalog(material).clone()
+    const m = cached as THREE.MeshStandardMaterial
+    m.polygonOffset = true
+    m.polygonOffsetFactor = -2
+    m.polygonOffsetUnits = -2
+    if (opts?.doubleSide) m.side = THREE.DoubleSide
+    catalogMatCache.set(key, cached)
+  }
+  return cached
+}
+
 function matFromCatalog(material: Material, opts?: { doubleSide?: boolean }): THREE.Material {
   if (opts?.doubleSide) {
     const key = `${material.id}:double`
@@ -1105,31 +1160,73 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
           </group>
         </group>
       )}
-      {/* Window — real transparent glazing in a slim white aluminium frame */}
-      {!isDoor && (
+      {/*
+        Window — a real casement set in the opening, not a white block filling it.
+
+        Everything here follows from **where the frame sits in the wall**. It used
+        to be `thickM * 1.05` deep, i.e. the entire wall thickness plus a little:
+        a 20 cm exterior wall got a 21 cm deep white frame, so from any angle but
+        dead-on the window was a solid white slab and the opening had no depth at
+        all. A casement frame is ~7 cm deep and is set toward the *outside*, which
+        is what leaves the plaster reveal (Laibung) on the room side — and the
+        reveal is the thing that makes an opening read as a hole through a wall
+        rather than as a white rectangle painted on it.
+
+        `frameZ` is that setback: half the frame depth in from the outer face,
+        plus 2 cm of weather rebate. On a thin partition the frame simply centres.
+      */}
+      {!isDoor && (() => {
+        const frameD = Math.min(0.07, thickM * 0.6)
+        const frameW = 0.045
+        /*
+         * Depths are worked out along one axis `u`, measured from the wall's
+         * centre plane **toward the room** — that keeps every number a plain
+         * distance and confines `interiorSign` to the two places it is applied.
+         * The wall's room-side face is at `u = thickM / 2`.
+         */
+        const setback = Math.max(0, thickM / 2 - frameD / 2 - 0.02)  // frame sits outboard
+        const frameU = -setback
+        const frameZ = interiorSign * frameU
+        // Plaster reveal left between the frame and the room, and the cill that
+        // caps it — a nose of 6 cm into the room, like a real stone Fensterbank.
+        const revealDepth = thickM / 2 - (frameU + frameD / 2)
+        const cillDepth = revealDepth + 0.06
+        const cillZ = interiorSign * (frameU + frameD / 2 + cillDepth / 2)
+        // A single sash below ~1.1 m, two above. A centre mullion drawn on every
+        // window regardless of size chopped a 60 cm bathroom light in half.
+        const mullion = opW > 1.1
+        // Glass fills the frame, in the frame's plane — a pane, not a slab. The
+        // refraction thickness is a material property (`glass.ts`), so geometry
+        // depth buys nothing here and a box only doubles the transmissive
+        // surfaces the renderer has to resolve.
+        const glassW = opW - frameW * 2
+        const glassH = opH - frameW * 2
+        return (
         <group position={[0, opSill + opH / 2, 0]}>
-          <mesh material={glass}>
-            <boxGeometry args={[opW * 0.94, opH * 0.94, 0.012]} />
+          <mesh position={[0, 0, frameZ]} material={glass}>
+            <planeGeometry args={[glassW, glassH]} />
           </mesh>
-          {/* Frame: top, bottom, two stiles + a centre mullion */}
-          <mesh position={[0, opH / 2 - 0.02, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW, 0.04, thickM * 1.05]} />
+          {/* Frame: head, cill rail, two stiles, and a mullion only if it fits */}
+          <mesh position={[0, opH / 2 - frameW / 2, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW, frameW, frameD]} />
           </mesh>
-          <mesh position={[0, -opH / 2 + 0.02, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW, 0.04, thickM * 1.05]} />
+          <mesh position={[0, -opH / 2 + frameW / 2, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW, frameW, frameD]} />
           </mesh>
-          <mesh position={[-opW / 2 + 0.02, 0, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[0.04, opH, thickM * 1.05]} />
+          <mesh position={[-opW / 2 + frameW / 2, 0, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[frameW, opH, frameD]} />
           </mesh>
-          <mesh position={[opW / 2 - 0.02, 0, 0]} castShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[0.04, opH, thickM * 1.05]} />
+          <mesh position={[opW / 2 - frameW / 2, 0, frameZ]} castShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[frameW, opH, frameD]} />
           </mesh>
-          <mesh material={MAT.matteWhite()}>
-            <boxGeometry args={[0.03, opH, thickM * 1.05]} />
-          </mesh>
-          {/* Window sill — a slim ledge below the opening */}
-          <mesh position={[0, -opH / 2 - 0.02, thickM * 0.4]} castShadow receiveShadow material={MAT.matteWhite()}>
-            <boxGeometry args={[opW + 0.06, 0.03, thickM * 1.5]} />
+          {mullion && (
+            <mesh position={[0, 0, frameZ]} material={MAT.matteWhite()}>
+              <boxGeometry args={[0.035, opH, frameD]} />
+            </mesh>
+          )}
+          {/* Interior stone cill — runs from the frame out past the wall face. */}
+          <mesh position={[0, -opH / 2 - 0.015, cillZ]} castShadow receiveShadow material={MAT.matteWhite()}>
+            <boxGeometry args={[opW + 0.06, 0.03, cillDepth]} />
           </mesh>
           {/* Radiator — slim modern flat panel below the window, interior side.
               Sized from the sill height; skipped when there is no room for it. */}
@@ -1206,7 +1303,8 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
             )
           })()}
         </group>
-      )}
+        )
+      })()}
     </group>
   )
 }
@@ -1214,11 +1312,19 @@ function Wall3D({ id, a, b, thickness, height = 250, selected, material, extA = 
 /**
  * Vertical pillar at a wall corner. Covers any tiny seam between two
  * extended-and-overlapping walls. Renders only ONCE per unique corner.
+ *
+ * `size` is the thickness of the thickest wall meeting here and the pillar is
+ * centred on the corner, so its four side faces land in **exactly** the planes
+ * of those walls' faces — coplanar, same material, same depth. That is the
+ * flicker you see as vertical strips at every junction while orbiting: the
+ * depth test has nothing to decide with and picks differently per frame. The
+ * pillar therefore draws with a depth bias toward the camera and wins the tie
+ * outright; see `matFromCatalogInFront`.
  */
 function CornerPillar({ x, z, size, height, material }: {
   x: number; z: number; size: number; height: number; material: Material;
 }) {
-  const mat = useMemo(() => matFromCatalog(material), [material])
+  const mat = useMemo(() => matFromCatalogInFront(material), [material])
   return (
     <group>
       <mesh position={[M(x), height / 2, M(z)]} castShadow receiveShadow material={mat}>
@@ -3904,7 +4010,11 @@ function Furniture3D({ f }: { f: PlacedFurniture }) {
       onClick={(e) => { e.stopPropagation(); setSelection({ type: 'furniture', ids: [f.id] }) }}
     >
       <group ref={groupRef}>
-        <GltfModel id={f.furnitureId} fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />} />
+        <GltfModel
+          id={f.furnitureId}
+          footprint={[M(w), M(h)]}
+          fallback={<FurnitureMesh furnitureId={f.furnitureId} w={w} h={h} item={f} />}
+        />
         {(isSelected || hovered) && (
           <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[Math.max(M(w), M(h)) / 2 + 0.06, Math.max(M(w), M(h)) / 2 + 0.075, 64]} />
@@ -5219,10 +5329,13 @@ function CeilingFade({ rooms, walkMode }: { rooms: Room[]; walkMode: boolean }) 
       it.material.transparent = next < 0.999
     }
   })
+  // `−π/2`, like the floors: the outlines are built with `-M(y)`, and the
+  // opposite sign mirrors every ceiling across z = 0 — in a flat, plan-wide
+  // plane that only shows up as the *wrong room's* material overhead.
   return (
     <group ref={group} visible={level.current > 0.02}>
       {items.map((it) => (
-        <mesh key={`ceil-${it.id}`} position={[0, M(250), 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow material={it.material}>
+        <mesh key={`ceil-${it.id}`} position={[0, M(250), 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow material={it.material}>
           <shapeGeometry args={[it.shape]} />
         </mesh>
       ))}
@@ -5267,6 +5380,9 @@ function mulberry32(seed: number) {
 function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
   wM: number; hM: number; cx: number; cz: number; phase: DayPhase; daylightScale: number
 }) {
+  // The klinker, roof and paver surfaces this builds from are the ones the
+  // Blender bake replaces, so this memo has to rebuild when they land too.
+  const bakedOutdoorVersion = useOutdoorTextures()
   const built = useMemo(() => {
     const lit = phase === 'night' || phase === 'dusk' || phase === 'goldenHour'
     // Detail budget: fine garnish (flower beds, parasols, gutters, fence posts,
@@ -5556,30 +5672,40 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
           if (rich) parts.push(<mesh key="rfu" position={[fw * 0.2, bh + 0.37, -fd * 0.15]} castShadow material={m.zinc}><boxGeometry args={[0.7, 0.36, 0.5]} /></mesh>)
         } else if (roofKind < 0.9) {
           const rh = Math.min(fw, fd) * 0.5
-          const slope = Math.hypot(fw / 2 + 0.16, rh)
-          const ang = Math.atan2(rh, fw / 2 + 0.16)
+          // Rafters bear on the wall head and the eaves hang below it — see
+          // `gableSlope`. Built from the overhang instead, the roof floated a
+          // hand's width clear of the masonry all the way round.
+          const sl = gableSlope(fw / 2, rh, 0.16)
+          const ang = sl.angle
           parts.push(
             <group key="rg" position={[0, bh, 0]}>
-              <mesh position={[-fw / 4, rh / 2, 0]} rotation={[0, 0, ang]} castShadow material={roofMat}><boxGeometry args={[slope, 0.1, fd + 0.5]} /></mesh>
-              <mesh position={[fw / 4, rh / 2, 0]} rotation={[0, 0, -ang]} castShadow material={roofMat}><boxGeometry args={[slope, 0.1, fd + 0.5]} /></mesh>
+              <mesh position={[-sl.cx, sl.cy, 0]} rotation={[0, 0, ang]} castShadow material={roofMat}><boxGeometry args={[sl.rafter, 0.1, fd + 0.5]} /></mesh>
+              <mesh position={[sl.cx, sl.cy, 0]} rotation={[0, 0, -ang]} castShadow material={roofMat}><boxGeometry args={[sl.rafter, 0.1, fd + 0.5]} /></mesh>
               {/* ridge cap */}
               <mesh position={[0, rh + 0.02, 0]} castShadow material={m.ridge}><boxGeometry args={[0.24, 0.1, fd + 0.55]} /></mesh>
               {/* zinc gutters along both eaves + downspouts to the plinth */}
               {rich && [-1, 1].map((s) => (
                 <group key={`gt${s}`}>
-                  <mesh position={[s * (fw / 2 + 0.22), 0.03, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.zinc}><cylinderGeometry args={[0.055, 0.055, fd + 0.5, 8]} /></mesh>
-                  <mesh position={[s * (fw / 2 + 0.24), -bh / 2 + 0.02, fd * 0.32]} material={m.zinc}><cylinderGeometry args={[0.04, 0.04, bh, 8]} /></mesh>
+                  <mesh position={[s * (sl.eaveX - 0.06), sl.eaveY - 0.03, 0]} rotation={[Math.PI / 2, 0, 0]} material={m.zinc}><cylinderGeometry args={[0.055, 0.055, fd + 0.5, 8]} /></mesh>
+                  <mesh position={[s * (sl.eaveX - 0.04), -bh / 2 + 0.02, fd * 0.32]} material={m.zinc}><cylinderGeometry args={[0.04, 0.04, bh, 8]} /></mesh>
                 </group>
               ))}
+              {/* Gable ends. A `shapeGeometry` faces +z, so the far one was
+                  turned away from the viewer and culled — every gable house in
+                  the estate stood open at the back. */}
               {[-1, 1].map((s) => {
                 const sh = new THREE.Shape(); sh.moveTo(-fw / 2, 0); sh.lineTo(fw / 2, 0); sh.lineTo(0, rh); sh.closePath()
-                return <mesh key={s} position={[0, 0, (s * fd) / 2]} material={facade}><shapeGeometry args={[sh]} /></mesh>
+                return (
+                  <mesh key={s} position={[0, 0, (s * fd) / 2]} rotation={[0, s > 0 ? 0 : Math.PI, 0]} material={facade}>
+                    <shapeGeometry args={[sh]} />
+                  </mesh>
+                )
               })}
               {/* Framed solar array on the front slope */}
               {stories === 2 && (
-                <group position={[-fw / 4, rh / 2 + 0.07, faceZ * fd * 0.1]} rotation={[0, 0, ang]}>
-                  <mesh castShadow material={m.solarFrame}><boxGeometry args={[slope * 0.74, 0.05, fd * 0.52]} /></mesh>
-                  <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[slope * 0.7, 0.02, fd * 0.48]} /></mesh>
+                <group position={[-sl.cx, sl.cy + 0.07, faceZ * fd * 0.1]} rotation={[0, 0, ang]}>
+                  <mesh castShadow material={m.solarFrame}><boxGeometry args={[sl.rafter * 0.74, 0.05, fd * 0.52]} /></mesh>
+                  <mesh position={[0, 0.035, 0]} material={m.solar}><boxGeometry args={[sl.rafter * 0.7, 0.02, fd * 0.48]} /></mesh>
                 </group>
               )}
               {/* Grey metal dormer with a window on the front slope */}
@@ -5592,8 +5718,32 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
             </group>,
           )
         } else {
-          const rh = Math.min(fw, fd) * 0.4
-          parts.push(<mesh key="rh" position={[0, bh + rh / 2, 0]} rotation={[0, Math.PI / 4, 0]} castShadow material={roofMat}><coneGeometry args={[Math.hypot(fw, fd) * 0.52, rh, 4]} /></mesh>)
+          /*
+           * Walmdach. This was `coneGeometry(hypot(fw, fd) * 0.52, rh, 4)` —
+           * a square pyramid turned 45°, i.e. a Zeltdach, which only fits a
+           * square plan. Over a rectangle its base edge is `hypot(w, d)·0.52·√2`
+           * in *both* directions at once: too short across the long side, too
+           * long across the short one. The same mistake was already corrected
+           * for the neighbourhood proper; this fallback estate kept it.
+           */
+          const OVH = 0.3
+          const hw = fw + OVH * 2, hd = fd + OVH * 2
+          const pitch = 0.55
+          const rise = (Math.min(hw, hd) / 2) * pitch
+          const ridgeLen = Math.abs(hw - hd)
+          const base = bh - eavesDrop(OVH, pitch)
+          parts.push(
+            <mesh key="rh" position={[0, base, 0]} castShadow material={roofMat}>
+              <primitive object={hipRoofGeometry(hw, hd, rise)} attach="geometry" />
+            </mesh>,
+          )
+          if (ridgeLen > 0.3) {
+            parts.push(
+              <mesh key="rhr" position={[0, base + rise + 0.02, 0]} rotation={[0, hw >= hd ? Math.PI / 2 : 0, 0]} castShadow material={m.ridge}>
+                <boxGeometry args={[0.24, 0.1, ridgeLen]} />
+              </mesh>,
+            )
+          }
         }
         if (hasChimney) {
           parts.push(<mesh key="ch" position={[fw * 0.25, bh + 0.9, fd * 0.1]} castShadow material={m.chimney}><boxGeometry args={[0.3, 1.1, 0.3]} /></mesh>)
@@ -5810,7 +5960,8 @@ function Neighborhood({ wM, hM, cx, cz, phase, daylightScale }: {
     }
 
     return { nodes, allMats, extraTex }
-  }, [wM, hM, cx, cz, phase, daylightScale])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wM, hM, cx, cz, phase, daylightScale, bakedOutdoorVersion])
 
   useEffect(() => {
     const mats = built.allMats, texs = built.extraTex
@@ -5949,38 +6100,65 @@ function HouseShell({ rooms, phase, daylightScale, style }: { rooms: Room[]; pha
       for (const [k, x, z, w, d] of [['pa', 0, (spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pb', 0, -(spanPerp + oh) / 2, spanRidge + oh * 2, 0.12], ['pl', (spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2], ['pr', -(spanRidge + oh) / 2, 0, 0.12, spanPerp + oh * 2]] as const) {
         roofGroup.push(<mesh key={k} position={[x, 0.34, z]} castShadow material={zinc}><boxGeometry args={[w, 0.36, d]} /></mesh>)
       }
-    } else {
-      const rh = (spanPerp / 2 + oh) * rhints.pitch
-      const slope = Math.hypot(spanPerp / 2 + oh, rh)
-      const ang = Math.atan2(rh, spanPerp / 2 + oh)
-      // Walmdach: the ridge is pulled in from the ends by the hip inset, so the
-      // main slopes become trapezoids and the ends become sloped hips instead
-      // of vertical gables. Satteldach keeps a full-length ridge + gable walls.
-      const hipInset = style.roof === 'hip' ? Math.min(spanPerp / 2 + oh, (spanRidge + oh * 2) * 0.22) : 0
-      const ridgeLen = spanRidge + oh * 2 - 2 * hipInset
-      // main slopes (front/back)
-      roofGroup.push(<mesh key="s1" position={[0, rh / 2, -(spanPerp / 4 + oh / 2)]} rotation={[-ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-      roofGroup.push(<mesh key="s2" position={[0, rh / 2, (spanPerp / 4 + oh / 2)]} rotation={[ang, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, slope]} /></mesh>)
-      if (style.roof === 'hip') {
-        // Two hip end-slopes, tilted inward from each short end to the ridge.
-        const hang = Math.atan2(rh, hipInset || 0.001)
-        const hslope = Math.hypot(hipInset, rh)
-        for (const s of [-1, 1]) {
-          roofGroup.push(
-            <mesh key={`hip${s}`} position={[s * (spanRidge / 2 + oh - hipInset / 2), rh / 2, 0]} rotation={[0, 0, s * hang]} castShadow receiveShadow material={roofMat}>
-              <boxGeometry args={[hslope, 0.12, spanPerp + oh * 2]} />
-            </mesh>,
-          )
-        }
-      } else {
-        // Satteldach gable triangles close the two ends.
-        for (const s of [-1, 1]) {
-          const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
-          roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
-        }
+    } else if (style.roof === 'hip') {
+      /*
+       * Walmdach.
+       *
+       * Was here: two full-length slope slabs plus two "hip" slabs rotated by
+       * `+s · hang`. That sign lifts the *outer* end of each hip to ridge height
+       * and drops the inner end to the eaves — the hip upside down. The result
+       * was a spike above the ridge at both ends and an open gap where the hip
+       * belonged, on every Walmdach in the app. The inset was wrong too: a hip
+       * at the same pitch as the main slopes is inset by exactly half the short
+       * span, which makes the ridge `|w − d|` long, not 56 % of the length.
+       *
+       * A hip is not four boxes. Its main faces are trapezoids and its ends are
+       * triangles meeting along a sloped ridge line, so it is built as real
+       * geometry — the same `hipRoofGeometry` the neighbourhood already uses.
+       */
+      const w = spanRidge + oh * 2
+      const d = spanPerp + oh * 2
+      const rise = (Math.min(w, d) / 2) * rhints.pitch
+      const ridgeLen = Math.abs(w - d)
+      // The shell is built for the *overhung* footprint, so it meets its own
+      // base plane at the eave tip. That plane belongs below the wall head by
+      // the climb over the overhang — see `eavesDrop`.
+      const base = -eavesDrop(oh, rhints.pitch)
+      roofGroup.push(
+        <mesh key="hip" position={[0, base, 0]} castShadow receiveShadow material={roofMat}>
+          <primitive object={hipRoofGeometry(w, d, rise)} attach="geometry" />
+        </mesh>,
+      )
+      // Traufbrett: the shell is a single surface with no thickness, so without
+      // a fascia the roof edge reads as paper from below and at grazing angles.
+      for (const [k, x, z, bw, bd] of [
+        ['fa', 0, d / 2, w, 0.06], ['fb', 0, -d / 2, w, 0.06],
+        ['fl', w / 2, 0, 0.06, d], ['fr', -w / 2, 0, 0.06, d],
+      ] as const) {
+        roofGroup.push(<mesh key={k} position={[x, base - 0.07, z]} castShadow material={roofMat}><boxGeometry args={[bw, 0.14, bd]} /></mesh>)
       }
-      // ridge cap
-      roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[ridgeLen, 0.12, 0.2]} /></mesh>)
+      if (ridgeLen > 0.2) {
+        roofGroup.push(
+          <mesh key="ridge" position={[0, base + rise, 0]} rotation={[0, w >= d ? 0 : Math.PI / 2, 0]} material={roofMat}>
+            <boxGeometry args={[ridgeLen, 0.12, 0.2]} />
+          </mesh>,
+        )
+      }
+    } else {
+      // Satteldach. `rh` is the ridge height above the wall head, and the slope
+      // bears on the wall head rather than on the tip of its own overhang —
+      // otherwise the roof hovers `oh · pitch` (here ~27 cm) clear of the
+      // masonry the whole way round and the attic is open to the street.
+      const rh = (spanPerp / 2) * rhints.pitch
+      const sl = gableSlope(spanPerp / 2, rh, oh)
+      roofGroup.push(<mesh key="s1" position={[0, sl.cy, -sl.cx]} rotation={[-sl.angle, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, sl.rafter]} /></mesh>)
+      roofGroup.push(<mesh key="s2" position={[0, sl.cy, sl.cx]} rotation={[sl.angle, 0, 0]} castShadow receiveShadow material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, sl.rafter]} /></mesh>)
+      // Gable triangles close the two ends, matching the slope line exactly.
+      for (const s of [-1, 1]) {
+        const sh = new THREE.Shape(); sh.moveTo(-spanPerp / 2, 0); sh.lineTo(spanPerp / 2, 0); sh.lineTo(0, rh); sh.closePath()
+        roofGroup.push(<mesh key={`g${s}`} position={[s * spanRidge / 2, 0, 0]} rotation={[0, s === 1 ? Math.PI / 2 : -Math.PI / 2, 0]} material={gableMat}><shapeGeometry args={[sh]} /></mesh>)
+      }
+      roofGroup.push(<mesh key="ridge" position={[0, rh, 0]} material={roofMat}><boxGeometry args={[spanRidge + oh * 2, 0.12, 0.2]} /></mesh>)
     }
     nodes.push(
       <group key="roof" position={[bcx, eaves, bcz]} rotation={[0, ridgeAlongX ? 0 : Math.PI / 2, 0]}>{roofGroup}</group>,
@@ -6168,6 +6346,31 @@ function GhostFloors({ floors, activeId }: { floors: Floor[]; activeId: string }
  * the scene re-triangulated every room's floor and re-extruded every terrace —
  * some of the most expensive geometry in the scene — for outlines that only
  * change when the plan does.
+ *
+ * ## Why the rotation is negative
+ *
+ * A `Shape` is authored in the XY plane and has to be laid down flat, and the
+ * sign of that quarter turn decides two things at once. `+π/2` maps the shape's
+ * y onto world **+z** and its face normal onto world **−y**; `−π/2` maps y onto
+ * **−z** and the normal onto **+y**. The outlines are built with `-M(y)`, so
+ * only `−π/2` puts a room where its walls are *and* leaves it facing up.
+ *
+ * With `+π/2` it did neither: every slab was mirrored across `z = 0` — a room at
+ * plan y = 3 m rendered at world z = −3 m, out on the neighbours' lawn — and its
+ * shading normal pointed at the ground, so it was lit from below and came out
+ * black. The per-room floor picker has therefore never put a material anywhere
+ * anyone would look for it.
+ *
+ * ## Why the slab is double-sided
+ *
+ * `ShapeGeometry` normalises its triangle winding, so a flat outline always
+ * *culls* the same way whatever order the points arrive in — face down, under
+ * this rotation — while its `normal` attribute is always `+z`, which the same
+ * rotation turns face up. Winding and normal therefore disagree by construction
+ * and no choice of point order reconciles them. `DoubleSide` is the honest
+ * answer: the shading normal is right, and nothing is culled that shouldn't be.
+ * `ExtrudeGeometry` (the terrace) has no such problem — its caps come out
+ * consistently — so the deck stays single-sided.
  */
 function RoomFloors({ rooms }: { rooms: Room[] }) {
   const slabs = useMemo(() => {
@@ -6186,7 +6389,9 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
           shape,
           extrudeOptions,
           outdoor: r.zoneType === 'outdoor',
-          material: matFromCatalog(resolveFloorMaterial(r)),
+          // Lies flush over the plan-wide floor, so it needs the depth bias
+          // that resolves the tie in its favour — see `matFromCatalogInFront`.
+          material: matFromCatalogInFront(resolveFloorMaterial(r), { doubleSide: true }),
         }
       })
   }, [rooms])
@@ -6194,33 +6399,26 @@ function RoomFloors({ rooms }: { rooms: Room[] }) {
   return (
     <>
       {slabs.map((slab) => (slab.outdoor ? (
-        <group key={`room-${slab.id}`}>
-          {/* Deck slab + top board — both weathered decking, not the indoor
-              furniture woods this used to borrow. See `MAT.deckWeathered`. */}
-          <mesh
-            position={[0, 0.0, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            castShadow
-            material={MAT.deckWeathered() as THREE.Material}
-          >
-            <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
-          </mesh>
-          {/* Top surface board sitting flush on the deck for plank detail */}
-          <mesh
-            position={[0, M(6) + 0.001, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
-            receiveShadow
-            material={MAT.deckWeathered() as THREE.Material}
-          >
-            <shapeGeometry args={[slab.shape]} />
-          </mesh>
-        </group>
+        // Weathered decking, not the indoor furniture woods this used to
+        // borrow. See `MAT.deckWeathered`. One extrusion, not two meshes: the
+        // slab already caps at `M(6)`, and the separate "top board" that used to
+        // sit 1 mm over that cap was the same material at the same place —
+        // invisible while the rotation was wrong, and a z-fighting surface the
+        // moment it was not.
+        <mesh
+          key={`room-${slab.id}`}
+          rotation={[-Math.PI / 2, 0, 0]}
+          receiveShadow
+          castShadow
+          material={MAT.deckWeathered() as THREE.Material}
+        >
+          <extrudeGeometry args={[slab.shape, slab.extrudeOptions]} />
+        </mesh>
       ) : (
         <mesh
           key={`room-${slab.id}`}
           position={[0, 0.001, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
           material={slab.material}
         >
@@ -6706,20 +6904,26 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
       {!preview && embedded && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 max-w-[calc(100%-1rem)]">
           <div className="flex items-center gap-2 flex-wrap justify-center">
-            {/* View segmented control */}
-            <div className="flex items-center gap-0.5 p-0.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
-              <button
-                onClick={() => useUIStore.getState().setViewMode('2d')}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[color:var(--muted)] hover:text-[color:var(--fg)] transition-colors"
-              >2D Plan</button>
-              <button
-                onClick={() => setWalkMode(false)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!walkMode ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)]'}`}
-              >3D Ansicht</button>
-              <button
-                onClick={() => setWalkMode(true)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${walkMode ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)]'}`}
-              >Walkthrough</button>
+            {/*
+              Camera mode — and only camera mode.
+              This strip used to read "2D Plan | 3D Ansicht | Walkthrough",
+              which put two unrelated decisions in one control: the first button
+              left 3D altogether, the other two chose a camera inside it. It also
+              said "3D Ansicht" directly under a top bar already saying "3D
+              Ansicht", so the same words were lit in two places and one of them
+              did something else. Leaving the view is what the bar's Editor tab
+              is for; what belongs here is how you move through the scene.
+            */}
+            <div className="glass-hud relative rounded-xl p-0.5">
+              <SegmentedControl
+                size="sm"
+                value={walkMode ? 'walk' : 'orbit'}
+                onChange={(v) => setWalkMode(v === 'walk')}
+                options={[
+                  { value: 'orbit', label: 'Umsehen' },
+                  { value: 'walk', label: 'Rundgang' },
+                ]}
+              />
             </div>
             {/* Time-of-day pill */}
             <div

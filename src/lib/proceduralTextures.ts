@@ -18,6 +18,22 @@
 import * as THREE from 'three'
 import { activeProfile } from '@/lib/render/quality'
 import { effectiveTextureScale, sobelStrengthFor } from '@/lib/textures'
+import { bakedOutdoorSurface } from '@/lib/outdoorTextureLoader'
+import { GENERATOR_SETS } from '@/lib/outdoorTextures'
+
+/**
+ * Die gebackene Variante dieser Oberfläche, falls sie schon geladen ist.
+ *
+ * Der Austauschpunkt liegt bewusst hier: jede Oberfläche wird einmal gebaut,
+ * modulweit zwischengespeichert und pro Verwendung geklont. Wird ersetzt, *was*
+ * diese eine Oberfläche ist, verbessern sich alle Verbraucher gleichzeitig —
+ * das Haus des Plans, die erzeugte Nachbarschaft, die Katastergebäude — ohne
+ * dass eine einzige Aufrufstelle sich ändert. Solange nichts geladen ist,
+ * bleibt die Leinwand-Oberfläche stehen.
+ */
+function baked(generator: keyof typeof GENERATOR_SETS): Surface | null {
+  return bakedOutdoorSurface(GENERATOR_SETS[generator])
+}
 
 export function mkTex(cv: HTMLCanvasElement, srgb: boolean, rep: [number, number] = [1, 1]): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(cv)
@@ -151,12 +167,19 @@ export function texRnd(seed: number) { let a = seed >>> 0; return () => { a = (a
  */
 
 /** Farbe, Relief und Glanz einer Oberfläche — vollständiges PBR-Material. */
+/**
+ * Eine Oberfläche — vier Karten.
+ *
+ * `THREE.Texture` statt `CanvasTexture`, seit dieselben Oberflächen auch aus
+ * den in Blender gebackenen Bildern kommen können (siehe `outdoorTextures`).
+ * `CanvasTexture` erbt von `Texture`, die Leinwand-Pfade bleiben unverändert.
+ */
 export interface Surface {
-  map: THREE.CanvasTexture
+  map: THREE.Texture
   /** Die rohe Höhenkarte. Bleibt erhalten, damit alte Aufrufer nicht brechen. */
-  bump: THREE.CanvasTexture
-  normal: THREE.CanvasTexture
-  roughness: THREE.CanvasTexture
+  bump: THREE.Texture
+  normal: THREE.Texture
+  roughness: THREE.Texture
 }
 
 /** Graustufen-Helligkeit an einer Stelle, mit Wiederholung an den Rändern. */
@@ -299,6 +322,8 @@ function surfaceOf(
 let _brickTex: Surface | null = null
 export function brickTextures(): Surface {
   if (_brickTex) return _brickTex
+  const ready = baked('brickTextures')
+  if (ready) { _brickTex = ready; return ready }
   const W = 512, H = 512, rows = 13, bh = H / rows, mortar = 3
   const rnd = texRnd(7)
   const cv = mkSurfaceCanvas(W, H)
@@ -375,6 +400,8 @@ export function boardTextures(): Surface {
 let _roofTex: Surface | null = null
 export function roofTextures(): Surface {
   if (_roofTex) return _roofTex
+  const ready = baked('roofTextures')
+  if (ready) { _roofTex = ready; return ready }
   const W = 512, H = 512, rows = 16, rh = H / rows
   const rnd = texRnd(23)
   const cv = mkSurfaceCanvas(W, H)
@@ -450,6 +477,8 @@ let _asphaltTex: Surface | null = null
  */
 export function asphaltSurface(): Surface {
   if (_asphaltTex) return _asphaltTex
+  const ready = baked('asphaltSurface')
+  if (ready) { _asphaltTex = ready; return ready }
   const W = 256, H = 256, rnd = texRnd(41)
   const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
@@ -483,13 +512,15 @@ export function asphaltSurface(): Surface {
 }
 
 /** Rückwärtskompatibel: nur die Farbkarte. */
-export function asphaltTexture(): THREE.CanvasTexture {
+export function asphaltTexture(): THREE.Texture {
   return asphaltSurface().map
 }
 
 let _paverTex: Surface | null = null
 export function paverTextures(): Surface {
   if (_paverTex) return _paverTex
+  const ready = baked('paverTextures')
+  if (ready) { _paverTex = ready; return ready }
   const W = 256, H = 256, n = 4, cell = W / n, rnd = texRnd(59)
   const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!
@@ -511,9 +542,11 @@ export function paverTextures(): Surface {
   return _paverTex
 }
 
-let _grassTex: THREE.CanvasTexture | null = null
-export function grassTexture(): THREE.CanvasTexture {
+let _grassTex: THREE.Texture | null = null
+export function grassTexture(): THREE.Texture {
   if (_grassTex) return _grassTex
+  const ready = baked('grassTexture')
+  if (ready) { _grassTex = ready.map; return ready.map }
   const W = 256, H = 256, rnd = texRnd(83)
   const cv = mkSurfaceCanvas(W, H)
   const cx = cv.getContext('2d')!

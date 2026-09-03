@@ -7,8 +7,8 @@
  */
 
 import type {
-  OnvifCameraConfig, OnvifCameraInfo, OnvifPtzCommand, OnvifPtzStatus, OnvifPtzSupport,
-  OnvifPreset, OnvifStreamInfo, OnvifStreamTicket, OnvifTransport,
+  OnvifBridgeHealth, OnvifCameraConfig, OnvifCameraInfo, OnvifPtzCommand, OnvifPtzStatus,
+  OnvifPtzSupport, OnvifPreset, OnvifStreamInfo, OnvifStreamTicket, OnvifTransport,
 } from './transport'
 
 export interface SimulatedOnvifOptions {
@@ -87,6 +87,19 @@ export class SimulatedOnvifTransport implements OnvifTransport {
   async disconnect(id: string): Promise<void> {
     const camera = this.cameras.get(id)
     if (camera) camera.connected = false
+  }
+
+  /** The simulator stands in for a current bridge, so it reports every route. */
+  async health(): Promise<OnvifBridgeHealth> {
+    return {
+      ok: true,
+      version: 2,
+      cameras: this.cameras.size,
+      ffmpeg: true,
+      webrtc: this.opts.streamMode === 'webrtc',
+      auth: false,
+      features: { stream: true, snapshot: true, mjpeg: true, ptz: true, ticket: true },
+    }
   }
 
   async list(): Promise<OnvifCameraInfo[]> {

@@ -52,7 +52,7 @@ export function DeviceLibrary() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b border-[color:var(--border)] p-3">
+      <div className="space-y-2 border-b border-[color:var(--hairline-soft)] p-3">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--muted)]" />
           <input
@@ -64,7 +64,8 @@ export function DeviceLibrary() {
         </div>
         <div className="flex gap-2">
           <select
-            className="input !py-1 text-xs"
+            className="select"
+            aria-label="Nach Ökosystem filtern"
             value={ecosystem}
             onChange={(e) => setEcosystem(e.target.value as Ecosystem | 'all')}
           >
@@ -74,7 +75,8 @@ export function DeviceLibrary() {
             ))}
           </select>
           <select
-            className="input !py-1 text-xs"
+            className="select"
+            aria-label="Nach Kategorie filtern"
             value={category}
             onChange={(e) => setCategory(e.target.value as DeviceCategory | 'all')}
           >

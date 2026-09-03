@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTier } from '@/hooks/useTier'
+import { Chrome } from '@/components/layout/Chrome'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
@@ -28,6 +29,7 @@ import type { PlanRow } from '@/types'
 import { X } from 'lucide-react'
 import { createDemoPlan } from '@/data/demoPlan'
 import { coercePlan } from '@/lib/planSchema'
+import { shouldAutoSave } from '@/lib/autoSave'
 
 // Heavy & seldom-needed → split out into their own chunks.
 const ExportDialog = lazy(() =>
@@ -130,16 +132,37 @@ export function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, planRowId, id])
 
-  // Auto-save: when authenticated and planRowId is set, debounce-save the doc
-  // 1.5s after the last change. Skips local-only / new sessions.
+  /*
+   * Auto-save: debounce-save the doc 1.5 s after the last *edit*.
+   *
+   * The dependency list is deliberately narrow. `doc` itself must not appear
+   * here: `saveToCloud` replaces the document object when it stamps the new
+   * `docVersion`, so depending on its identity made every save re-arm the timer
+   * that had just fired — a cloud write every 1.5 seconds, indefinitely, on a
+   * plan nobody was editing. `updatedAt` is the value that tracks edits, and
+   * `shouldAutoSave` re-checks it at fire time so a save can never chain into
+   * the next one.
+   */
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSavedUpdatedAt = useRef<string | null>(null)
   const pushToast = useUIStore((s) => s.pushToast)
-  const reloadFromCloud = usePlanStore((s) => s.reloadFromCloud)
+  const docUpdatedAt = doc?.updatedAt
   useEffect(() => {
-    if (!doc || !planRowId || !supabaseReady || !user) return
+    if (!shouldAutoSave({
+      updatedAt: docUpdatedAt,
+      lastSavedUpdatedAt: lastSavedUpdatedAt.current,
+      planRowId,
+      cloudReady: supabaseReady,
+      signedIn: !!user,
+    })) return
+
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(async () => {
-      const result = await saveToCloud(planRowId)
+      // Claim this revision before the write: a failed save leaves it claimed,
+      // and the next real edit (a new `updatedAt`) retries. Without the claim a
+      // save that races its own result can re-enter here.
+      lastSavedUpdatedAt.current = docUpdatedAt ?? null
+      const result = await saveToCloud(planRowId!)
       if (result && typeof result === 'object' && 'conflict' in result) {
         pushToast({
           kind: 'warning',
@@ -152,7 +175,7 @@ export function EditorPage() {
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     }
-  }, [doc?.updatedAt, planRowId, user, saveToCloud, doc, pushToast, reloadFromCloud])
+  }, [docUpdatedAt, planRowId, user, saveToCloud, pushToast])
 
   if (loading) {
     return (
@@ -188,24 +211,28 @@ export function EditorPage() {
       <ShortcutsHelp />
       <CinematicLayer />
       
-      <Topbar
-        showBack
-        planRowId={planRowId}
-        onOpenExport={() => setExportOpen(true)}
-        onOpenShare={() => setShareOpen(true)}
-        onOpenDevices={() => setDevicesOpen(true)}
-        onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
-        onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
-      />
-
-      {/* Toolbar — responsive, not overlapping */}
-      <div className="shrink-0 z-20 flex items-center gap-2 px-3 py-2 bg-[color:var(--glass-bg)] backdrop-blur-[18px] border-b border-[color:var(--border)] overflow-x-auto no-select">
-        <EditorToolbar />
-        <div className="mx-2 w-px h-6 bg-[color:var(--border)]" />
-        <FloorTabs />
-        {/* View tabs live in the Topbar (reference layout); the toolbar row
-            keeps tools + floors only. */}
-      </div>
+      {/*
+        One pane of glass, two strips: the document identity row, and the tool
+        rail under it. The material lives on <Chrome/>; the strips inside carry
+        nothing but the hairline between them.
+      */}
+      <Chrome>
+        <Topbar
+          showBack
+          planRowId={planRowId}
+          onOpenExport={() => setExportOpen(true)}
+          onOpenShare={() => setShareOpen(true)}
+          onOpenDevices={() => setDevicesOpen(true)}
+          onOpenConnectors={() => { if (can('live-connectors')) setConnectorsOpen(true); else navigate('/#preise') }}
+          onOpenVacuum={() => { if (can('robot-map')) setVacuumOpen(true); else navigate('/#preise') }}
+        />
+        <div className="chrome-row overflow-x-auto omega-scroll">
+          <EditorToolbar />
+          <div className="ml-auto flex items-center gap-2 pl-3">
+            <FloorTabs />
+          </div>
+        </div>
+      </Chrome>
 
       <div className="relative flex flex-1 overflow-hidden min-h-0">
         {/* LEFT RAIL — library (collapsible, desktop lg+) */}
@@ -275,24 +302,34 @@ export function EditorPage() {
 
       <MobileNav />
 
-      {/* Mobile bottom sheet */}
+      {/* Mobile bottom sheet — a grabber, a title, and the panel. The grabber is
+          not decoration: it is the only thing on a phone that says the surface
+          belongs to the bottom edge and can be dismissed downward. */}
       {mobilePanel && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/60 animate-fade-in"
+          className="lg:hidden fixed inset-0 z-40 scrim animate-fade-in"
           onClick={() => openMobilePanel(null)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 max-h-[80vh] surface rounded-t-2xl overflow-hidden animate-slide-up safe-bottom"
+            role="dialog"
+            aria-modal="true"
+            aria-label={panelLabel(mobilePanel)}
+            className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-hidden rounded-t-[var(--radius-3xl)] border-t border-[color:var(--hairline)] bg-[color:var(--bg-elevated)] shadow-[0_-8px_40px_-8px_rgba(0,0,0,0.55)] animate-slide-up safe-bottom"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 70px)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-3 border-b border-[color:var(--border)]">
-              <div className="font-display text-base font-semibold capitalize">{panelLabel(mobilePanel)}</div>
-              <button onClick={() => openMobilePanel(null)} className="btn btn-ghost btn-icon touch-target">
+            <div className="sheet-grabber" aria-hidden />
+            <div className="flex items-center justify-between px-4 pb-2.5 pt-1">
+              <div className="font-display text-[0.95rem] font-semibold tracking-tight">{panelLabel(mobilePanel)}</div>
+              <button
+                onClick={() => openMobilePanel(null)}
+                aria-label="Schließen"
+                className="btn btn-ghost btn-icon touch-target"
+              >
                 <X size={20} />
               </button>
             </div>
-            <div className="max-h-[65vh] overflow-y-auto omega-scroll">
+            <div className="max-h-[65vh] overflow-y-auto omega-scroll border-t border-[color:var(--hairline-soft)]">
               {mobilePanel === 'library' && (
                 <div className="h-[60vh]"><LibraryPanel /></div>
               )}

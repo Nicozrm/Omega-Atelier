@@ -26,6 +26,9 @@ export type { SegmentedControlProps, SegmentOption } from './SegmentedControl'
 export { InspectorSection, InspectorRow } from './InspectorSection'
 export type { InspectorSectionProps } from './InspectorSection'
 
+export { SearchField } from './SearchField'
+export type { SearchFieldProps } from './SearchField'
+
 export { Tooltip } from './Tooltip'
 export type { TooltipProps } from './Tooltip'
 

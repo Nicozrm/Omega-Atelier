@@ -1,0 +1,103 @@
+{
+  "generated": "2026-09-03T16:50:20.941Z",
+  "models": [
+    {
+      "file": "plant",
+      "ids": [
+        "plant",
+        "plant-tall",
+        "plant-large"
+      ],
+      "referenceId": "plant",
+      "footprintCm": [
+        50,
+        50
+      ],
+      "sizeM": [
+        0.5,
+        0.7238,
+        0.4544
+      ]
+    },
+    {
+      "file": "armchair",
+      "ids": [
+        "armchair"
+      ],
+      "referenceId": "armchair",
+      "footprintCm": [
+        85,
+        90
+      ],
+      "sizeM": [
+        0.7484,
+        0.9331,
+        0.9
+      ]
+    },
+    {
+      "file": "table-coffee",
+      "ids": [
+        "table-coffee"
+      ],
+      "referenceId": "table-coffee",
+      "footprintCm": [
+        110,
+        60
+      ],
+      "sizeM": [
+        1.1,
+        0.3569,
+        0.5492
+      ]
+    },
+    {
+      "file": "chair-dining",
+      "ids": [
+        "chair-dining"
+      ],
+      "referenceId": "chair-dining",
+      "footprintCm": [
+        45,
+        50
+      ],
+      "sizeM": [
+        0.3761,
+        0.8443,
+        0.5
+      ]
+    },
+    {
+      "file": "nightstand",
+      "ids": [
+        "nightstand"
+      ],
+      "referenceId": "nightstand",
+      "footprintCm": [
+        45,
+        40
+      ],
+      "sizeM": [
+        0.45,
+        0.4505,
+        0.3682
+      ]
+    },
+    {
+      "file": "vase-floor",
+      "ids": [
+        "vase-floor"
+      ],
+      "referenceId": "vase-floor",
+      "footprintCm": [
+        30,
+        30
+      ],
+      "sizeM": [
+        0.3,
+        0.5664,
+        0.3
+      ]
+    }
+  ]
+}
