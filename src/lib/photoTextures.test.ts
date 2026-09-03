@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import {
   PHOTO_SETS, PHOTO_UPGRADES, hasMap, photoTextureUrl, requiredSets, shouldUpgrade,
   type MapKind, type PhotoSetKey,
+  GENERATED_MATERIAL_UPGRADES, requiredGeneratedSets,
 } from './photoTextures'
 
 /**
@@ -124,5 +125,47 @@ describe('photoTextureUrl', () => {
   it('builds a base-aware path', () => {
     const url = photoTextureUrl(PHOTO_SETS.parquet, 'diff')
     expect(url).toContain('textures/floor/parquet_diff.jpg')
+  })
+})
+
+describe('GENERATED_MATERIAL_UPGRADES — textures for the Blender-built furniture', () => {
+  it('names only sets that actually ship', () => {
+    for (const [role, upgrade] of Object.entries(GENERATED_MATERIAL_UPGRADES)) {
+      expect(PHOTO_SETS[upgrade.set], `${role} points at a set that does not exist`).toBeDefined()
+    }
+  })
+
+  it('keeps every tile a plausible physical size', () => {
+    for (const [role, upgrade] of Object.entries(GENERATED_MATERIAL_UPGRADES)) {
+      // Under 10 cm would alias into noise on a wardrobe door; over 3 m would
+      // show barely one repeat across the whole piece.
+      expect(upgrade.metresPerTile, `${role}`).toBeGreaterThan(0.1)
+      expect(upgrade.metresPerTile, `${role}`).toBeLessThan(3)
+    }
+  })
+
+  it('leaves grainless roles alone rather than inventing texture for them', () => {
+    // These are the palette's painted, plated and glazed finishes. Giving a
+    // soft-touch black console a wood grain would be worse than flat colour.
+    for (const role of ['steel', 'soft_black', 'warm_white', 'ceramic', 'glass_dark']) {
+      expect(GENERATED_MATERIAL_UPGRADES[role]).toBeUndefined()
+    }
+  })
+
+  it('shares one weave across the upholstery colourways', () => {
+    // The materials keep their own base colour and gain only the weave, so
+    // three colourways must not cost three decodes.
+    const sets = requiredGeneratedSets(['fabric_beige', 'fabric_gray', 'fabric_blue'])
+    expect(sets).toEqual(['linen'])
+  })
+
+  it('deduplicates the sets a whole model list needs', () => {
+    const sets = requiredGeneratedSets(['oak', 'oak', 'walnut', 'steel', 'fabric_beige'])
+    expect(sets).toEqual(['linen', 'oak', 'walnut'])
+  })
+
+  it('asks for nothing when no role has a set', () => {
+    expect(requiredGeneratedSets(['steel', 'soft_black'])).toEqual([])
+    expect(requiredGeneratedSets([])).toEqual([])
   })
 })

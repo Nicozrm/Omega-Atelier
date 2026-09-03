@@ -34,6 +34,7 @@ import { useGLTF, Clone } from '@react-three/drei'
 import { fitScale, modelUrl, type ModelDef } from '@/assets/modelRegistry'
 import { MODEL_SIZES } from '@/assets/modelSizes'
 import { anchorOffsetY } from '@/assets/modelFit'
+import { upgradeGeneratedModel } from '@/lib/photoTextureLoader'
 import { requestShadowRefresh } from './ShadowController'
 
 /** Self-hosted Draco decoder directory. Trailing slash required by DRACOLoader. */
@@ -56,6 +57,11 @@ export default function GltfModelImpl({ def, target }: {
   // world change triggered. Without this the piece would be missing from an
   // otherwise correct map until something else in the scene moved.
   useEffect(() => { requestShadowRefresh(0.4) }, [gltf.scene])
+  // Generated assets carry solid colours and no UVs; this binds the scanned PBR
+  // maps the scene already loads to their named material roles. Runs on the
+  // cached glTF scene, so it happens once per model rather than per instance,
+  // and does nothing at all for the photoscans, which arrive already textured.
+  useEffect(() => { void upgradeGeneratedModel(gltf.scene) }, [gltf.scene])
   const [ox, oy, oz] = def.offset ?? [0, 0, 0]
   return (
     <group scale={fit}>

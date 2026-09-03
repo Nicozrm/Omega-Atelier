@@ -156,3 +156,56 @@ export function requiredSets(materialKeys: readonly string[]): PhotoSetKey[] {
 export function shouldUpgrade(profile: { detailMaps: boolean }): boolean {
   return profile.detailMaps
 }
+
+/**
+ * Photographic maps for the *generated* furniture.
+ *
+ * `tools/blender` authors those assets with a solid Principled BSDF per role
+ * and no UVs at all — deliberately, because a 15 KB wardrobe that carries no
+ * maps is the whole reason they are cheap enough to ship. The cost is that they
+ * read as flat colour next to a photoscan, however good the silhouette is.
+ *
+ * They do not need their own textures to fix that. Every one of them names its
+ * materials after a role from the shared palette (`oak`, `fabric_beige`,
+ * `linen`, …), and this repo already ships and loads scanned PBR sets for those
+ * exact roles. So the role name is the join: bind the same decoded texture that
+ * the procedural room surfaces use, generate coordinates by box projection, and
+ * the asset gains real grain for no extra download at all — the maps are shared
+ * with the rest of the scene and decoded once.
+ *
+ * Keys are the material names inside the GLB. A role that is absent stays flat,
+ * and that is a decision rather than a gap: painted steel, soft-touch black and
+ * warm white have no grain to show, and giving them wood would be worse than
+ * leaving them alone.
+ */
+export interface GeneratedUpgrade {
+  set: PhotoSetKey
+  /** World size of one texture repeat, metres. Keeps grain physically sized. */
+  metresPerTile: number
+  normalScale?: number
+}
+
+export const GENERATED_MATERIAL_UPGRADES: Record<string, GeneratedUpgrade> = {
+  // Wood — the roles that carry most of the visible surface area.
+  oak: { set: 'oak', metresPerTile: 1.1, normalScale: 0.5 },
+  walnut: { set: 'walnut', metresPerTile: 1.1, normalScale: 0.5 },
+  // Upholstery. One linen scan serves all three colourways: the material keeps
+  // its own base colour and only gains the weave.
+  fabric_beige: { set: 'linen', metresPerTile: 0.5, normalScale: 0.6 },
+  fabric_gray: { set: 'linen', metresPerTile: 0.5, normalScale: 0.6 },
+  fabric_blue: { set: 'linen', metresPerTile: 0.5, normalScale: 0.6 },
+  linen: { set: 'linen', metresPerTile: 0.6, normalScale: 0.55 },
+  leather_black: { set: 'leather', metresPerTile: 0.7, normalScale: 0.7 },
+  // Stone.
+  slate: { set: 'slate', metresPerTile: 0.9, normalScale: 0.7 },
+}
+
+/** The distinct sets the generated assets need. */
+export function requiredGeneratedSets(materialNames: readonly string[]): PhotoSetKey[] {
+  const wanted = new Set<PhotoSetKey>()
+  for (const name of materialNames) {
+    const upgrade = GENERATED_MATERIAL_UPGRADES[name]
+    if (upgrade) wanted.add(upgrade.set)
+  }
+  return [...wanted].sort()
+}
