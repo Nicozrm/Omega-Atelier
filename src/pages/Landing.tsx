@@ -330,9 +330,22 @@ export function LandingPage() {
               Plane deine Wohnung, sieh sie fotoreal in 3D, hör sie, beleuchte sie mit echter
               Sonne — und verbinde am Ende deine realen Geräte. Alles in einem Werkzeug.
             </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link to={user ? '/start' : '/login'} className="btn btn-primary">Kostenlos starten <ArrowRight size={15} /></Link>
-              <a href="#preise" className="btn btn-outline">Pläne ansehen</a>
+
+            <p className="mx-auto mt-3 max-w-md text-sm text-[color:var(--muted)]">
+              Ich arbeite eng mit einem kleinen, erfahrenen Kreativ‑ und Entwicklerteam zusammen — Projekte werden gemeinsam umgesetzt.
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <div className="flex -space-x-2">
+                <div className="h-10 w-10 rounded-full bg-[color:var(--surface-3)] flex items-center justify-center text-sm font-semibold">N</div>
+                <div className="h-10 w-10 rounded-full bg-[color:var(--surface-3)] flex items-center justify-center text-sm font-semibold">T</div>
+              </div>
+              <div className="text-sm text-[color:var(--muted)]">Nico &amp; kleines Team — Design &amp; Entwicklung</div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link to={user ? '/start' : '/login'} className="btn btn-primary">Projekt besprechen <ArrowRight size={15} /></Link>
+              <Link to={user ? '/start' : '/login'} className="btn btn-outline">Kostenlos starten</Link>
             </div>
           </section>
         </Reveal>
