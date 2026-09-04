@@ -256,9 +256,11 @@ body {
 .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
 .font-mono    { font-family: var(--font-mono); }
 
-h1, .h1 { font-family: var(--font-display); font-size: 1.88rem; line-height: 1.14; letter-spacing: -0.028em; font-weight: 600; }
-h2, .h2 { font-family: var(--font-display); font-size: 1.4rem;  line-height: 1.22; letter-spacing: -0.024em; font-weight: 600; }
-h3, .h3 { font-family: var(--font-display); font-size: 1.1rem;  line-height: 1.25; letter-spacing: -0.02em;  font-weight: 600; }
+h1, .h1 { font-family: var(--font-display); font-size: 2.25rem; line-height: 1.08; letter-spacing: -0.03em; font-weight: 650; }
+/* Slightly larger, more confident section headings */
+h2, .h2 { font-family: var(--font-display); font-size: 1.6rem;  line-height: 1.18; letter-spacing: -0.02em; font-weight: 600; }
+/* Tighten display for compact hero spacing */
+h3, .h3 { font-family: var(--font-display); font-size: 1.15rem;  line-height: 1.25; letter-spacing: -0.01em;  font-weight: 600; }
 
 .label-xs {
   font-size: 0.66rem;
