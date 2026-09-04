@@ -16,6 +16,8 @@ import * as THREE from 'three'
 import type { Floor, Point } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { RESIDENT_DOORS, clearResidentDoors } from './residentsBus'
+import { loadPeopleGltf, getPeopleGltf } from './peopleLoader'
+import { instantiatePersonFromGltf } from './PeopleModel'
 
 const M = (cm: number) => cm / 100
 const CAT = new Map(DEVICES.map((d) => [d.id, d.category] as const))
@@ -195,10 +197,28 @@ function buildResidents(floor: Floor, count: number): Built | null {
   }
   const shadowTex = shadowTexture()
   const residents: ResidentRT[] = []
+  const peopleGltf = getPeopleGltf()
+
   for (let i = 0; i < n; i++) {
     const mat = track(new THREE.MeshStandardMaterial({ color: tints[i % tints.length], roughness: 0.52, metalness: 0.0, envMapIntensity: 0.7 }))
     const rig = makePerson(mat, personGeo)
     root.add(rig.group)
+
+    // If a people GLB is loaded, clone and attach it as a visual overlay so
+    // the procedural rig still drives the gait while the GLB provides quality.
+    if (peopleGltf) {
+      try {
+        const gl = instantiatePersonFromGltf(peopleGltf)
+        // scale down a bit to match the procedural unit; authors differ
+        gl.scale.setScalar(0.9)
+        gl.position.set(0, 0, 0)
+        rig.group.add(gl)
+      } catch (e) {
+        // ignore cloning errors — fall back to procedural only
+        console.warn('Failed to attach people GLB', e)
+      }
+    }
+
     // Soft contact shadow that follows the figure.
     const shMat = track(new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.85, depthWrite: false }))
     const shadow = new THREE.Mesh(track(new THREE.PlaneGeometry(0.72, 0.72)), shMat)

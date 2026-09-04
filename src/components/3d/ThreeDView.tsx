@@ -43,6 +43,7 @@ import { seasonFromDate } from '@/lib/season'
 import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
+import { loadPeopleGltf } from './peopleLoader'
 import { SegmentedControl } from '@/ui'
 import { QualityMenu } from './QualityMenu'
 import { cameraFocus } from './cameraFocusBus'
@@ -6842,6 +6843,10 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // returns false rather than breaking if three's shader ever changes shape.
   // Profile-gated: PCSS costs roughly twice the shadow taps of plain PCF.
   const profile = activeProfile()
+
+  // Kick off optional people GLB preload so high-quality mode can attach models
+  // without waiting for user interaction.
+  useEffect(() => { void loadPeopleGltf() }, [])
   useMemo(() => (profile.softShadows ? enablePcssShadows() : false), [profile.softShadows])
   // Normal-variance roughness filtering, installed the same way and for the same
   // reason (global chunk, must precede the first compile). Deliberately *not*
