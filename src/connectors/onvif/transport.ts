@@ -278,6 +278,7 @@ export class HttpOnvifTransport implements OnvifTransport {
     // Not `request()`: this answer is bytes, and the bearer token has to ride
     // along, which is exactly why an <img src> cannot fetch it directly.
     const response = await fetch(`${this.base}/cameras/${encodeURIComponent(id)}/snapshot`, {
+      method: 'POST',
       headers: this.headers(),
     })
     if (!response.ok) {
