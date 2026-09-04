@@ -85,3 +85,14 @@ catalog by `src/assets/modelRegistry.test.ts`.
 | `floor/laminate_{diff,nor,rough}.jpg` | Poly Haven laminate_floor_02 (1k) | CC0 |
 | `floor/slate_{diff,nor,rough}.jpg` | Poly Haven slate_driveway (1k) | CC0 |
 | `wall/concrete_{diff,nor,rough}.jpg` | Poly Haven concrete_wall_004 (1k) | CC0 |
+
+## People model (optional)
+
+Drop a CC0 people GLB named `people.glb` into this folder to enable higher-quality resident visuals. The app preloads `public/models/people.glb` (ThreeDView) and, if present, attaches a cloned model to each procedural resident rig as a visual overlay (procedural gait/logic is preserved).
+
+To add an asset automatically, use the provided script:
+
+  PEOPLE_GLTF_URL="https://example.com/people.glb" npm run fetch-people
+
+Ensure the model is licensed for redistribution (CC0 or equivalent) before committing.
+

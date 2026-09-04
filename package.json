@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "fetch-people": "sh ./scripts/fetch-people.sh"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",
