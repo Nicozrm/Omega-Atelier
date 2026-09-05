@@ -38,15 +38,54 @@
  * costs nothing at all — no `useFrame`, no per-frame allocation.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Sky } from 'three/examples/jsm/objects/Sky.js'
 import type { EnvironmentState } from '@/lib/environment'
 import { skyParamsFor, skyFingerprint } from '@/lib/render/skyModel'
+import {
+  HDRI_SKIES, selectHdriSky, hdriRotationY, hdriExposure, hdriUrl,
+} from '@/lib/render/hdriSky'
+import { activeProfile } from '@/lib/render/quality'
+import { RGBELoader } from 'three-stdlib'
 
 /** Minimum wall-clock gap between two PMREM builds, ms. */
 const REBUILD_INTERVAL_MS = 120
+
+/**
+ * Decoded captured skies, cached process-wide.
+ *
+ * An equirectangular HDR is a few hundred kilobytes and decodes to a float
+ * texture; decoding one twice would cost the memory twice for identical pixels.
+ * Keyed by sky, so scrubbing back and forth across the day only ever pays for
+ * each map once.
+ */
+const hdriCache = new Map<string, Promise<THREE.DataTexture | null>>()
+
+function loadHdri(key: keyof typeof HDRI_SKIES): Promise<THREE.DataTexture | null> {
+  const cached = hdriCache.get(key)
+  if (cached) return cached
+  const pending = new Promise<THREE.DataTexture | null>((resolve) => {
+    new RGBELoader().load(
+      hdriUrl(HDRI_SKIES[key]),
+      (texture) => {
+        // Equirectangular, and sampled by a sphere's own UVs — so it needs to
+        // wrap horizontally and clamp at the poles like any panorama.
+        texture.mapping = THREE.EquirectangularReflectionMapping
+        texture.wrapS = THREE.RepeatWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+        resolve(texture)
+      },
+      undefined,
+      // A missing or corrupt map must not take the lighting down with it: the
+      // analytic sky stays, which is exactly what it is there for.
+      () => resolve(null),
+    )
+  })
+  hdriCache.set(key, pending)
+  return pending
+}
 
 /**
  * Interior bounce palettes per user-facing preset. These describe the *room*
@@ -71,6 +110,8 @@ const INTERIOR_PRESETS: Record<EnvPreset, {
 interface EnvSource {
   scene: THREE.Scene
   sky: Sky
+  /** Captured sky dome. Hidden until an HDRI has loaded; replaces `sky` then. */
+  dome: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>
   ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>
   panels: Array<{
     mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>
@@ -92,6 +133,21 @@ function createEnvSource(preset: EnvPreset): EnvSource {
   const sky = new Sky()
   sky.scale.setScalar(90)
   scene.add(sky)
+
+  // The captured sky, when one is available. It sits just inside the analytic
+  // dome and hides it, rather than replacing it: an HDRI arrives over the
+  // network, and the scene must be lit correctly before and during that.
+  //
+  // Rendered from the inside (BackSide) with tone mapping off, because this is
+  // radiance being convolved into an environment map — tone mapping it here
+  // would compress the sun's highlights out before they ever light anything.
+  const domeGeo = new THREE.SphereGeometry(80, 48, 24)
+  const domeMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false })
+  const dome = new THREE.Mesh(domeGeo, domeMat)
+  dome.visible = false
+  scene.add(dome)
+  geometries.push(domeGeo)
+  materials.push(domeMat)
 
   // ── An open-topped room, which is what the dollhouse actually is.
   //
@@ -151,6 +207,7 @@ function createEnvSource(preset: EnvPreset): EnvSource {
   return {
     scene,
     sky,
+    dome,
     ground,
     panels,
     dispose: () => {
@@ -199,6 +256,31 @@ export function SkyEnvironment({ env, preset }: {
     scene.environmentIntensity = skyParamsFor(env).environmentIntensity
   }, [scene, env])
 
+  // Which captured skies have finished decoding. A ref rather than state: the
+  // arrival of a texture must trigger exactly one rebuild, not a re-render of
+  // the whole subtree.
+  const hdriReady = useRef(new Map<string, THREE.DataTexture>())
+  const [hdriEpoch, setHdriEpoch] = useState(0)
+
+  const capturedKey = selectHdriSky(env)
+  useEffect(() => {
+    // Captured skies are an upgrade, not a requirement — a device that cannot
+    // afford the extra texture memory keeps the analytic sky, which is the same
+    // flag that already decides whether detail maps are affordable.
+    if (!activeProfile().detailMaps) return
+    if (hdriReady.current.has(capturedKey)) return
+    let cancelled = false
+    void loadHdri(capturedKey).then((texture) => {
+      if (cancelled || !texture) return
+      hdriReady.current.set(capturedKey, texture)
+      // Force the next effect run to rebuild rather than skip on a matching
+      // fingerprint: the world did not change, but what lights it did.
+      lastFingerprint.current = null
+      setHdriEpoch((n) => n + 1)
+    })
+    return () => { cancelled = true }
+  }, [capturedKey])
+
   const fingerprint = skyFingerprint(env)
 
   useEffect(() => {
@@ -222,6 +304,30 @@ export function SkyEnvironment({ env, preset }: {
       u.sunPosition.value.set(env.sun.direction.x, env.sun.direction.y, env.sun.direction.z)
 
       source.sky.material.uniformsNeedUpdate = true
+
+      // ── Captured sky, when one has arrived.
+      //
+      // The analytic sky underneath stays configured and simply gets hidden, so
+      // the first frames (and any device that never loads an HDRI) are lit
+      // correctly rather than being lit by nothing.
+      const capturedKey = selectHdriSky(env)
+      const captured = hdriReady.current.get(capturedKey) ?? null
+      source.dome.visible = captured !== null
+      if (captured) {
+        const sky = HDRI_SKIES[capturedKey]
+        source.dome.material.map = captured
+        // Turn the dome so the photographed sun lands on the solar bearing the
+        // shadow-casting light already uses. Without this, highlights arrive
+        // from one side while shadows fall to the other.
+        source.dome.rotation.y = hdriRotationY(sky, env)
+        // Normalise the four maps to one exposure. They were photographed at
+        // wildly different light levels, and the scene's exposure was calibrated
+        // against the analytic sky these replace; the deliberate day/night
+        // falloff stays with `environmentIntensity`, which models it on purpose.
+        const level = hdriExposure(sky)
+        source.dome.material.color.setScalar(level)
+        source.dome.material.needsUpdate = true
+      }
 
       // Ground bounce: the sky's horizon colour, dimmed by how much light is
       // actually reaching the ground.
@@ -257,7 +363,7 @@ export function SkyEnvironment({ env, preset }: {
         pending.current = null
       }
     }
-  }, [fingerprint, env, preset, source, pmrem, scene])
+  }, [fingerprint, hdriEpoch, env, preset, source, pmrem, scene])
 
   return null
 }
