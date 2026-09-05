@@ -34,6 +34,7 @@ Digital-Twin, der reale Ökosysteme (Home Assistant, MQTT, Matter …) anbindet.
 | `/plan/:id` | `pages/Editor` | `AuthGate` |
 | `/dashboard` | `pages/Dashboard` | `AuthGate` |
 | `/settings` | `pages/Settings` | `AuthGate` |
+| `/checkout`, `/checkout/done` | `pages/Checkout` | öffentlich |
 | `*` | → `/dashboard` | — |
 
 Alle Seiten außer `StartScreen` sind `React.lazy`-Chunks (Code-Splitting). Der
@@ -114,8 +115,11 @@ Drei getrennte Zustand-Stores; UI-Zustand verschmutzt nie die Undo-Historie.
     Locking über `docVersion`; Konflikt → `{ conflict, remoteVersion }`).
   - Eingehende/lokale Daten werden über `planSchema` (`coercePlan`/`parsePlanJSON`)
     validiert & migriert — nie ungeprüft übernommen.
-- **`useAuthStore`** — Supabase-Session/User, OAuth (Google/Apple) + Passwort.
+- **`useAuthStore`** — Supabase-Session/User, OAuth (Google) + Passwort.
 - **`useUIStore`** — Theme, offene Panels, Toasts, `viewMode` (`2d|3d|twin`).
+- **`useBillingStore`** — der bezahlte Tarif, **wie ihn der Server sieht**
+  (§ 10). Startet als `null` = „noch keine Aussage"; `loaded` unterscheidet das
+  von einem bestätigten `free`.
 
 **Konvention:** Immer selektiv subscriben (`usePlanStore(s => s.doc)`), nie den
 ganzen Store ziehen — verhindert unnötige Re-Renders.
@@ -277,7 +281,76 @@ Pin), `AnalysisStage` (Cinematic: goldener Scan, Partikel, Checkliste). Einstieg
 
 ---
 
-## 9. Build & Qualität
+## 9. Abrechnung & Checkout
+
+Eine eigene Kasse unter `/checkout` statt einer fremden Hosted-Page — mit
+Tarifwahl, Adresse, rund zwei Dutzend Zahlungsarten, Prüfschritt und
+Ergebnisseite.
+
+### Schichten
+
+```
+src/lib/billing/          rein, ohne React, ohne IO (Ausnahmen: promo · session)
+├── catalog.ts            Tarife, Intervalle, Währungen, Preisbuch, Geldformat
+├── countries.ts          Länderliste + Regionen des Checkouts
+├── vat.ts                EU-Sätze, USt-IdNr.-Format, Reverse-Charge
+├── methods.ts            Registry aller Zahlungsarten + Verfügbarkeitslogik
+├── pricing.ts            quote() — die einzige Stelle, die Beträge rechnet
+├── validation.ts         Luhn · IBAN mod-97 · PLZ · Ablaufdatum
+├── checkout.ts           Formularmodell, Schritte, Schrittvalidierung
+├── promo.ts              Gutschein nachschlagen (RPC, Demo-Fallback)
+└── session.ts            Nutzlast bauen + an die Edge Function übergeben
+
+src/components/checkout/  Feldprimitive, Schrittleiste, vier Schritte,
+                          Bestellübersicht, Ergebnis, Abo-Karte
+src/pages/Checkout.tsx    Zustand, Fokusführung, Absenden
+```
+
+### Vier Regeln, die diese Schicht trägt
+
+1. **Beträge sind Ganzzahlen in Minor Units.** Fliesskomma-Euro sind in einer
+   Kasse ein Fehler, der sich erst beim Runden zeigt.
+2. **Gerechnet wird an genau einer Stelle** — `quote()`. Jede Anzeige liest aus
+   deren Ergebnis; die angezeigten Zeilen addieren sich zur angezeigten Summe
+   (durch einen Test festgehalten).
+3. **Die Kartennummer verlässt den Browser nicht Richtung OMEGA.**
+   `buildIntent` überträgt Marke, letzte vier Stellen und Ablauf, sonst nichts;
+   `session.test.ts` liest die fertige Nutzlast als Text und sucht die Nummer
+   darin. Der Trigger `orders_no_pan` ist die zweite Instanz in der Datenbank.
+4. **Ein Monatsabo braucht ein abbuchungsfähiges Verfahren.** Einmalige
+   Verfahren (iDEAL, Klarna, Überweisung, Krypto) erscheinen deshalb nur beim
+   Jahresabo — sichtbar gesperrt und mit Begründung, nicht wortlos entfernt.
+
+### Serverseite
+
+| Ort | Rolle |
+| --- | --- |
+| `supabase/migrations/20260905120000_billing.sql` | `billing_customers` · `orders` · `subscriptions` · `payment_events` · `promo_codes` · `billing_prices`, RLS, `current_tier()` |
+| `supabase/functions/billing-checkout` | JWT prüfen, Preis **neu rechnen**, Gutschein und USt-IdNr. verifizieren, Bestellung anlegen, Anbieter-Session erzeugen |
+| `supabase/functions/billing-webhook` | Signatur prüfen, Ereignis protokollieren, Abo setzen. **Die einzige Stelle, die freischaltet.** |
+
+Kein Client hat ein INSERT-Recht auf `orders` oder `subscriptions`. Wer bezahlt
+hat, ist keine Angabe, die der Zahlende selbst machen darf.
+
+---
+
+## 10. Entitlements
+
+`resolveTier(email, serverTier)` beantwortet die Frage „welchen Tarif hat dieses
+Konto?" aus **zwei** Quellen und keiner dritten:
+
+- `DEV_EMAILS` → `max` (der Produktinhaber besitzt jeden Schalter im eigenen Haus)
+- `serverTier` aus `public.current_tier()` → der bezahlte Tarif
+- alles andere, inklusive „noch keine Antwort" → `free`
+
+Früher stand der Tarif in `localStorage['omega.tier']`, und die Preiskarte
+*war* das Abo. `storePlanInterest` speichert diesen Klick weiterhin — als
+Notiz, was jemand wollte —, aber `resolveTier` liest ihn nicht. Ein Test hält
+das fest.
+
+---
+
+## 11. Build & Qualität
 
 | Befehl | Zweck |
 | --- | --- |

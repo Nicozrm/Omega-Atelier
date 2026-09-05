@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/useAuthStore'
 import { supabaseReady } from '@/lib/supabase'
 import { AlertCircle, MailCheck } from 'lucide-react'
@@ -16,7 +16,24 @@ function GoogleIcon() {
   )
 }
 
+/**
+ * Wohin nach der Anmeldung.
+ *
+ * `?next=` erlaubt es der Kasse, jemanden anmelden zu lassen und danach an
+ * dieselbe Stelle zurückzubringen. Angenommen wird ausschliesslich ein Pfad
+ * innerhalb der App: ein Ziel mit Schema oder führendem `//` wäre eine offene
+ * Weiterleitung — ein Anmeldelink, der auf einer fremden Seite endet, und genau
+ * damit werden Zugangsdaten abgefischt.
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return '/dashboard'
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/dashboard'
+  return raw
+}
+
 export function LoginPage() {
+  const [params] = useSearchParams()
+  const next = safeNext(params.get('next'))
   const user = useAuthStore((s) => s.user)
   const loading = useAuthStore((s) => s.loading)
   const signIn = useAuthStore((s) => s.signInWithPassword)
@@ -30,7 +47,7 @@ export function LoginPage() {
   const [err, setErr] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
 
-  if (user) return <Navigate to="/dashboard" replace />
+  if (user) return <Navigate to={next} replace />
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
