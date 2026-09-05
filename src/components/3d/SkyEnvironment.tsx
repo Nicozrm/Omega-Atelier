@@ -107,7 +107,7 @@ const INTERIOR_PRESETS: Record<EnvPreset, {
 }
 
 /** The mutable pieces of the source scene, kept across rebuilds. */
-interface EnvSource {
+export interface EnvSource {
   scene: THREE.Scene
   sky: Sky
   /** Captured sky dome. Hidden until an HDRI has loaded; replaces `sky` then. */
@@ -124,8 +124,13 @@ interface EnvSource {
 /**
  * Build the source scene once. Everything inside sits well within the PMREM
  * camera's default 0.1…100 range, so the convolution sees all of it.
+ *
+ * Exported because this module's exposure is *measured*, not chosen (see the
+ * enclosure note above), and the measurement needs the same source scene the
+ * runtime builds. Replicating it in a harness would let the two drift, and the
+ * drift would be invisible.
  */
-function createEnvSource(preset: EnvPreset): EnvSource {
+export function createEnvSource(preset: EnvPreset): EnvSource {
   const scene = new THREE.Scene()
   const geometries: THREE.BufferGeometry[] = []
   const materials: THREE.Material[] = []
@@ -246,6 +251,7 @@ export function SkyEnvironment({ env, preset }: {
     target.current?.dispose()
     target.current = null
     scene.environment = null
+    scene.background = null
   }, [scene])
 
   // Exposure is a single scalar on the scene, so it is applied on every change
@@ -327,6 +333,21 @@ export function SkyEnvironment({ env, preset }: {
         const level = hdriExposure(sky)
         source.dome.material.color.setScalar(level)
         source.dome.material.needsUpdate = true
+
+        // The same map as the *visible* sky behind the house, replacing a flat
+        // CSS gradient. Worth doing for its own sake — real cloud structure and
+        // a real horizon instead of two interpolated colours — but the reason it
+        // is done here, from the same values, is consistency: a background whose
+        // sun sits somewhere other than the reflected one is worse than no
+        // background at all.
+        //
+        // `backgroundRotation` is negated against the dome's. The dome is a
+        // sphere seen from inside, which flips the mapping; the background
+        // samples the direction vector directly and does not. Both signs were
+        // measured rather than derived.
+        scene.background = captured
+        scene.backgroundRotation.set(0, -source.dome.rotation.y, 0)
+        scene.backgroundIntensity = level * params.environmentIntensity
       }
 
       // Ground bounce: the sky's horizon colour, dimmed by how much light is

@@ -160,6 +160,34 @@ export function hdriRotationY(
 }
 
 /**
+ * Calibration constant: how much of the analytic sky's delivered light the
+ * captured dome should reproduce.
+ *
+ * Measured, not chosen. Rendering a white matte sphere under the source scene
+ * in three configurations — enclosure alone, enclosure + analytic sky,
+ * enclosure + captured dome — separates the sky term from the room it sits in.
+ * The captured maps are photographed at higher absolute radiance than the
+ * analytic model delivers, and without this the swap made full daylight
+ * 1.4–1.75× brighter while leaving night and dusk untouched. The ratio the
+ * daylight hours need clusters at 0.20–0.24.
+ *
+ * ## The bigger number this exposes
+ *
+ * That same measurement showed the enclosure supplying roughly 80 % of the
+ * lighting and the sky only ~18 % at noon. That balance came from calibrating
+ * against the *studio box* these replaced, whose entire purpose was interior
+ * bounce — and it is defensible for a walk-through, where a surface really is
+ * lit mostly by the walls around it. For the dollhouse seen from outside it is
+ * not: those surfaces see sky.
+ *
+ * Rebalancing it is a deliberate art-direction change with a visible effect on
+ * every interior, so it is left as one number rather than made silently here.
+ * Raising this raises the sky's share; `skyModel`'s `interior.intensity` lowers
+ * the enclosure's.
+ */
+export const HDRI_SKY_CALIBRATION = 0.22
+
+/**
  * Scale that brings a sky to a common exposure.
  *
  * The four maps were photographed at wildly different light levels — noon is
@@ -172,9 +200,9 @@ export function hdriRotationY(
  *   clear day sky, which is the one the exposure pass was measured against.
  */
 export function hdriExposure(sky: HdriSky, reference = HDRI_SKIES.day.meanLuminance): number {
-  if (!(sky.meanLuminance > 0) || !(reference > 0)) return 1
-  const scale = reference / sky.meanLuminance
-  return Number.isFinite(scale) && scale > 0 ? scale : 1
+  if (!(sky.meanLuminance > 0) || !(reference > 0)) return HDRI_SKY_CALIBRATION
+  const scale = (reference / sky.meanLuminance) * HDRI_SKY_CALIBRATION
+  return Number.isFinite(scale) && scale > 0 ? scale : HDRI_SKY_CALIBRATION
 }
 
 /** Base-aware URL (works under the GitHub Pages sub-path). */

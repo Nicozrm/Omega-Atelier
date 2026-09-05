@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { deriveEnvironment } from '@/lib/environment'
 import {
   HDRI_SKIES, selectHdriSky, solarBearing, wrapAngle, hdriRotationY, hdriExposure, hdriUrl,
-  type HdriSkyKey,
+  HDRI_SKY_CALIBRATION, type HdriSkyKey,
 } from './hdriSky'
 
 const at = (hour: number, weather?: 'clear' | 'cloudy' | 'overcast') =>
@@ -120,22 +120,23 @@ describe('hdriRotationY', () => {
 
 describe('hdriExposure', () => {
   it('normalises every sky to a common level', () => {
-    for (const sky of Object.values(HDRI_SKIES)) {
-      const normalised = sky.meanLuminance * hdriExposure(sky)
-      expect(normalised).toBeCloseTo(HDRI_SKIES.day.meanLuminance, 6)
-    }
+    // All four end up delivering the same light, whatever they were shot at.
+    const levels = Object.values(HDRI_SKIES).map((s) => s.meanLuminance * hdriExposure(s))
+    for (const level of levels) expect(level).toBeCloseTo(levels[0], 6)
   })
 
-  it('is identity for the reference sky', () => {
-    expect(hdriExposure(HDRI_SKIES.day)).toBeCloseTo(1, 9)
+  it('applies the measured calibration to the reference sky', () => {
+    // Not 1: the captured maps are brighter than the analytic sky they replace,
+    // and without this daylight came out 1.4–1.75× too bright.
+    expect(hdriExposure(HDRI_SKIES.day)).toBeCloseTo(HDRI_SKY_CALIBRATION, 9)
   })
 
   it('never returns a scale that would black out or blow up the scene', () => {
     for (const bad of [0, -1, Number.NaN, Infinity]) {
       const sky = { ...HDRI_SKIES.day, meanLuminance: bad }
-      expect(hdriExposure(sky)).toBe(1)
+      expect(hdriExposure(sky)).toBe(HDRI_SKY_CALIBRATION)
     }
-    expect(hdriExposure(HDRI_SKIES.day, 0)).toBe(1)
+    expect(hdriExposure(HDRI_SKIES.day, 0)).toBe(HDRI_SKY_CALIBRATION)
   })
 })
 
