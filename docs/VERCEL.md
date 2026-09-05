@@ -99,6 +99,37 @@ Jeder Pull Request bekommt eine eigene URL. Zwei Dinge dazu:
 
 ---
 
+## Zwei Vercel-Projekte auf diesem Repository
+
+Auf `Nicozrm/Omega-Atelier` zeigen **zwei** Vercel-Projekte:
+
+| Projekt | Root-Verzeichnis | Zweck |
+| --- | --- | --- |
+| `omegaatelier` | Repo-Wurzel | die App — hierhin gehört alles aus diesem Dokument |
+| `omega-atelier` | `docs/assets` | die vier Demo-GIFs der README |
+
+Das zweite Projekt baut nichts: `docs/assets` enthält GIFs und keine
+`package.json`. Damit Vercel das auch so behandelt, liegt dort eine eigene
+`vercel.json` mit `outputDirectory: "."` — bei gesetztem Root-Verzeichnis ist
+das die Datei, die dieses Projekt liest, und sie sagt „ausliefern, nicht
+bauen".
+
+Ohne sie greift die Wurzel-`vercel.json` mit ihrem `buildCommand`: die
+Abhängigkeiten werden dann in `docs/assets` installiert (wo es keine gibt),
+anschliessend läuft das Build-Skript der Wurzel — und scheitert mit
+`tsc: command not found`. Genau so ist es beim ersten Deployment dieses
+Projekts passiert.
+
+> **Offen, für den Kontoinhaber:** Das Projekt `omega-atelier` deployt
+> Feature-Branches mit `target: production` auf
+> `omega-atelier-omegaatelier.vercel.app`. Ein Branch überschreibt dort also
+> die Produktionsadresse — dieselbe Falle, gegen die `deploy-pages.yml` seit
+> einem Vorfall eine harte Sperre hat. Entweder das Projekt auf
+> Preview-Deployments umstellen oder, falls die GIFs keine eigene Domain
+> brauchen, ganz löschen.
+
+---
+
 ## Verhältnis zu GitHub Pages
 
 Beide Ziele können parallel laufen. Unterschied:
