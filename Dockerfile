@@ -17,7 +17,7 @@ ENV CI=true \
     npm_config_update_notifier=false \
         npm_config_fund=false \
             npm_config_audit=false \
-                NODE_OPTIONS=--max-old-space-size=2048
+                NODE_OPTIONS=--max-old-space-size=896
                 
                 COPY package.json package-lock.json ./
                 RUN npm ci
