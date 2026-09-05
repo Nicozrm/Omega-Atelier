@@ -28,6 +28,7 @@ const LoginPage = lazy(() => import('@/pages/Login').then((m) => ({ default: m.L
 const PlansPage = lazy(() => import('@/pages/Plans').then((m) => ({ default: m.PlansPage })))
 const EditorPage = lazy(() => import('@/pages/Editor').then((m) => ({ default: m.EditorPage })))
 const SettingsPage = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.SettingsPage })))
+const CheckoutPage = lazy(() => import('@/pages/Checkout').then((m) => ({ default: m.CheckoutPage })))
 const DashboardPage = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.DashboardPage })))
 const RobotPage = lazy(() => import('@/pages/Robot').then((m) => ({ default: m.RobotPage })))
 const ImpressumPage = lazy(() => import('@/pages/Legal').then((m) => ({ default: m.ImpressumPage })))
@@ -78,6 +79,15 @@ export default function App() {
           <Route path="/impressum" element={<ImpressumPage />} />
           <Route path="/datenschutz" element={<DatenschutzPage />} />
           <Route path="/agb" element={<AGBPage />} />
+          {/*
+            Die Kasse ist öffentlich. Anmelden muss man erst zum Abschluss —
+            wer vor dem ersten Feld eine Registrierung verlangt, verliert die
+            Hälfte der Interessenten, bevor sie den Preis gesehen haben.
+            `/checkout/done` ist die Rückkehr-URL der Anbieter; sie zeigt
+            dieselbe Seite, die den Auftrag anhand von `?order=` einordnet.
+          */}
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/checkout/done" element={<CheckoutPage />} />
           <Route
             path="/plans"
             element={

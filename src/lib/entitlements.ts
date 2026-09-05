@@ -95,7 +95,7 @@ export function readPlanInterest(): Tier | null {
 }
 
 /**
- * Resolve the active tier. **Free for everyone**, `max` for the product owner.
+ * Resolve the active tier.
  *
  * This used to return whatever `localStorage['omega.tier']` said, which meant
  * the pricing cards were the subscription: clicking "Max" wrote `max` and the
@@ -104,21 +104,26 @@ export function readPlanInterest(): Tier | null {
  * into the console, because a client-side string is not a grant. It is a note
  * the client wrote to itself.
  *
- * So the stored choice is now kept (see `storePlanInterest`) but never read
- * here. Until real billing exists, exactly two answers are possible, and both
- * come from something the client cannot rewrite:
+ * Billing has since arrived, and this is where it lands. The paid tier now
+ * comes from `serverTier` — the answer of the Postgres function
+ * `public.current_tier()`, which reads `subscriptions` and nothing else. Into
+ * that table writes only the payment webhook, with the service role; no client
+ * has an INSERT grant on it (see the `billing` migration). The claim therefore
+ * survives an open console, which is the whole point.
  *
- *  - the product owner's account → `max`
- *  - everybody else → `free`
+ * Two answers still come from outside that claim:
  *
- * When billing arrives this function is where it lands: the paid tier has to
- * come from the session — a verified claim on the server side — and this
- * signature already takes the account rather than reading storage, so the fix
- * is to consult that claim here and nowhere else.
+ *  - the product owner's account → `max`, so the maker owns every switch in
+ *    their own home without paying themselves
+ *  - no claim yet (offline, still loading, Supabase not configured) → `free`,
+ *    because "we don't know" must never resolve upward
+ *
+ * The stored plan *interest* (see `storePlanInterest`) is deliberately still
+ * not read here — it says what someone clicked, never what they hold.
  */
-export function resolveTier(userEmail?: string | null): Tier {
+export function resolveTier(userEmail?: string | null, serverTier?: Tier | null): Tier {
   if (userEmail && DEV_EMAILS.includes(userEmail.toLowerCase())) return 'max'
-  return 'free'
+  return serverTier ?? 'free'
 }
 
 export interface PlanSpec {

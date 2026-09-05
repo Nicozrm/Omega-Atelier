@@ -285,11 +285,18 @@ export function LandingPage() {
   }, [])
 
   const choose = useCallback((plan: PlanSpec) => {
-    // Records what they came for; it does not unlock it. Entitlements are
-    // resolved from the account, never from this — see `resolveTier`.
+    // Hält fest, wofür jemand gekommen ist; freigeschaltet wird dadurch nichts.
+    // Der Anspruch kommt aus dem Konto, nie von hier — siehe `resolveTier`.
     storePlanInterest(plan.tier)
     setChosenTier(plan.tier)
-    window.setTimeout(() => navigate(user ? '/start' : '/login'), 650)
+    // Free braucht keine Kasse: dort ist der nächste sinnvolle Schritt die App
+    // selbst. Für Pro und Max geht es direkt in den Checkout, mit dem
+    // gewählten Tarif und dem Intervall im Link — wer hier klickt, hat die
+    // Entscheidung getroffen und soll sie nicht noch einmal treffen müssen.
+    const target = plan.tier === 'free'
+      ? (user ? '/start' : '/login')
+      : `/checkout?plan=${plan.tier}&interval=yearly`
+    window.setTimeout(() => navigate(target), 650)
   }, [navigate, user])
 
   return (
