@@ -27,7 +27,7 @@ ENV CI=true \
                 ENV VITE_SUPABASE_URL=__OMEGA_SUPABASE_URL__ \
                     VITE_SUPABASE_ANON_KEY=__OMEGA_SUPABASE_ANON_KEY__
                     
-                    RUN npx vite build \
+                    RUN npx vite build --sourcemap false \
                      && find dist -name '*.map' -delete
                      
                      # -- Stage 2: Runtime ---------------------------------------------------------
