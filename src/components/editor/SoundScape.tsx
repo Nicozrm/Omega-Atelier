@@ -7,6 +7,7 @@ import { useTier } from '@/hooks/useTier'
 import { DEVICES } from '@/data/devices'
 import { acousticPath } from '@/lib/acoustics'
 import type { Floor, Point } from '@/types'
+import { DockSlot } from './CanvasDock'
 
 /**
  * SoundScape — hear the floor plan.
@@ -271,15 +272,17 @@ export function SoundScape() {
 
   if (!listening) {
     return (
+      <DockSlot>
       <button
         onClick={locked ? goUpgrade : start}
-        className="glass spring-press absolute bottom-[104px] left-3 z-20 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-[color:var(--fg)] md:bottom-[60px]"
+        className="dock-chip"
         title={locked ? 'Hörmodus — im Pro-Plan enthalten' : 'Hörmodus — zieh das Ohr durch den Plan und höre dein Zuhause'}
       >
         <Ear size={14} className="text-[color:var(--accent-bright)]" />
         <span className="hidden sm:inline">Hören</span>
         {locked && <Lock size={11} className="text-[color:var(--muted)]" />}
       </button>
+      </DockSlot>
     )
   }
 
@@ -307,8 +310,9 @@ export function SoundScape() {
         <Ear size={19} className="pointer-events-none text-[#0A0A0B]" />
       </div>
 
-      {/* Status pill */}
-      <div className="glass absolute bottom-[104px] left-3 z-20 flex items-center gap-2.5 rounded-full px-3 py-2 md:bottom-[60px]">
+      {/* Status pill — in the dock; the ear above stays anchored to the plan. */}
+      <DockSlot>
+      <div className="dock-panel">
         <Ear size={14} className="text-[color:var(--accent-bright)]" />
         <span className="text-xs font-medium tabular-nums">
           {audible === 0 ? 'Stille' : `${audible} ${audible === 1 ? 'Quelle' : 'Quellen'} hörbar`}
@@ -317,6 +321,7 @@ export function SoundScape() {
           <X size={13} />
         </button>
       </div>
+      </DockSlot>
     </>
   )
 }

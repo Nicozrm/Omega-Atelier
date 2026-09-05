@@ -86,7 +86,7 @@ export function FurnitureLibrary() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b border-[color:var(--border)] p-3">
+      <div className="lib-head">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--muted)]" />
           <input
@@ -96,48 +96,37 @@ export function FurnitureLibrary() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {/* KATEGORIEN — vertical list with counts (reference library) */}
+        {/* Kategorien — a list, not a dropdown: the counts are half the value
+            and a <select> can show neither them nor the current filter at rest. */}
         <div>
-          <div className="px-1 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--muted)]">
-            Kategorien
-          </div>
+          <div className="lib-eyebrow px-1.5">Kategorien</div>
           <div className="max-h-44 space-y-px overflow-y-auto omega-scroll">
             <button
               onClick={() => setCategory('all')}
-              className={cn(
-                'flex w-full items-center justify-between rounded-md px-2 py-1 text-xs transition-colors',
-                category === 'all'
-                  ? 'bg-[color:var(--surface-2)] text-[color:var(--fg)]'
-                  : 'text-[color:var(--muted)] hover:bg-[color:var(--surface)] hover:text-[color:var(--fg)]',
-              )}
+              aria-pressed={category === 'all'}
+              className={cn('lib-cat', category === 'all' && 'is-selected')}
             >
-              Alle <span className="font-mono text-[10px]">{FURNITURE.length}</span>
+              Alle <span className="lib-cat-count">{FURNITURE.length}</span>
             </button>
             {categories.map((c) => (
               <button
                 key={c}
                 onClick={() => setCategory(c)}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-md px-2 py-1 text-xs transition-colors',
-                  category === c
-                    ? 'bg-[color:var(--surface-2)] text-[color:var(--fg)]'
-                    : 'text-[color:var(--muted)] hover:bg-[color:var(--surface)] hover:text-[color:var(--fg)]',
-                )}
+                aria-pressed={category === c}
+                className={cn('lib-cat', category === c && 'is-selected')}
               >
-                {CAT_LABELS[c]} <span className="font-mono text-[10px]">{counts.get(c)}</span>
+                {CAT_LABELS[c]} <span className="lib-cat-count">{counts.get(c)}</span>
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto omega-scroll p-2">
-        {/* KÜRZLICH VERWENDET — quick re-pick row (reference library) */}
+      <div className="flex-1 overflow-y-auto omega-scroll px-1.5 pb-2">
+        {/* Kürzlich verwendet — the fast path back to what you just placed. */}
         {recent.length > 0 && !query && category === 'all' && (
-          <div className="mb-2">
-            <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--muted)]">
-              Kürzlich verwendet
-            </div>
+          <div className="mb-1">
+            <div className="lib-eyebrow">Kürzlich verwendet</div>
             <div className="grid grid-cols-3 gap-1.5">
               {recent.map((id) => {
                 const f = FURNITURE.find((x) => x.id === id)
@@ -147,15 +136,16 @@ export function FurnitureLibrary() {
                     key={id}
                     onClick={() => pick(f.id)}
                     title={f.name}
-                    className={cn(
-                      'flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg border transition',
-                      hover === f.id
-                        ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.10)] text-[color:var(--accent)]'
-                        : 'border-[color:var(--border)] text-[color:var(--muted)] hover:border-[color:var(--border-strong)] hover:text-[color:var(--fg)]',
-                    )}
+                    aria-pressed={hover === f.id}
+                    className={cn('lib-tile items-center gap-0.5 py-1.5', hover === f.id && 'is-selected')}
                   >
-                    <FurnitureThumb category={f.category} />
-                    <span className="max-w-full truncate px-1 text-[9px]">{f.name}</span>
+                    <span className={cn(
+                      'flex h-8 items-center justify-center',
+                      hover === f.id ? 'text-[color:var(--accent-bright)]' : 'text-[color:var(--muted)]',
+                    )}>
+                      <FurnitureThumb category={f.category} />
+                    </span>
+                    <span className="lib-meta max-w-full text-center">{f.name}</span>
                   </button>
                 )
               })}
@@ -163,7 +153,7 @@ export function FurnitureLibrary() {
           </div>
         )}
         {/* Card grid with visual thumbnails */}
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-2 gap-0.5">
           {filtered.map((f) => {
             const selected = hover === f.id
             return (
@@ -173,24 +163,13 @@ export function FurnitureLibrary() {
                 data-lib-kind="furniture"
                 data-lib-label={f.name}
                 onClick={() => pick(f.id)}
-                className={cn(
-                  'group relative flex flex-col items-stretch rounded-lg border p-2 text-left transition',
-                  selected
-                    ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.10)]'
-                    : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-2)]',
-                )}
+                aria-pressed={selected}
+                className={cn('lib-tile', selected && 'is-selected')}
               >
-                <div className={cn(
-                  'flex h-12 items-center justify-center rounded-md bg-[color:var(--surface-2)] transition-colors',
-                  selected ? 'text-[color:var(--accent)]' : 'text-[color:var(--muted)] group-hover:text-[color:var(--fg)]',
-                )}>
-                  <FurnitureThumb category={f.category} />
-                </div>
-                <div className="mt-1.5 truncate text-xs font-medium">{f.name}</div>
-                <div className="font-mono text-[10px] text-[color:var(--muted)]">
-                  {f.size[0]} × {f.size[1]} cm
-                </div>
-                {selected && <CheckCircle2 size={13} className="absolute right-1.5 top-1.5 text-[color:var(--accent)]" />}
+                <span className="lib-tile-art"><FurnitureThumb category={f.category} /></span>
+                <span className="lib-name mt-1.5 block">{f.name}</span>
+                <span className="lib-price block">{f.size[0]} × {f.size[1]} cm</span>
+                {selected && <CheckCircle2 size={13} className="absolute right-2 top-2 text-[color:var(--accent-bright)]" />}
               </button>
             )
           })}

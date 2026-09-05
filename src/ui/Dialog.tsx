@@ -42,6 +42,11 @@ export function Dialog({ open, onClose, title, size = 'md', className, children 
       className="fixed inset-0 z-50 flex items-center justify-center scrim p-4 animate-fade-in"
       onClick={onClose}
     >
+      {/*
+        Header, body, and a hairline between them — the header stays put while
+        the body scrolls. A dialog that scrolls its own title away leaves you
+        looking at a floating panel with no name on it.
+      */}
       <div
         ref={panelRef}
         role="dialog"
@@ -49,23 +54,15 @@ export function Dialog({ open, onClose, title, size = 'md', className, children 
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'surface-glass w-full max-h-[90vh] overflow-y-auto p-5 animate-pop-in outline-none',
-          SIZES[size],
-          className,
-        )}
+        className={cn('dialog-panel w-full max-h-[90vh]', SIZES[size], className)}
       >
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 id={titleId} className="font-display text-xl">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Schließen"
-            className="btn btn-ghost btn-icon"
-          >
+        <header className="dialog-head">
+          <h2 id={titleId} className="dialog-title">{title}</h2>
+          <button onClick={onClose} aria-label="Schließen" className="tool-btn h-7 w-7">
             <X size={16} />
           </button>
-        </div>
-        {children}
+        </header>
+        <div className="dialog-body omega-scroll">{children}</div>
       </div>
     </div>
   )

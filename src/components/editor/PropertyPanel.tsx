@@ -14,6 +14,7 @@ import { UPHOLSTERY_SLOTS, WOOD_SLOTS } from '@/lib/materialSlots'
 import { FurnitureThumb } from '@/components/library/FurnitureLibrary'
 import { materialsForSurface, resolveFloorMaterial } from '@/lib/materials'
 import type { Point, Room } from '@/types'
+import { Badge } from '@/ui'
 
 const DEVICE_MAP = Object.fromEntries(DEVICES.map((d) => [d.id, d] as const))
 const FURN_MAP = Object.fromEntries(FURNITURE.map((f) => [f.id, f] as const))
@@ -111,9 +112,10 @@ export function PropertyPanel() {
 
   if (!selection.type || selection.ids.length === 0 || !floor) {
     return (
-      <div className="surface p-3">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[color:var(--muted)]">
-          <Info size={12} /> Eigenschaften
+      <div className="pb-1">
+        <div className="mb-1 flex items-center gap-2">
+          <Info size={13} className="text-[color:var(--muted)]" />
+          <span className="inspector-title">Eigenschaften</span>
         </div>
         {tool === 'measure' ? (
           <div className="mt-2 space-y-2">
@@ -514,12 +516,13 @@ export function PropertyPanel() {
   }
 
   return (
-    <div className="surface p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[color:var(--muted)]">
-          <Info size={12} /> Eigenschaften
+    <div className="space-y-3 pb-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Info size={13} className="text-[color:var(--muted)]" />
+          <span className="inspector-title">Eigenschaften</span>
         </div>
-        <span className="chip">{selection.ids.length} ausgewählt</span>
+        <Badge tone="accent">{selection.ids.length} ausgewählt</Badge>
       </div>
 
       <div className="space-y-2 text-sm">

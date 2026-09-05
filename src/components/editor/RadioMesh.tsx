@@ -7,6 +7,7 @@ import { useTier } from '@/hooks/useTier'
 import { DEVICES } from '@/data/devices'
 import { buildMesh, arcPoint, PROTOCOL_COLORS, type RadioLink } from '@/lib/radioMesh'
 import type { Floor } from '@/types'
+import { DockSlot } from './CanvasDock'
 
 /**
  * RadioMesh — the home's invisible nervous system, rendered.
@@ -236,18 +237,18 @@ export function RadioMesh() {
           <canvas ref={canvasRef} className="absolute inset-0" />
         </div>
       )}
+      <DockSlot>
       <button
         onClick={locked ? goUpgrade : () => setActive((v) => !v)}
-        className={`glass spring-press absolute bottom-[148px] left-3 z-20 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium md:bottom-[104px] ${
-          active ? 'text-[color:var(--accent-bright)]' : 'text-[color:var(--fg)]'
-        }`}
-        style={active ? { boxShadow: 'var(--glow-accent-soft)' } : undefined}
+        className={`dock-chip ${active ? 'is-on' : ''}`}
+        aria-pressed={active}
         title={locked ? 'Funknetz — im Pro-Plan enthalten' : 'Funknetz — die Funk-Topologie deines Zuhauses, live'}
       >
         <Radio size={14} className={active ? 'text-[color:var(--accent-bright)]' : 'text-[color:var(--accent)]'} />
         <span className="hidden sm:inline">Funknetz</span>
         {locked && <Lock size={11} className="text-[color:var(--muted)]" />}
       </button>
+      </DockSlot>
     </>
   )
 }

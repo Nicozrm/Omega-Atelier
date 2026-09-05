@@ -5,6 +5,7 @@ import { useUIStore } from '@/store/useUIStore'
 import { usePlanStore } from '@/store/usePlanStore'
 import { useTier } from '@/hooks/useTier'
 import { modeForHour, formatClock, phaseLabel } from '@/lib/dayCycle'
+import { DockSlot } from './CanvasDock'
 
 /** Real-seconds for one full simulated day when playing. */
 const DAY_SECONDS = 30
@@ -86,21 +87,24 @@ export function LivingHome() {
 
   if (!active) {
     return (
+      <DockSlot>
       <button
         onClick={locked ? goUpgrade : activate}
-        className="glass spring-press absolute bottom-16 left-3 z-20 inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-[color:var(--fg)] md:bottom-4"
+        className="dock-chip"
         title={locked ? 'Tagesverlauf — im Pro-Plan enthalten' : 'Tagesverlauf abspielen — das Zuhause durch einen Tag'}
       >
         <Sunrise size={14} className="text-[color:var(--accent-bright)]" />
         <span className="hidden sm:inline">Tagesverlauf</span>
         {locked && <Lock size={11} className="text-[color:var(--muted)]" />}
       </button>
+      </DockSlot>
     )
   }
 
   const t = timeOfDay as number
   return (
-    <div className="glass absolute bottom-16 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full px-2.5 py-2 md:bottom-4">
+    <DockSlot>
+    <div className="dock-panel">
       <button onClick={() => setPlaying((p) => !p)} className="spring-press flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--accent)] text-[color:var(--accent-contrast)]" title={playing ? 'Pause' : 'Abspielen'}>
         {playing ? <Pause size={15} /> : <Play size={15} className="translate-x-[1px]" />}
       </button>
@@ -118,5 +122,6 @@ export function LivingHome() {
         <X size={15} />
       </button>
     </div>
+    </DockSlot>
   )
 }

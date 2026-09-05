@@ -7,7 +7,7 @@ import { useTier } from '@/hooks/useTier'
 import { usePlanStore } from '@/store/usePlanStore'
 import { useUIStore } from '@/store/useUIStore'
 import type { Tool } from '@/types'
-import { Tooltip } from '@/ui'
+import { Menu, Tooltip } from '@/ui'
 import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 import { cn } from '@/lib/utils'
 import { play as playSound } from '@/lib/sound'
@@ -236,19 +236,92 @@ export function EditorToolbar() {
                 <Grid3x3 size={17} />
               </button>
             </Tooltip>
-            <Tooltip label="Am Raster einrasten" side="bottom">
-              <button
-                className={cn('tool-btn', doc?.settings.snap && 'is-on')}
-                aria-label="Einrasten umschalten"
-                aria-pressed={doc?.settings.snap ?? false}
-                onClick={() => updateDoc((d) => { d.settings.snap = !d.settings.snap }, { history: false })}
-              >
-                <Magnet size={17} />
-              </button>
-            </Tooltip>
+            <SnapControl />
           </ActionCluster>
         </>
       )}
     </div>
+  )
+}
+
+/** Snap steps offered in the menu, in centimetres. */
+const SNAP_STEPS: Array<{ label: string; cm: number }> = [
+  { label: '0,25 m', cm: 25 },
+  { label: '0,5 m',  cm: 50 },
+  { label: '1 m',    cm: 100 },
+]
+
+/**
+ * SnapControl — everything about snapping, in one place.
+ *
+ * These settings used to live in three: a magnet toggle in this rail, a
+ * duplicate grid toggle plus the step buttons in a pill floating over the plan,
+ * and the wall-magnet switch only in that pill. Two of the three controls were
+ * the *same* switch rendered twice, so flipping one silently moved the other,
+ * and the step — the only setting you actually tune — was the one you could not
+ * reach from the toolbar.
+ *
+ * Now: one button that reads out the active step, and a menu that names every
+ * option. The button still toggles nothing on its own; a control whose label is
+ * a value should open the values, not flip a hidden boolean.
+ */
+function SnapControl() {
+  const doc = usePlanStore((s) => s.doc)
+  const updateDoc = usePlanStore((s) => s.updateDoc)
+  if (!doc) return null
+
+  const st = doc.settings
+  // Legacy plans may carry a step outside the offered set (10 cm, say) — show
+  // the nearest one so the readout always matches what the canvas does.
+  const activeCm = st.snap
+    ? SNAP_STEPS.reduce((best, o) => (Math.abs(o.cm - st.snapStep) < Math.abs(best - st.snapStep) ? o.cm : best), SNAP_STEPS[0].cm)
+    : null
+  const stepLabel = activeCm === null ? 'Aus' : SNAP_STEPS.find((o) => o.cm === activeCm)!.label
+  const patch = (fn: (s: typeof st) => void) => updateDoc((d) => fn(d.settings), { history: false })
+
+  return (
+    <Menu
+      align="start"
+      minWidth={228}
+      trigger={({ ref, ...props }) => (
+        <button
+          ref={ref}
+          {...props}
+          aria-label={`Einrasten: ${stepLabel}`}
+          title={`Einrasten: ${stepLabel}`}
+          className={cn(
+            'tool-btn w-auto gap-1.5 px-2 text-[0.6875rem] font-medium',
+            st.snap && 'is-on',
+          )}
+        >
+          <Magnet size={16} />
+          <span className="tabular-nums">{stepLabel}</span>
+        </button>
+      )}
+    >
+      <Menu.Section title="Am Raster einrasten">
+        <Menu.Item checked={!st.snap} onSelect={() => patch((s) => { s.snap = false })}>
+          Aus
+        </Menu.Item>
+        {SNAP_STEPS.map(({ label, cm }) => (
+          <Menu.Item
+            key={cm}
+            checked={activeCm === cm}
+            onSelect={() => patch((s) => { s.snap = true; s.snapStep = cm })}
+          >
+            {label}
+          </Menu.Item>
+        ))}
+      </Menu.Section>
+      <Menu.Section title="Hilfslinien">
+        <Menu.Item
+          checked={st.magnet !== false}
+          description="Zieht Objekte an Wandkanten"
+          onSelect={() => patch((s) => { s.magnet = s.magnet === false })}
+        >
+          An Wänden ausrichten
+        </Menu.Item>
+      </Menu.Section>
+    </Menu>
   )
 }

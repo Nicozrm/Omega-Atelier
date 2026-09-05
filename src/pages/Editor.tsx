@@ -5,14 +5,13 @@ import { Chrome } from '@/components/layout/Chrome'
 import { Topbar } from '@/components/layout/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { OmegaFloorCanvas } from '@/components/editor/Canvas'
+import { CanvasDock } from '@/components/editor/CanvasDock'
 import { CinematicLayer } from '@/components/editor/CinematicLayer'
-import { SnapBar } from '@/components/editor/SnapBar'
 import { LivingHome } from '@/components/editor/LivingHome'
 import { SoundScape } from '@/components/editor/SoundScape'
 import { RadioMesh } from '@/components/editor/RadioMesh'
 import { EditorToolbar } from '@/components/editor/Toolbar'
 import { FloorTabs } from '@/components/editor/FloorTabs'
-import { HistoryTimeline } from '@/components/editor/HistoryTimeline'
 import { LayerPanel } from '@/components/editor/LayerPanel'
 import { PropertyPanel } from '@/components/editor/PropertyPanel'
 import { ModesPanel } from '@/components/modes/ModesPanel'
@@ -253,9 +252,19 @@ export function EditorPage() {
         <div className="relative flex-1 min-w-0">
           {viewMode === '2d' ? (
             <>
+              {/*
+                Two floating bars used to sit here over the plan, and both said
+                what the tool rail above already says. The history pill was a
+                second undo/redo (a third, counting ⌘Z) wrapped around a
+                "3 / 7" step counter; the snap pill was a second grid toggle,
+                a second magnet switch and the step buttons. Snapping now lives
+                in one named menu in the rail, undo/redo in one place — and the
+                plan gets the bottom of the canvas back.
+              */}
               <OmegaFloorCanvas cursors={cursors} publishCursor={publishCursor} />
-              <HistoryTimeline />
-              <SnapBar />
+              {/* One anchored column for the plan overlays; each control below
+                  contributes its chip or panel to it. */}
+              <CanvasDock />
               <LivingHome />
               <SoundScape />
               <RadioMesh />
