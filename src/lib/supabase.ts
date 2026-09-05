@@ -17,8 +17,8 @@ if (!url || !anonKey) {
  * so the app doesn't crash — all cloud operations will simply return errors.
  */
 export const supabase: SupabaseClient = createClient(
-  url ?? 'https://missing.supabase.co',
-  anonKey ?? 'missing-anon-key',
+  url || 'https://missing.supabase.co',
+  anonKey || 'missing-anon-key',
   {
     auth: {
       persistSession: true,
