@@ -55,21 +55,23 @@ export function QuickStats() {
 
   if (!stats) return null
 
+  /*
+   * A boxed table with a rule under every row is how a spreadsheet presents
+   * six numbers. Six label/value pairs need neither the box nor the rules —
+   * the alignment already pairs them, and the panel around it is the box.
+   */
   return (
-    <div className="rounded-[var(--radius-md)] border border-[color:var(--border)] bg-[color:var(--surface-2)]">
+    <dl className="stat-list">
       {stats.rows.map((r) => (
-        <div
-          key={r.label}
-          className="flex items-center justify-between border-b border-[color:var(--border)] px-3 py-2 last:border-0"
-        >
-          <span className="text-xs text-[color:var(--muted)]">{r.label}</span>
-          <span className="font-mono text-xs text-[color:var(--fg)]">{r.value}</span>
+        <div key={r.label} className="stat-row">
+          <dt>{r.label}</dt>
+          <dd>{r.value}</dd>
         </div>
       ))}
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-xs text-[color:var(--muted)]">Status</span>
-        <span className="text-xs font-medium text-[color:var(--color-omega-success,#3ecf8e)]">Alle online</span>
+      <div className="stat-row">
+        <dt>Status</dt>
+        <dd className="text-[color:var(--color-omega-success)]">Alle online</dd>
       </div>
-    </div>
+    </dl>
   )
 }

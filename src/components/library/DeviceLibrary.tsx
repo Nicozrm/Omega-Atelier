@@ -52,7 +52,7 @@ export function DeviceLibrary() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-2 border-b border-[color:var(--hairline-soft)] p-3">
+      <div className="lib-head">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--muted)]" />
           <input
@@ -62,7 +62,7 @@ export function DeviceLibrary() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <select
             className="select"
             aria-label="Nach Ökosystem filtern"
@@ -88,19 +88,19 @@ export function DeviceLibrary() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto omega-scroll p-2">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-[color:var(--muted)] mb-2 px-1">
+      <div className="flex-1 overflow-y-auto omega-scroll px-1.5 pb-2">
+        <div className="lib-eyebrow">
           <span>{filtered.length} {filtered.length === 1 ? 'Ergebnis' : 'Ergebnisse'}</span>
           {(query || ecosystem !== 'all' || category !== 'all') && (
             <button
               onClick={() => { setQuery(''); setEcosystem('all'); setCategory('all') }}
-              className="text-[color:var(--accent)] hover:underline normal-case tracking-normal text-xs"
+              className="text-[0.6875rem] font-medium normal-case tracking-normal text-[color:var(--accent-bright)] hover:underline"
             >
-              zurücksetzen
+              Zurücksetzen
             </button>
           )}
         </div>
-        <div className="space-y-1">
+        <div className="space-y-px">
           {filtered.map((d) => {
             const selected = hover === d.id
             return (
@@ -113,47 +113,30 @@ export function DeviceLibrary() {
                   setHover(d.id)
                   setTool('device')
                 }}
-                className={cn(
-                  'flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition-all duration-150',
-                  selected
-                    ? 'border-[color:var(--accent)] bg-[rgba(199,162,78,0.10)] shadow-[0_2px_10px_rgba(199,162,78,0.18)]'
-                    : 'border-[color:var(--border)] hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-2)] hover:-translate-y-0.5',
-                )}
+                aria-pressed={selected}
+                className={cn('lib-row', selected && 'is-selected')}
               >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  {(() => {
-                    const Icon = CATEGORY_ICONS[d.category] ?? Cpu
-                    return (
-                      <div className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[color:var(--surface-2)]',
-                        selected ? 'text-[color:var(--accent)]' : 'text-[color:var(--muted)]',
-                      )}>
-                        <Icon size={15} />
-                      </div>
-                    )
-                  })()}
-                  <div className="min-w-0">
-                    <div className="truncate text-sm">{d.name}</div>
-                    <div className="truncate text-xs text-[color:var(--muted)]">
-                      {d.brand} · {CATEGORY_LABELS[d.category]}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {d.price && <span className="font-mono text-xs text-[color:var(--muted)]">€{d.price}</span>}
-                  {selected && <CheckCircle2 size={14} className="text-[color:var(--accent)]" />}
-                </div>
+                {(() => {
+                  const Icon = CATEGORY_ICONS[d.category] ?? Cpu
+                  return <span className="lib-thumb"><Icon size={15} /></span>
+                })()}
+                <span className="min-w-0 flex-1">
+                  <span className="lib-name block">{d.name}</span>
+                  <span className="lib-meta block">{d.brand} · {CATEGORY_LABELS[d.category]}</span>
+                </span>
+                {d.price && <span className="lib-price">€{d.price}</span>}
+                {selected && <CheckCircle2 size={14} className="shrink-0 text-[color:var(--accent-bright)]" />}
               </button>
             )
           })}
         </div>
         {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-            <div className="w-14 h-14 rounded-full border-2 border-dashed border-[color:var(--border)] flex items-center justify-center mb-3 text-[color:var(--muted)]">
-              <Search size={22} />
-            </div>
-            <div className="text-sm font-medium text-[color:var(--fg)] mb-1">Nichts gefunden</div>
-            <div className="text-xs text-[color:var(--muted)] max-w-[240px] leading-relaxed">
+          <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
+            <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--fill-quiet)] text-[color:var(--muted)]">
+              <Search size={19} />
+            </span>
+            <div className="mb-1 text-sm font-medium text-[color:var(--fg)]">Nichts gefunden</div>
+            <div className="max-w-[220px] text-xs leading-relaxed text-[color:var(--muted)]">
               Versuche andere Suchbegriffe oder setze die Filter zurück.
             </div>
           </div>

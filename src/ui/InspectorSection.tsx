@@ -33,12 +33,9 @@ export function InspectorSection({
   const expanded = isStatic ? true : open
 
   return (
-    <section className={cn('border-b border-[color:var(--border)] last:border-b-0', className)}>
+    <section className={cn('border-b border-[color:var(--hairline-soft)] last:border-b-0', className)}>
       <header
-        className={cn(
-          'flex items-center justify-between gap-2 px-3 py-2.5 select-none',
-          !isStatic && 'cursor-pointer hover:bg-[color:var(--surface-2)]',
-        )}
+        className={cn('inspector-head', !isStatic && 'is-clickable')}
         onClick={isStatic ? undefined : () => setOpen((o) => !o)}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -49,8 +46,8 @@ export function InspectorSection({
               style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}
             />
           )}
-          {icon && <span className="text-[color:var(--muted)] shrink-0">{icon}</span>}
-          <span className="label-xs truncate">{title}</span>
+          {icon && <span className="shrink-0 text-[color:var(--muted)]">{icon}</span>}
+          <span className="inspector-title truncate">{title}</span>
         </div>
         {trailing && <div className="shrink-0">{trailing}</div>}
       </header>
