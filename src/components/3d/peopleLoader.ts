@@ -1,5 +1,4 @@
-import { GLTF } from 'three/examples/jsm/loaders/GLTFLoader';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 let _gltf: GLTF | null = null;
 let _loading: Promise<void> | null = null;

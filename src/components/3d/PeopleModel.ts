@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 /**
  * Clone a loaded people GLTF into a standalone THREE.Group suitable for
@@ -16,13 +16,9 @@ export function instantiatePersonFromGltf(gltf: GLTF): THREE.Group {
       const m = o as THREE.Mesh
       m.castShadow = true
       m.receiveShadow = true
-      // Ensure the material is standard-ish so it responds to env lighting
-      try {
-        // Some GLBs use non-serialisable material shapes; leave as-is if not.
-        if (m.material && (m.material as any).isMeshStandardMaterial === undefined) {
-          // no-op: preserve author materials for faithful look
-        }
-      } catch {}
+      // Materials are deliberately left untouched: a GLB's authored material
+      // is the faithful look, and non-standard material shapes still respond
+      // to the scene's environment map.
     }
   })
 

@@ -16,7 +16,7 @@ import * as THREE from 'three'
 import type { Floor, Point } from '@/types'
 import { DEVICES } from '@/data/devices'
 import { RESIDENT_DOORS, clearResidentDoors } from './residentsBus'
-import { loadPeopleGltf, getPeopleGltf } from './peopleLoader'
+import { getPeopleGltf } from './peopleLoader'
 import { instantiatePersonFromGltf } from './PeopleModel'
 
 const M = (cm: number) => cm / 100
