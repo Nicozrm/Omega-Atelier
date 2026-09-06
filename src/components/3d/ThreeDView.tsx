@@ -38,12 +38,11 @@ import { ShadowController, requestShadowRefresh } from './ShadowController'
 import { SkyEnvironment, type EnvPreset } from './SkyEnvironment'
 import { SkyDome } from './SkyDome'
 import { Precipitation } from './Precipitation'
-import { PRECIP_LABEL, seasonalPrecip, type Precip } from '@/lib/precipitation'
-import { seasonFromDate } from '@/lib/season'
+import { PRECIP_LABEL, type Precip } from '@/lib/precipitation'
 import { WorldAround } from './WorldAround'
 import { PostFX } from './PostFX'
 import { AdaptiveQuality } from './AdaptiveQuality'
-import { SegmentedControl } from '@/ui'
+import { Badge, Menu, SegmentedControl, Tooltip } from '@/ui'
 import { QualityMenu } from './QualityMenu'
 import { cameraFocus } from './cameraFocusBus'
 import type { CategoryLookup } from '@/lib/lighting'
@@ -75,8 +74,7 @@ import { canopyGeometry } from '@/lib/render/canopy'
 import { eavesDrop, gableSlope, hipRoofGeometry } from '@/lib/render/roofGeometry'
 import {
   X, Camera, Sun, Moon, Eye, Footprints, Palette, Box, Boxes, LayoutGrid, Square,
-  ImageDown, Maximize2, Home, Users, Clapperboard, CircleDot, Layers, Lock, Aperture,
-  CloudRain, Snowflake,
+  ImageDown, Maximize2, Clapperboard, CircleDot, SlidersHorizontal,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { computeFloorStack } from '@/lib/floorStack'
@@ -6766,9 +6764,15 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
   // imposing rain on someone's living room would be a costume, not information.
   // The first press picks what the season would actually bring.
   const [precip, setPrecip] = useState<Precip>('none')
-  const cyclePrecip = () => setPrecip((p) =>
-    p === 'none' ? seasonalPrecip(seasonFromDate(new Date().getMonth() + 1))
-      : p === 'rain' ? 'snow' : 'none')
+
+  /**
+   * Does the scene menu currently hold anything other than its defaults?
+   *
+   * The trigger has to answer that, because the six switches behind it are no
+   * longer visible: without it, turning on snow and the floor stack would leave
+   * the rail looking exactly as it does with everything off.
+   */
+  const sceneOptionsOn = showHouse || stackView || !photoLook || precip !== 'none' || residents > 0
   const [residentStatus, setResidentStatus] = useState<ResidentStatus | null>(null)
   const compassNeedleRef = useRef<HTMLDivElement | null>(null)
   // Cinematic camera: every move is an eased AAA-style flight (presets, room
@@ -7276,127 +7280,136 @@ export function ThreeDView({ onClose, embedded = false, preview = false }: {
         </div>
         )}
 
-        {/* Camera preset + capture toolbar — the pro-tool viewport controls
-            (Twinmotion/Forma feel). Presets fly the camera smoothly; capture
-            grabs the composed frame; fullscreen expands the viewport. */}
+        {/*
+          Viewport rail — three clusters, not eleven glyphs in a line.
+
+          It used to stack every viewport control into one undifferentiated
+          column: four mutually-exclusive camera presets, six independent scene
+          toggles (house, floor stack, weather, façade studio, photo look,
+          residents), the quality menu and two actions — all the same size, all
+          the same spacing, none of them named except by an OS tooltip. Nothing
+          in the column said which of them were a choice, which were switches,
+          and which would do something irreversible.
+
+          What stays visible is what you reach for while composing a shot: the
+          four viewpoints (one cluster, one lit pill), and the two things you do
+          with the result. Everything that configures the *scene* moved into one
+          named menu, where a row can say "Etagen-Stack · Pro" and a weather
+          option can show which of three states is on — neither of which a glyph
+          that cycles on click can express at all.
+        */}
         {!preview && (
-        <div className="absolute right-2 sm:right-4 top-20 z-10 flex flex-col items-center gap-1 p-1 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg">
-          {!walkMode && ([
-            ['persp', Box], ['corner', Boxes], ['top', LayoutGrid], ['front', Square],
-          ] as Array<[CamPreset, typeof Box]>).map(([preset, Icon]) => (
-            <button
-              key={preset}
-              onClick={() => goPreset(preset)}
-              title={CAM_PRESET_LABEL[preset]}
-              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                activePreset === preset ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-              }`}
-            >
-              <Icon size={15} />
-            </button>
-          ))}
+        <div className="hud-rail absolute right-2 top-20 z-10 sm:right-4">
           {!walkMode && (
-            <button
-              onClick={() => setShowHouse((v) => !v)}
-              title={showHouse ? 'Eigenes Haus ausblenden (Puppenhaus)' : 'Eigenes Haus einblenden (Klinker-Außenansicht)'}
-              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                showHouse ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-              }`}
-            >
-              <Home size={15} />
-            </button>
-          )}
-          {!walkMode && (
-            <button
-              onClick={() => { if (!canStack) { navigate('/#preise'); return } setStackView((v) => !v) }}
-              title={!canStack ? 'Etagen-Stack — ab Pro' : stackView ? 'Etagen-Stack ausblenden' : 'Etagen-Stack: alle Stockwerke übereinander'}
-              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                stackView ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-              }`}
-            >
-              {canStack ? <Layers size={15} /> : <Lock size={15} />}
-            </button>
-          )}
-          {/* Wetter — aus · Regen · Schnee. Der erste Druck nimmt, was die
-              Jahreszeit ohnehin brächte. */}
-          <button
-            onClick={cyclePrecip}
-            title={`Wetter: ${PRECIP_LABEL[precip]}${precip === 'none' ? ' — klicken für Niederschlag' : ''}`}
-            className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-              precip !== 'none' ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-            }`}
-          >
-            {precip === 'snow' ? <Snowflake size={15} /> : <CloudRain size={15} />}
-          </button>
-          {/* Bau-Studio — construction · stone colour · roof shape · roof colour */}
-          {!walkMode && showHouse && (
-            <div className="relative">
-              <button
-                onClick={() => { if (canFacade) setStudioOpen((v) => !v); else navigate('/#preise') }}
-                title={canFacade ? 'Bau-Studio: Fassade, Dach & Farben' : 'Bau-Studio — ab Max'}
-                className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                  studioOpen ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-                }`}
-              >
-                {canFacade ? <Palette size={15} /> : <Lock size={15} />}
-              </button>
-              {canFacade && studioOpen && (
-                <div className="absolute right-full top-0 z-30 mr-2 w-56 origin-top-right animate-scale-in space-y-2.5 rounded-xl border border-[color:var(--border)] bg-[color:var(--glass-bg)] p-3 shadow-xl backdrop-blur-xl">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--muted)]">Bau-Studio</div>
-                  <BauRow label="Bauart" options={FACADE_KINDS} active={houseStyle.facade} onPick={(id) => patchHouseStyle({ facade: id as HouseStyle['facade'] })} shape="chip" />
-                  <BauRow label="Steinfarbe" options={STONE_COLORS} active={STONE_COLORS.find((o) => o.swatch === houseStyle.facadeTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ facadeTint: STONE_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
-                  <BauRow label="Dachform" options={ROOF_KINDS} active={houseStyle.roof} onPick={(id) => patchHouseStyle({ roof: id as HouseStyle['roof'] })} shape="chip" />
-                  <BauRow label="Dachfarbe" options={ROOF_COLORS} active={ROOF_COLORS.find((o) => o.swatch === houseStyle.roofTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ roofTint: ROOF_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
-                  <button onClick={() => patchHouseStyle(DEFAULT_HOUSE_STYLE)} className="w-full rounded-md border border-[color:var(--border)] py-1 text-[11px] text-[color:var(--muted)] transition-colors hover:text-[color:var(--fg)]">Zurücksetzen</button>
-                </div>
-              )}
+            <div className="hud-cluster">
+              {([
+                ['persp', Box], ['corner', Boxes], ['top', LayoutGrid], ['front', Square],
+              ] as Array<[CamPreset, typeof Box]>).map(([preset, Icon]) => (
+                <Tooltip key={preset} label={CAM_PRESET_LABEL[preset]} side="left">
+                  <button
+                    onClick={() => goPreset(preset)}
+                    aria-label={CAM_PRESET_LABEL[preset]}
+                    aria-pressed={activePreset === preset}
+                    className={`hud-btn ${activePreset === preset ? 'is-on' : ''}`}
+                  >
+                    <Icon size={15} />
+                  </button>
+                </Tooltip>
+              ))}
             </div>
           )}
-          {/* Foto-Look — opt-in AgX tone mapping for maximum photorealism */}
-          {!walkMode && (
-            <button
-              onClick={() => setPhotoLook((v) => !v)}
-              title={photoLook ? 'Foto-Look aus (Brillant/ACES)' : 'Foto-Look an (AgX — natürlicher Kontrast)'}
-              className={`flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                photoLook ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-              }`}
-            >
-              <Aperture size={15} />
-            </button>
-          )}
-          {!walkMode && (
-            <button
-              onClick={() => setResidents((v) => (v + 1) % 3)}
-              title={residents === 0 ? 'Virtuelle Bewohner einblenden' : residents === 1 ? 'Zweiten Bewohner hinzufügen' : 'Bewohner ausblenden'}
-              className={`relative flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg transition-colors ${
-                residents > 0 ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)]'
-              }`}
-            >
-              <Users size={15} />
-              {residents > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[color:var(--bg)] text-[8px] font-semibold text-[color:var(--accent)] ring-1 ring-[color:var(--accent)]">
-                  {residents}
-                </span>
+
+          <div className="hud-cluster">
+            <Menu
+              align="end"
+              minWidth={252}
+              trigger={({ ref, ...props }) => (
+                <button
+                  ref={ref}
+                  {...props}
+                  aria-label="Szene-Optionen"
+                  title="Szene"
+                  className={`hud-btn ${sceneOptionsOn ? 'is-on' : ''}`}
+                >
+                  <SlidersHorizontal size={15} />
+                </button>
               )}
-            </button>
+            >
+              {!walkMode && (
+                <Menu.Section title="Szene">
+                  <Menu.Item checked={showHouse} onSelect={() => setShowHouse((v) => !v)}>
+                    Eigenes Haus
+                  </Menu.Item>
+                  <Menu.Item
+                    checked={stackView}
+                    trailing={canStack ? undefined : <Badge tone="accent">Pro</Badge>}
+                    onSelect={() => { if (!canStack) { navigate('/#preise'); return } setStackView((v) => !v) }}
+                  >
+                    Etagen-Stack
+                  </Menu.Item>
+                  <Menu.Item checked={photoLook} description="AgX — natürlicher Kontrast" onSelect={() => setPhotoLook((v) => !v)}>
+                    Foto-Look
+                  </Menu.Item>
+                  {showHouse && (
+                    <Menu.Item
+                      icon={<Palette size={15} />}
+                      trailing={canFacade ? undefined : <Badge tone="cyan">Max</Badge>}
+                      onSelect={() => { if (canFacade) setStudioOpen((v) => !v); else navigate('/#preise') }}
+                    >
+                      Bau-Studio …
+                    </Menu.Item>
+                  )}
+                </Menu.Section>
+              )}
+
+              <Menu.Section title="Wetter">
+                {(['none', 'rain', 'snow'] as Precip[]).map((p) => (
+                  <Menu.Item key={p} checked={precip === p} onSelect={() => setPrecip(p)}>
+                    {PRECIP_LABEL[p]}
+                  </Menu.Item>
+                ))}
+              </Menu.Section>
+
+              {!walkMode && (
+                <Menu.Section title="Bewohner">
+                  {[0, 1, 2].map((n) => (
+                    <Menu.Item key={n} checked={residents === n} onSelect={() => setResidents(n)}>
+                      {n === 0 ? 'Keine' : n === 1 ? 'Eine Person' : 'Zwei Personen'}
+                    </Menu.Item>
+                  ))}
+                </Menu.Section>
+              )}
+            </Menu>
+
+            {/* Render-Qualität — GPU-erkanntes Profil, live überschreibbar. */}
+            <QualityMenu />
+          </div>
+
+          <div className="hud-cluster">
+            <Tooltip label="Screenshot speichern" side="left">
+              <button onClick={() => captureRef.current?.()} aria-label="Screenshot speichern" className="hud-btn">
+                <ImageDown size={15} />
+              </button>
+            </Tooltip>
+            <Tooltip label="Vollbild" side="left">
+              <button onClick={toggleFullscreen} aria-label="Vollbild" className="hud-btn">
+                <Maximize2 size={15} />
+              </button>
+            </Tooltip>
+          </div>
+
+          {/* Bau-Studio — anchored to the rail rather than to a button, so the
+              row that opens it can live inside the menu. */}
+          {!walkMode && showHouse && canFacade && studioOpen && (
+            <div className="glass-hud absolute right-full top-0 z-30 mr-2 w-56 origin-top-right animate-scale-in space-y-2.5 p-3">
+              <div className="inspector-title">Bau-Studio</div>
+              <BauRow label="Bauart" options={FACADE_KINDS} active={houseStyle.facade} onPick={(id) => patchHouseStyle({ facade: id as HouseStyle['facade'] })} shape="chip" />
+              <BauRow label="Steinfarbe" options={STONE_COLORS} active={STONE_COLORS.find((o) => o.swatch === houseStyle.facadeTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ facadeTint: STONE_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
+              <BauRow label="Dachform" options={ROOF_KINDS} active={houseStyle.roof} onPick={(id) => patchHouseStyle({ roof: id as HouseStyle['roof'] })} shape="chip" />
+              <BauRow label="Dachfarbe" options={ROOF_COLORS} active={ROOF_COLORS.find((o) => o.swatch === houseStyle.roofTint)?.id ?? ''} onPick={(id) => patchHouseStyle({ roofTint: ROOF_COLORS.find((o) => o.id === id)!.swatch })} shape="dot" />
+              <button onClick={() => patchHouseStyle(DEFAULT_HOUSE_STYLE)} className="w-full rounded-md border border-[color:var(--hairline)] py-1 text-[11px] text-[color:var(--muted)] transition-colors hover:text-[color:var(--fg)]">Zurücksetzen</button>
+            </div>
           )}
-          {/* Render-Qualität — GPU-erkanntes Profil, live überschreibbar. */}
-          <QualityMenu />
-          {!walkMode && <div className="my-0.5 h-px w-6 bg-[color:var(--border)]" />}
-          <button
-            onClick={() => captureRef.current?.()}
-            title="Screenshot speichern"
-            className="flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
-          >
-            <ImageDown size={15} />
-          </button>
-          <button
-            onClick={toggleFullscreen}
-            title="Vollbild"
-            className="flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-lg text-[color:var(--muted)] hover:text-[color:var(--fg)] hover:bg-[color:var(--surface-2)] transition-colors"
-          >
-            <Maximize2 size={15} />
-          </button>
         </div>
         )}
 
