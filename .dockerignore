@@ -1,0 +1,16 @@
+.git
+  .github
+  node_modules
+  dist
+  dist-macos
+  macOS
+  coverage
+  *.log
+  .env
+  .env.*
+  !.env.example
+  .DS_Store
+  .codex
+  .impeccable
+  docs
+  *.md

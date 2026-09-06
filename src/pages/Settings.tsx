@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Sun, Moon, Palette, SlidersHorizontal, LifeBuoy, Info, Volume2, VolumeX, Sparkles } from 'lucide-react'
 import { useUIStore } from '@/store/useUIStore'
 import { usePlanStore } from '@/store/usePlanStore'
+import { useTier } from '@/hooks/useTier'
+import { SubscriptionCard } from '@/components/checkout/SubscriptionCard'
 import { isSoundEnabled, setSoundEnabled, play as playSound } from '@/lib/sound'
 import { isCinematicEnabled, setCinematicEnabled, cinematicReact } from '@/lib/cinematic'
 
@@ -15,6 +17,7 @@ export function SettingsPage() {
 
   const doc = usePlanStore((s) => s.doc)
   const updateDoc = usePlanStore((s) => s.updateDoc)
+  const { tier, admin } = useTier()
 
   return (
     <div className="omega-noise omega-scroll h-screen overflow-y-auto">
@@ -24,6 +27,13 @@ export function SettingsPage() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+        {/*
+          Ganz oben, und das ist Absicht: § 312k BGB verlangt, dass die
+          Kündigung eines online geschlossenen Dauervertrags ohne Suchen
+          erreichbar ist. Unter „Sonstiges" wäre sie das nicht.
+        */}
+        <SubscriptionCard tier={tier} admin={admin} />
+
         <section className="surface space-y-3 p-4">
           <div className="flex items-center gap-2">
             <Palette size={15} className="icon-optical text-[color:var(--accent)]" />

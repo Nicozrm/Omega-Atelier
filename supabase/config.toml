@@ -81,3 +81,23 @@ secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
 # sie aufruft, muss seine eigenen Hersteller-Zugangsdaten mitschicken.
 [functions.vendor-relay]
 verify_jwt = false
+
+# `billing-checkout` nimmt Bestellungen entgegen und arbeitet mit der
+# Service-Rolle. Hier ist die JWT-Prüfung genau richtig — ein Abo ohne Konto
+# gäbe es nicht, und die Function soll gar nicht erst anfangen zu rechnen,
+# wenn niemand angemeldet ist. Der Default (true) ist gewollt und steht hier
+# nur, damit niemand ihn versehentlich für „vergessen" hält.
+[functions.billing-checkout]
+verify_jwt = true
+
+# `billing-webhook` MUSS ohne JWT-Prüfung laufen: Stripe schickt keinen
+# Supabase-Token, sondern eine eigene HMAC-Signatur im Header
+# `Stripe-Signature`. Mit verify_jwt = true antwortet die Plattform jedem
+# Webhook mit 401, das Abo wird nie freigeschaltet, und im Stripe-Dashboard
+# stapeln sich Fehlversuche.
+#
+# Ungeschützt ist der Endpunkt deswegen nicht: die Function prüft die Signatur
+# selbst (zeitkonstant, mit Zeitstempel gegen Replays) und schreibt vor dieser
+# Prüfung nichts.
+[functions.billing-webhook]
+verify_jwt = false

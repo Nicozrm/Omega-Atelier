@@ -23,10 +23,24 @@ describe('hasFeature', () => {
 })
 
 describe('resolveTier', () => {
-  it('gives everyone free', () => {
+  it('gives everyone free without a server claim', () => {
     expect(resolveTier(null)).toBe('free')
     expect(resolveTier('someone@example.com')).toBe('free')
     expect(resolveTier('')).toBe('free')
+  })
+
+  it('honours the tier the server claims', () => {
+    // Der Anspruch kommt aus `public.current_tier()`, das ausschliesslich
+    // `subscriptions` liest — eine Tabelle ohne INSERT-Recht für Clients.
+    expect(resolveTier('someone@example.com', 'pro')).toBe('pro')
+    expect(resolveTier('someone@example.com', 'max')).toBe('max')
+  })
+
+  it('treats "no answer yet" as free, never as paid', () => {
+    // `null` heisst „der Server hat noch nichts gesagt". Nach oben aufzulösen
+    // hiesse, dass ein Netzfehler bezahlte Funktionen verschenkt.
+    expect(resolveTier('someone@example.com', null)).toBe('free')
+    expect(resolveTier('someone@example.com', undefined)).toBe('free')
   })
 
   it('gives the product owner max, in any casing', () => {
@@ -43,6 +57,14 @@ describe('resolveTier', () => {
       expect(resolveTier(null)).toBe('free')
       expect(resolveTier('someone@example.com')).toBe('free')
     }
+  })
+
+  it('still ignores localStorage once a server claim exists', () => {
+    // Der gespeicherte Klick darf den Server-Anspruch weder heben noch senken.
+    localStorage.setItem('omega.tier', 'max')
+    expect(resolveTier('someone@example.com', 'pro')).toBe('pro')
+    localStorage.setItem('omega.tier', 'free')
+    expect(resolveTier('someone@example.com', 'max')).toBe('max')
   })
 
   it('is not lowered for the owner by a stored choice either', () => {

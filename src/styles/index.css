@@ -1739,3 +1739,282 @@ html.q-low .bloom, html.q-off .bloom { filter: none; }
   }
   .tabbar-item[aria-selected="true"] .tabbar-icon { background: var(--fill-active); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHECKOUT — die Kasse
+   ═══════════════════════════════════════════════════════════════════════
+
+   Eine eigene Massstabsebene, und das ist Absicht. Der Rest der App ist ein
+   Werkzeug: dort kämpfen Panels, Inspektor und Canvas um jeden Pixel, und
+   0.88rem in einem 32px hohen Feld ist die richtige Antwort darauf.
+
+   Die Kasse ist das Gegenteil. Hier steht eine Person mit ihrer Kartennummer
+   vor einem Formular und trifft eine Entscheidung über Geld. Enge liest sich
+   hier nicht als Dichte, sondern als Gedränge — und Gedränge an der Kasse
+   kostet Abschlüsse. Deshalb: 48px hohe Felder (auch der Daumen auf dem
+   Telefon trifft sie), 1rem Schriftgrösse (unter 16px zoomt iOS beim
+   Fokussieren ungefragt die ganze Seite), grosszügige Abstände, und Fokus, den
+   man aus zwei Metern Entfernung sieht.
+   ─────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* ── Feld ──────────────────────────────────────────────────────────── */
+  .co-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .co-label {
+    font-size: 0.8125rem;
+    font-weight: 550;
+    letter-spacing: -0.005em;
+    color: var(--muted-strong);
+  }
+
+  .co-input,
+  .co-select {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.75rem 0.875rem;
+    /* Nicht kleiner als 16px: darunter zoomt Safari auf iOS beim Fokus die
+       Seite heran, und der Kunde tippt seine IBAN in ein verschobenes
+       Layout. */
+    font-size: 1rem;
+    font-family: inherit;
+    line-height: 1.35;
+    color: var(--fg);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    transition:
+      border-color var(--dur-1) var(--ease-out-quart),
+      background-color var(--dur-1) var(--ease-out-quart),
+      box-shadow var(--dur-2) var(--ease-out-quart);
+  }
+
+  .co-input::placeholder { color: var(--muted); opacity: 0.75; }
+
+  .co-input:hover:not(:disabled),
+  .co-select:hover:not(:disabled) { border-color: var(--border-accent); }
+
+  .co-input:focus-visible,
+  .co-select:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+
+  /* Der Fehler steht am Feld und färbt es — aber nicht allein: die Meldung
+     darunter trägt die Aussage, damit auch ohne Farbwahrnehmung klar ist,
+     was gemeint ist. */
+  .co-input[aria-invalid="true"],
+  .co-select[aria-invalid="true"] {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 7%, var(--surface-2));
+  }
+  .co-input[aria-invalid="true"]:focus-visible,
+  .co-select[aria-invalid="true"]:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 26%, transparent);
+  }
+
+  .co-input:disabled,
+  .co-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .co-select {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 10 6' fill='none' stroke='%23928B7C' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.25 5 4.75 9 1.25'/%3E%3C/svg%3E");
+    background-position: right 0.9rem center;
+    background-size: 12px 7px;
+    background-repeat: no-repeat;
+  }
+
+  .co-hint  { font-size: 0.78125rem; line-height: 1.4; color: var(--muted); }
+  .co-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    font-size: 0.78125rem;
+    line-height: 1.4;
+    color: var(--danger);
+  }
+
+  /* ── Auswahlkachel (Tarif, Zahlungsart, Intervall) ─────────────────── */
+  .co-tile {
+    position: relative;
+    display: flex;
+    width: 100%;
+    text-align: left;
+    gap: 0.875rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition:
+      border-color var(--dur-1) var(--ease-out-quart),
+      background-color var(--dur-1) var(--ease-out-quart),
+      transform var(--spring-pop-ms) var(--spring-pop),
+      box-shadow var(--dur-2) var(--ease-out-quart);
+  }
+  .co-tile:hover:not(:disabled) {
+    border-color: var(--border-accent);
+    background: var(--surface-2);
+    transform: translateY(-1px);
+  }
+  .co-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* Ausgewählt wird über drei Signale gleichzeitig markiert — Rahmen, Fläche
+     und der Haken im Radio-Punkt. Eines allein wäre entweder nur Farbe (für
+     Rot-Grün-Schwäche unsichtbar) oder nur Form (im Augenwinkel zu leise). */
+  .co-tile[aria-checked="true"],
+  .co-tile[data-selected="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    box-shadow: 0 0 0 1px var(--accent), 0 8px 24px -12px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  .co-tile:disabled,
+  .co-tile[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.55;
+    background: var(--surface);
+  }
+  .co-tile:disabled:hover,
+  .co-tile[aria-disabled="true"]:hover {
+    transform: none;
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+
+  /* Der Radio-/Check-Punkt links oder rechts in der Kachel. */
+  .co-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 999px;
+    color: var(--accent-contrast);
+    transition: background-color var(--dur-1) var(--ease-out-quart), border-color var(--dur-1) var(--ease-out-quart);
+  }
+  .co-tile[aria-checked="true"] .co-dot,
+  .co-tile[data-selected="true"] .co-dot {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ── Kontrollkästchen mit Text daneben ─────────────────────────────── */
+  .co-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color var(--dur-1) var(--ease-out-quart), background-color var(--dur-1) var(--ease-out-quart);
+  }
+  .co-check:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .co-check:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .co-check input[type="checkbox"] {
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.1rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* ── Schrittleiste ─────────────────────────────────────────────────── */
+  .co-step {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.25rem;
+    background: none;
+    border: 0;
+    font: inherit;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease-out-quart);
+  }
+  .co-step:disabled { cursor: default; }
+  .co-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+  .co-step[aria-current="step"] { color: var(--fg-strong); }
+  .co-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    border: 1.5px solid var(--border-strong);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: background-color var(--dur-2) var(--ease-out-quart), border-color var(--dur-2) var(--ease-out-quart), color var(--dur-2) var(--ease-out-quart);
+  }
+  .co-step[aria-current="step"] .co-step-num {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .co-step[data-done="true"] .co-step-num {
+    border-color: var(--accent);
+    color: var(--accent-bright);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  /* ── Zusammenfassung ───────────────────────────────────────────────── */
+  .co-summary {
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.35);
+    backdrop-filter: blur(16px) saturate(1.35);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-2xl);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.18),
+      0 16px 40px -20px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+  .co-summary-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.875rem;
+  }
+
+  /* Beträge immer mit Tabellenziffern: sonst tanzen die Spalten, sobald sich
+     eine 1 in eine 8 verwandelt. */
+  .co-amount { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+  /* ── Vertrauenszeile ───────────────────────────────────────────────── */
+  .co-trust {
+    display: flex;
+    align-items: center;
+    gap: 0.4375rem;
+    font-size: 0.78125rem;
+    color: var(--muted);
+  }
+
+  /* ── Bewegung ──────────────────────────────────────────────────────── */
+  /* Ein Schrittwechsel darf sich bewegen — aber nur ein bisschen, und nie
+     gegen den Wunsch des Betriebssystems (globale prefers-reduced-motion-Regel
+     weiter oben schaltet alle Animationen ab). */
+  @keyframes co-step-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .co-step-body { animation: co-step-in var(--dur-3) var(--ease-out-quart) both; }
+}
