@@ -7,7 +7,7 @@
 > erfinden.
 >
 > **Quelle der Wahrheit.** Jede Aussage hier ist aus dem tatsächlichen Code und
-> den Repo-Dokumenten von `Nicozrm/omega-atelier` abgeleitet (Stand: siehe
+> den Repo-Dokumenten von `Nicozrm/Omega-Atelier` abgeleitet (Stand: siehe
 > letzte Zeile des Dokuments). Wo etwas *nicht* aus dem Code belegbar ist, steht
 > es ausdrücklich als „unbestätigt" markiert. Der Assistent darf unbestätigte
 > Punkte nicht als Tatsache verkaufen.
@@ -1872,14 +1872,33 @@ Gelöscht wird, soweit keine gesetzlichen Aufbewahrungspflichten entgegenstehen.
 - **Qualitätsschranken vor jedem Deploy:** ESLint mit **0 erlaubten
   Warnungen**, strikter TypeScript-Typecheck, Unit-Tests, Build-Verifikation
 - **Hosting:** GitHub Pages, automatisch deployt bei jedem Stand auf `main`
-- **Repository:** `Nicozrm/omega-atelier`
+- **Repository:** `Nicozrm/Omega-Atelier`
 
-> **Achtung bei der Live-Adresse:** Die App wird als GitHub-Pages-Projektseite
-> nach dem Muster `https://<konto>.github.io/<repo>/` ausgeliefert. Die im Repo
-> hinterlegte Adresse kann veraltet sein. **Der Assistent sagt am Telefon keine
-> URL aus dem Gedächtnis** — er bietet an, den Link per E-Mail oder SMS
-> schicken zu lassen, oder verweist auf die vom Anrufer bereits genutzte
-> Adresse. Eine falsch buchstabierte URL ist am Telefon besonders ärgerlich.
+### Die Live-Adresse
+
+```
+https://nicozrm.github.io/Omega-Atelier/
+```
+
+Verifiziert am 5. September 2026: HTTP 200, ausgeliefert wird die echte App
+(`<title>OMEGA Atelier 2.0</title>`, Base-Pfad `/Omega-Atelier/`, PWA-Manifest
+erreichbar).
+
+**Groß- und Kleinschreibung ist entscheidend.** GitHub Pages unterscheidet sie
+im Pfad: `Omega-Atelier` mit zwei Großbuchstaben und Bindestrich ist richtig,
+`omega-atelier` klein liefert 404.
+
+**Wie der Assistent sie am Telefon nennt.** Buchstabierend, in Blöcken, und
+danach einmal wiederholen lassen:
+
+> „Die Adresse ist: nicozrm — n wie Nordpol, i, c, o, z, r, m — punkt github
+> punkt i-o, Schrägstrich, Omega Bindestrich Atelier, großes O, großes A.
+> Soll ich sie dir lieber per SMS oder Mail schicken? Am Telefon vertippt man
+> sich schnell."
+
+**Der Link per Nachricht ist immer die bessere Option** — anbieten, bevor
+buchstabiert wird. Eine falsch notierte URL kostet den Anrufer mehr Zeit als
+das Nachfragen.
 
 ### Warum die Architektur so gebaut ist (Kurzfassung für Fachfragen)
 
@@ -1983,6 +2002,15 @@ Assistent darf sie kürzen, aber nicht inhaltlich verändern.
 **4. Wie fange ich an?**
 > „Du öffnest die Seite und klickst auf Demo-Wohnung oder Neuer Plan. Kein
 > Konto, keine Anmeldung, kein Download. Fünf Minuten reichen für ein Gefühl."
+
+**4b. Wo finde ich die App? / Wie ist die Adresse?**
+> „Soll ich dir den Link schicken? Dann vertippst du dich nicht. Sonst
+> buchstabiere ich ihn dir gern: nicozrm punkt github punkt i-o, Schrägstrich,
+> Omega Bindestrich Atelier."
+
+Die vollständige Adresse und wie sie am Telefon gesprochen wird, steht in
+Kapitel 17. Wichtig: `Omega-Atelier` groß geschrieben mit Bindestrich —
+klein geschrieben führt die Adresse ins Leere.
 
 **5. Muss ich zeichnen können?**
 > „Nein. Du klickst Wände hin, alles rastet auf ein Raster ein. Und wenn dir
@@ -2709,8 +2737,9 @@ Sofort und ohne Widerstand:
 **Zahlen und Adressen am Telefon:**
 - Preise ausgesprochen: „neun Euro im Monat", nicht „9 €/Mon."
 - E-Mail-Adressen **buchstabieren** und wiederholen lassen.
-- URLs **nicht aus dem Gedächtnis diktieren** — anbieten, sie per E-Mail oder
-  SMS zu schicken (siehe Kapitel 17).
+- Die **Live-Adresse** steht verifiziert in Kapitel 17 und darf genannt werden
+  — aber erst den Versand per SMS/Mail anbieten, dann buchstabieren. Auf die
+  Groß-/Kleinschreibung achten: `Omega-Atelier`, nicht `omega-atelier`.
 - Telefonnummern in Zweiergruppen sprechen und einmal wiederholen.
 
 ### 21.5 Sätze, die immer funktionieren
@@ -2756,5 +2785,5 @@ Assistent sich blind darauf verlassen kann.
 ---
 
 <sub>Wissensbasis für den KI-Telefonassistenten von OMEGA Atelier ·
-abgeleitet aus dem Stand des Repositorys `Nicozrm/omega-atelier` ·
+abgeleitet aus dem Stand des Repositorys `Nicozrm/Omega-Atelier` ·
 erstellt am 5. September 2026</sub>
