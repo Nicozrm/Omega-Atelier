@@ -149,7 +149,7 @@ Wenn der Assistent nur eine Seite dieses Dokuments im Kopf hätte, wäre es dies
 | 2 | Sie verbindet **drei Dinge in einem Werkzeug**: Grundriss planen (2D), fotoreal ansehen (3D) und echte Smart-Home-Geräte steuern (Digital Twin). |
 | 3 | Man kann **sofort und kostenlos loslegen — ohne Konto**. Pläne liegen dann nur lokal im Browser. |
 | 4 | Es gibt **drei Tarife: Free (0 €), Pro (9 €/Monat), Max (19 €/Monat)**. |
-| 5 | **Wichtig und ehrlich:** Es gibt aktuell **keinen automatischen Bezahlvorgang**. Wer Pro oder Max will, meldet sich beim Anbieter. (Details Kapitel 7.) |
+| 5 | Es gibt eine **echte Kasse**: vier Schritte, vier Währungen, über 25 Zahlarten, Monats- oder Jahreszahlung. Jahreszahlung spart zwei Monate. |
 | 6 | Der Gerätekatalog umfasst rund **170 Geräte-Modelle** aus etwa **30 Ökosystemen** und über **90 Möbelstücke**. |
 | 7 | **Live steuerbar** sind heute: Home Assistant, MQTT, Govee Cloud, SwitchBot Cloud, Tuya/Smart Life Cloud und ONVIF-Kameras. |
 | 8 | Alle übrigen Ökosysteme (Hue, IKEA, Aqara, Sonos, Nuki, tado, Alexa, Apple Home …) laufen als **realistische Simulation** — planbar, demonstrierbar, aber nicht physisch schaltend. |
@@ -381,33 +381,115 @@ Alle Preise **zzgl. gesetzlicher Mehrwertsteuer** (§ 4 AGB).
 - **Image Blaster 3D** — aus einem Bild ein 3D-Objekt
 - **Priorität bei neuen Features**
 
-### ⚠️ Die wichtigste Ehrlichkeit im ganzen Dokument
+### Die Kasse — wie man tatsächlich bucht
 
-**Es gibt heute keinen funktionierenden Selbst-Checkout.** Im Code ist das
-ausdrücklich so gebaut:
+> **Hinweis für alle, die eine ältere Fassung dieses Dokuments kennen:** Hier
+> stand einmal, es gebe keinen Selbst-Checkout. Das galt bis zum 5. September
+> 2026 und ist überholt — die Kasse ist gebaut und live.
 
-- Wer auf der Preisseite einen Tarif anklickt, hinterlässt damit nur eine
-  **Absichtsnotiz** im Browser. Das schaltet nichts frei.
-- Die Freischaltung wird **aus dem Konto abgeleitet**, nicht aus dem Klick.
-  Solange keine echte Abrechnung existiert, gilt: **alle Konten sind Free**,
-  ausgenommen das Konto des Produktinhabers.
-- Das war bewusst eine Korrektur: Früher hat der Klick den Tarif tatsächlich
-  freigeschaltet — was bedeutete, dass jeder mit einer Zeile in der
-  Browser-Konsole „Max" hätte haben können. Ein Wert, den der Client selbst
-  schreiben kann, ist keine Berechtigung.
+**Der Weg:** Preisseite → Tarif wählen → `/checkout`. Vier Schritte:
 
-**Was der Assistent daraus am Telefon macht:**
+| Schritt | Was passiert |
+|---|---|
+| **1 · Tarif** | Pro oder Max, monatlich oder jährlich. „Jederzeit wechselbar." |
+| **2 · Kontakt** | Rechnungsanschrift — „nur was auf den Beleg muss". |
+| **3 · Zahlung** | Zahlart wählen |
+| **4 · Prüfen** | AGB bestätigen, sofortige Freischaltung bestätigen, kaufen |
 
-> „Free kannst du sofort nutzen, ohne irgendwas. Pro und Max sind fertig
-> gebaut und in der App sichtbar, aber die automatische Bezahlung ist noch
-> nicht scharf geschaltet — die Freischaltung läuft aktuell direkt über Nico.
-> Wenn du Interesse hast, nehme ich deine Nummer auf und er meldet sich."
+### Preise nach Währung
 
-**Was der Assistent auf keinen Fall sagt:**
-- „Du kannst das im Kundenkonto buchen." (Gibt es nicht.)
-- „Die Abbuchung erfolgt monatlich." (Nicht belegt.)
-- „Es gibt eine 14-tägige Testphase / Geld-zurück-Garantie." (Nicht belegt.)
-- Irgendeine Aussage über Jahresrabatte, Familientarife, Studentenrabatte.
+Die Währung richtet sich nach dem Land des Kunden, sie wird **nicht
+umgerechnet** — jeder Markt hat seinen eigenen, glatten Preis.
+
+| | Pro / Monat | Pro / Jahr | Max / Monat | Max / Jahr |
+|---|---|---|---|---|
+| **Euro** | 9,00 € | 90,00 € | 19,00 € | 190,00 € |
+| **Schweizer Franken** | 9,50 | 95,00 | 19,50 | 195,00 |
+| **Britische Pfund** | 8,00 | 80,00 | 17,00 | 170,00 |
+| **US-Dollar** | 10,00 | 100,00 | 20,00 | 200,00 |
+
+**Die Jahreszahlung kostet das Zehnfache des Monatspreises — also zwei Monate
+geschenkt.** Das ist das beste Argument am Telefon und der Satz, der in der
+Kasse selbst steht: „Jahreszahlung spart zwei Monate."
+
+### Zahlarten
+
+Über 25, gruppiert. Der Assistent zählt **niemals alle auf** — er fragt:
+„Wie zahlst du normalerweise am liebsten?" und bestätigt dann.
+
+| Gruppe | Was dabei ist |
+|---|---|
+| **Wallets** | Apple Pay, Google Pay, PayPal, Link, Revolut Pay, Amazon Pay |
+| **Karte** | Kredit- und Debitkarte |
+| **Bank** | SEPA-Lastschrift, Überweisung |
+| **Später zahlen** | Klarna |
+| **Landestypisch** | iDEAL, Bancontact, EPS, TWINT, Przelewy24, BLIK, MB WAY, Multibanco, Satispay, Swish, MobilePay, Vipps, Alipay, WeChat Pay |
+| **Geschäftlich** | Rechnung, Bestellung / Rahmenvertrag |
+| **Krypto** | über Coinbase Commerce |
+
+Abgewickelt wird über **Stripe** (Irland/USA), **PayPal** (Luxemburg),
+**Mollie** (Niederlande), **Klarna** (Schweden), **Coinbase Commerce** (USA) —
+Rechnung und Überweisung laufen direkt über OMEGA Atelier (Deutschland).
+
+### Mehrwertsteuer
+
+Digitale Leistungen an Verbraucher werden **im Land des Kunden** versteuert
+(One-Stop-Shop). Ein Kunde in Ungarn zahlt 27 %, einer in Luxemburg 17 % — für
+dasselbe Abo. Der Satz hängt also am Wohnsitz, nicht am Sitz des Verkäufers.
+
+**Geschäftskunden mit gültiger USt-IdNr. aus einem anderen EU-Land** zahlen
+0 % (Reverse-Charge, Art. 196 MwStSystRL) und versteuern selbst. **Im Inland
+gilt das nicht** — dort wird ganz normal ausgewiesen.
+
+Die Nummer wird im Formular auf ihr *Format* geprüft; ob sie wirklich
+existiert, bestätigt der Server über den VIES-Dienst der EU, bevor 0 %
+ausgewiesen werden.
+
+### Rabattcodes
+
+Zwei sind im Code hinterlegt: **ATELIER20** (20 % im ersten Jahr, nur bei
+Jahreszahlung) und **TWIN10** (10 %). Weitere können serverseitig dazukommen.
+
+> **Regel:** Der Assistent **bietet von sich aus keinen Code an** und erfindet
+> keine. Fragt jemand nach einem Rabatt, ist die Antwort: „Ich kann dir keinen
+> zusagen — das entscheidet Nico. Soll ich das weitergeben?"
+
+### Widerrufsrecht — der Punkt, der oft Rückfragen erzeugt
+
+Die Kasse verlangt in Schritt 4 **zwei** Häkchen: AGB/Datenschutz **und** die
+ausdrückliche Zustimmung zur sofortigen Freischaltung.
+
+Der Grund ist § 356 Abs. 5 BGB: Wer eine digitale Leistung vor Ablauf der
+vierzehntägigen Widerrufsfrist nutzen will, muss dem ausdrücklich zustimmen.
+Ohne diese Zustimmung würde das Abo erst nach vierzehn Tagen beginnen. Die
+Kasse verlangt sie deshalb, statt sie zu unterstellen.
+
+Am Telefon:
+> „Das zweite Häkchen heißt nur: Du willst sofort loslegen statt vierzehn Tage
+> zu warten. Das ist gesetzlich vorgeschrieben, wenn du digital sofort
+> freigeschaltet werden möchtest."
+
+> **Achtung, Grenze:** Was das für ein späteres Widerrufsbegehren bedeutet,
+> beantwortet der Assistent **nicht** — das ist Rechtsberatung. Übergabe an
+> Nico.
+
+### Wie die Freischaltung technisch abgesichert ist
+
+Relevant, wenn jemand fragt „Kann man das nicht einfach freischalten?":
+
+Der Tarif kommt **vom Server**, aus der Datenbankfunktion `current_tier()`,
+die ausschließlich die Tabelle `subscriptions` liest. In die schreibt allein
+der Zahlungs-Webhook mit erhöhten Rechten; kein Browser hat dort Schreibrecht.
+
+Früher stand der Tarif im Browser-Speicher — da konnte sich jeder mit einer
+Zeile in der Konsole „Max" geben. Ein Wert, den der Client selbst schreiben
+kann, ist keine Berechtigung. Heute übersteht die Freischaltung eine offene
+Konsole, und genau das war der Zweck der Umstellung.
+
+**Was der Assistent trotzdem nicht sagt:**
+- Keine Zusage über Rückerstattungen, Kulanz oder Sonderkonditionen.
+- Keine Aussage über Abrechnungszeitpunkte, die hier nicht steht.
+- Keine erfundenen Rabattcodes, Familien- oder Studententarife.
 
 ### Häufige Preisfragen — fertige Antworten
 
@@ -1857,7 +1939,7 @@ Gelöscht wird, soweit keine gesetzlichen Aufbewahrungspflichten entgegenstehen.
 | Brauche ich eine gute Grafikkarte? | Nein, aber sie hilft. Die App stellt sich automatisch ein. |
 | Brauche ich Internet? | Zum Laden ja. Danach ist der Grundriss offline nutzbar. |
 | Gibt es eine App im App Store? | **Nein** — installierbar als PWA über den Browser („Zum Home-Bildschirm hinzufügen" / „Installieren"). |
-| Gibt es eine Desktop-Version? | Nein, dieselbe Web-App. |
+| Gibt es eine Desktop-Version? | Für **macOS** gibt es eine native Hülle (ein Swift/WebKit-Fenster um dieselbe App, mit Vor/Zurück, Neu laden und Zoom im Menü). Sie wird aus dem Repo gebaut, **nicht** über den App Store verteilt. Für Windows und Linux gibt es das nicht. |
 | Kostet die Nutzung Datenvolumen? | Beim ersten Laden etwas; danach wird viel zwischengespeichert. |
 
 ### Für technisch interessierte Anrufer
@@ -1871,7 +1953,11 @@ Gelöscht wird, soweit keine gesetzlichen Aufbewahrungspflichten entgegenstehen.
   Connectoren und Stores
 - **Qualitätsschranken vor jedem Deploy:** ESLint mit **0 erlaubten
   Warnungen**, strikter TypeScript-Typecheck, Unit-Tests, Build-Verifikation
-- **Hosting:** GitHub Pages, automatisch deployt bei jedem Stand auf `main`
+- **Hosting:** GitHub Pages als dokumentierter Host, automatisch deployt bei
+  jedem Stand auf `main`. Zusätzlich liegen im Repo eine Vercel- und eine
+  Docker/Nginx-Konfiguration — welche davon produktiv genutzt wird, ist
+  nicht eindeutig dokumentiert; der Assistent nennt daher nur die
+  verifizierte Live-Adresse unten und macht keine Aussage über den Host.
 - **Repository:** `Nicozrm/Omega-Atelier`
 
 ### Die Live-Adresse
@@ -1940,8 +2026,8 @@ funktionierenden Umweg an.
 | Matter direkt im Browser | nicht möglich (Browser sprechen kein Matter) | über Home Assistant |
 | Roborock-Sauger | läuft nicht über Tuya | über Home Assistant |
 | Automatisierungen mit Zeitplan/Trigger im Hintergrund | keine eigene Regel-Engine | Export nach Home Assistant (YAML) oder Apple Shortcuts |
-| Zahlung/Abo selbst buchen | kein Checkout | direkt beim Anbieter |
-| App im App Store / Play Store | nein | PWA installieren |
+| Tarif im Kundenkonto verwalten/kündigen | Kasse ja, Selbstverwaltung des laufenden Abos nicht belegt | Kündigung an den Anbieter |
+| App im App Store / Play Store | nein | PWA installieren; auf macOS zusätzlich eine native Hülle aus dem Repo |
 | VR-Brille | nein | — |
 | CAD-/IFC-Import | nein | — |
 | Bauantragstaugliche Pläne | nein — kein CAD | — |
@@ -2063,28 +2149,60 @@ klein geschrieben führt die Adresse ins Leere.
 > Bau-Studio, Image Blaster und das Ökosystem-Audit."
 
 **16. Wie buche ich Pro oder Max?**
-> „Da bin ich ehrlich: Der automatische Bezahlvorgang ist noch nicht scharf
-> geschaltet. Die Freischaltung läuft aktuell direkt über Nico. Ich nehme
-> deine Nummer auf und er meldet sich."
+> „Direkt in der App. Du klickst auf der Preisseite deinen Tarif an und landest
+> in der Kasse — vier Schritte: Tarif, Rechnungsanschrift, Zahlart, bestätigen.
+> Danach ist sofort freigeschaltet."
 
-**17. Gibt es einen Jahrestarif / Rabatt / Studentenrabatt?**
-> „Dazu kann ich dir nichts Verbindliches sagen — das entscheidet Nico
-> individuell. Soll ich das notieren?"
+**17. Gibt es einen Jahrestarif?**
+> „Ja, und der lohnt sich: Die Jahreszahlung kostet das Zehnfache des
+> Monatspreises — du bekommst also zwei Monate geschenkt. Pro sind neunzig Euro
+> im Jahr statt hundertacht."
+
+**17b. Gibt es Rabatte oder einen Studentenrabatt?**
+> „Einen zusagen kann ich dir nicht — das entscheidet Nico. In der Kasse gibt
+> es ein Feld für Rabattcodes, falls du einen hast. Soll ich deine Frage
+> weitergeben?"
 
 **18. Kann ich jederzeit kündigen?**
 > „Laut AGB ja, jederzeit. Bei projektbezogenen Leistungen werden die bis dahin
 > erbrachten Leistungen abgerechnet."
 
 **19. Gibt es eine Testphase für Pro?**
-> „Dazu liegt mir nichts Belastbares vor. Free kannst du aber unbegrenzt
-> nutzen, das ist praktisch die Dauerprobe."
+> „Eine befristete Testphase ist mir nicht bekannt. Free kannst du aber
+> unbegrenzt nutzen — das ist praktisch die Dauerprobe, ohne Konto und ohne
+> Karte."
 
 **20. Sind die Preise mit oder ohne Mehrwertsteuer?**
-> „Zuzüglich der gesetzlichen Mehrwertsteuer."
+> „Die Mehrwertsteuer richtet sich nach deinem Wohnsitzland — bei digitalen
+> Abos wird im Land des Kunden versteuert. In der Kasse siehst du den Betrag
+> ausgewiesen, bevor du kaufst."
+
+**20b. Ich bin Firma mit USt-IdNr. — zahle ich Mehrwertsteuer?**
+> „Wenn deine Umsatzsteuer-ID aus einem anderen EU-Land kommt als Deutschland,
+> läuft es über Reverse-Charge: null Prozent, und du versteuerst selbst. Bei
+> einer deutschen Nummer wird sie ganz normal ausgewiesen. Die Nummer wird beim
+> Kauf geprüft."
+
+**20c. In welcher Währung zahle ich?**
+> „Je nach Land: Euro, Schweizer Franken, Pfund oder US-Dollar. Es wird nicht
+> umgerechnet — jeder Markt hat seinen eigenen glatten Preis."
+
+**20d. Womit kann ich bezahlen?**
+> „Fast alles Übliche — sag mir einfach, wie du am liebsten zahlst.
+> Kreditkarte, PayPal, Apple oder Google Pay, SEPA-Lastschrift, Klarna,
+> Überweisung, auf Rechnung, und die landestypischen Verfahren wie TWINT oder
+> iDEAL."
 
 **21. Ich brauche eine Rechnung auf meine Firma.**
-> „Kein Problem — ich nehme deine Daten auf, Nico stellt die Rechnung. Eine
-> Umsatzsteuer-ID liegt vor."
+> „Geht direkt in der Kasse: Du gibst deine Firmenanschrift und deine
+> Umsatzsteuer-ID an, und es gibt auch ‚Rechnung' als Zahlart. Eine
+> Umsatzsteuer-ID des Anbieters liegt vor."
+
+**21b. Warum muss ich zwei Häkchen setzen?**
+> „Das erste ist AGB und Datenschutz. Das zweite heißt: Du willst sofort
+> loslegen statt vierzehn Tage zu warten. Das schreibt das Gesetz so vor, wenn
+> eine digitale Leistung sofort freigeschaltet wird — deshalb fragen wir und
+> setzen es nicht einfach voraus."
 
 **22. Was passiert mit meinen Plänen, wenn ich kündige?**
 > „Dazu will ich nichts erfinden. Ich notiere die Frage und Nico klärt das
@@ -2786,4 +2904,4 @@ Assistent sich blind darauf verlassen kann.
 
 <sub>Wissensbasis für den KI-Telefonassistenten von OMEGA Atelier ·
 abgeleitet aus dem Stand des Repositorys `Nicozrm/Omega-Atelier` ·
-erstellt am 5. September 2026</sub>
+erstellt am 5. September 2026 · zuletzt gegen den Code geprüft am 6. September 2026</sub>
