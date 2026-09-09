@@ -24,7 +24,13 @@ GitHub Pages ist der einzige Host; die frühere Vercel-Konfiguration ist entfern
 
 ## Live-URL
 `https://<owner>.github.io/<repo>/` → für dieses Repo:
-`https://nicozrmn.github.io/OmegaAtelier/`
+`https://nicozrm.github.io/Omega-Atelier/`
+
+Owner und Repo-Name gehen exakt so in den Pfad, wie sie auf GitHub stehen —
+Pages unterscheidet Gross- und Kleinschreibung. Die hier zuvor genannte
+Adresse (`nicozrmn.github.io/OmegaAtelier/`) hat es nie gegeben: ein „n" zu
+viel im Konto und der Bindestrich im Repo-Namen fehlte. Sie antwortete
+dauerhaft mit 404.
 
 ## Verifikation nach Deploy
 HTTP 200 auf Live-URL · Entry-JS + Assets laden (kein 404) · Manifest/PWA erreichbar.
